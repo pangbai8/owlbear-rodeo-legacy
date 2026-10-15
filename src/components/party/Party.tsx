@@ -10,6 +10,7 @@ import SettingsButton from "../SettingsButton";
 import StartTimerButton from "./StartTimerButton";
 import Timer from "./Timer";
 import DiceTrayButton from "./DiceTrayButton";
+import ChatButton from "./ChatButton";
 
 import useSetting from "../../hooks/useSetting";
 
@@ -182,6 +183,7 @@ function Party({
             onTimerStop={handleTimerStop}
             timer={playerState.timer}
           />
+          <ChatButton />
           <SettingsButton />
         </Flex>
       </Box>

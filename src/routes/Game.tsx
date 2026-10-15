@@ -7,6 +7,7 @@ import Banner from "../components/banner/Banner";
 import ReconnectBanner from "../components/banner/ReconnectBanner";
 import OfflineBanner from "../components/banner/OfflineBanner";
 import LoadingOverlay from "../components/LoadingOverlay";
+import ChatWindow from "../components/ChatWindow";
 import Link from "../components/Link";
 import MapLoadingOverlay from "../components/map/MapLoadingOverlay";
 import UpgradingLoadingOverlay from "../components/UpgradingLoadingOverlay";
@@ -25,6 +26,7 @@ import { AssetsProvider, AssetURLsProvider } from "../contexts/AssetsContext";
 import { MapDataProvider } from "../contexts/MapDataContext";
 import { TokenDataProvider } from "../contexts/TokenDataContext";
 import { MapLoadingProvider } from "../contexts/MapLoadingContext";
+import { ChatPanelProvider } from "../contexts/ChatPanelContext";
 
 import NetworkedMapAndTokens from "../network/NetworkedMapAndTokens";
 import NetworkedParty from "../network/NetworkedParty";
@@ -124,51 +126,55 @@ function Game() {
               <PlayerProvider session={session}>
                 <PartyProvider session={session}>
                   <MapStageProvider value={mapStageRef}>
-                    <Flex
-                      sx={{
-                        justifyContent: "space-between",
-                        flexGrow: 1,
-                        height: "100%",
-                      }}
-                    >
-                      <NetworkedParty session={session} gameId={gameId} />
-                      <NetworkedMapAndTokens session={session} />
-                    </Flex>
-                    <Banner
-                      isOpen={!!peerError}
-                      onRequestClose={() => setPeerError(null)}
-                    >
-                      <Box p={1}>
-                        <Text as="p" variant="body2">
-                          {peerError} See <Link to="/faq#connection">FAQ</Link>{" "}
-                          for more information.
-                        </Text>
-                      </Box>
-                    </Banner>
-                    <OfflineBanner isOpen={sessionStatus === "offline"} />
-                    <ReconnectBanner
-                      isOpen={sessionStatus === "reconnecting"}
-                    />
-                    <AuthModal
-                      isOpen={sessionStatus === "auth"}
-                      onSubmit={handleAuthSubmit}
-                    />
-                    <GameExpiredModal
-                      isOpen={gameExpired}
-                      onRequestClose={() => setGameExpired(false)}
-                    />
-                    <ForceUpdateModal
-                      isOpen={sessionStatus === "needs_update"}
-                    />
-                    {!sessionStatus && <LoadingOverlay />}
-                    {sessionStatus && databaseStatus === "upgrading" && (
-                      <UpgradingLoadingOverlay />
-                    )}
-                    <MaintenanceModal
-                      isOpen={maintenance}
-                      onRequestClose={() => setMaintenance(false)}
-                    />
-                    <MapLoadingOverlay />
+                    <ChatPanelProvider>
+                      <Flex
+                        sx={{
+                          justifyContent: "space-between",
+                          flexGrow: 1,
+                          height: "100%",
+                        }}
+                      >
+                        <NetworkedParty session={session} gameId={gameId} />
+                        <NetworkedMapAndTokens session={session} />
+                      </Flex>
+                      <Banner
+                        isOpen={!!peerError}
+                        onRequestClose={() => setPeerError(null)}
+                      >
+                        <Box p={1}>
+                          <Text as="p" variant="body2">
+                            {peerError} See{" "}
+                            <Link to="/faq#connection">FAQ</Link> for more
+                            information.
+                          </Text>
+                        </Box>
+                      </Banner>
+                      <OfflineBanner isOpen={sessionStatus === "offline"} />
+                      <ReconnectBanner
+                        isOpen={sessionStatus === "reconnecting"}
+                      />
+                      <AuthModal
+                        isOpen={sessionStatus === "auth"}
+                        onSubmit={handleAuthSubmit}
+                      />
+                      <GameExpiredModal
+                        isOpen={gameExpired}
+                        onRequestClose={() => setGameExpired(false)}
+                      />
+                      <ForceUpdateModal
+                        isOpen={sessionStatus === "needs_update"}
+                      />
+                      {!sessionStatus && <LoadingOverlay />}
+                      {sessionStatus && databaseStatus === "upgrading" && (
+                        <UpgradingLoadingOverlay />
+                      )}
+                      <MaintenanceModal
+                        isOpen={maintenance}
+                        onRequestClose={() => setMaintenance(false)}
+                      />
+                      <MapLoadingOverlay />
+                      <ChatWindow />
+                    </ChatPanelProvider>
                   </MapStageProvider>
                 </PartyProvider>
               </PlayerProvider>
