@@ -52,7 +52,7 @@ export function modalValue(components, customId) {
 
 /**
  * @param interaction Discord interaction object
- * @param ops {{ ownerOf(id): string|null, edit(channelId, messageId, content): Promise, remove(channelId, messageId): Promise }}
+ * @param ops {{ ownerOf(id): string|null, contentOf?(channelId, messageId): Promise<string>, edit(channelId, messageId, content): Promise, remove(channelId, messageId): Promise }}
  * @returns interaction response object
  */
 export async function handleInteraction(interaction, ops) {
@@ -74,6 +74,9 @@ export async function handleInteraction(interaction, ops) {
       if (denied) return denied;
 
       if (interaction.data.name === EDIT_COMMAND) {
+        // The target message's text normally comes along; if Discord leaves it out, read it back
+        let content = message?.content || "";
+        if (!content && ops.contentOf) content = await ops.contentOf(channelId, messageId).catch(() => "");
         return {
           type: 9,
           data: {
@@ -88,7 +91,7 @@ export async function handleInteraction(interaction, ops) {
                     custom_id: "content",
                     label: "消息内容",
                     style: 2,
-                    value: (message?.content || "").slice(0, 2000),
+                    value: content.slice(0, 2000),
                     min_length: 1,
                     max_length: 2000,
                     required: true,

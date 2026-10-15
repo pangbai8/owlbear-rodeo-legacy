@@ -567,6 +567,11 @@ export class Hub extends DurableObject {
       ownerOf: this.ownerOf,
       edit: (channelId, messageId, text) => this.editMessage(channelId, messageId, text),
       remove: (channelId, messageId) => this.deleteMessage(channelId, messageId),
+      contentOf: async (channelId, messageId) => {
+        const { id, token } = await this.getWebhook(channelId);
+        const message = await discordRequest(this.env, `/webhooks/${id}/${token}/messages/${messageId}`, { auth: null });
+        return message.content || "";
+      },
     });
   }
 

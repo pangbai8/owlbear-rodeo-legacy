@@ -45,6 +45,17 @@ test("edit command opens a modal prefilled with the message", async () => {
   assert.equal(response.data.components[0].components[0].value, "旧内容");
 });
 
+test("edit modal falls back to reading the message when Discord omits its text", async () => {
+  const ops = { ...fakeOps(), contentOf: async (channelId, messageId) => `text of ${channelId}/${messageId}` };
+  const interaction = command(EDIT_COMMAND);
+  interaction.data.resolved.messages["900"].content = "";
+  const response = await handleInteraction(interaction, ops);
+  assert.equal(response.data.components[0].components[0].value, "text of 50/900");
+  delete interaction.data.resolved;
+  const missing = await handleInteraction(interaction, ops);
+  assert.equal(missing.data.components[0].components[0].value, "text of 50/900");
+});
+
 test("only the owner can edit or delete; foreign messages are refused", async () => {
   const ops = fakeOps();
   const notOwner = await handleInteraction(command(EDIT_COMMAND, "222"), ops);
