@@ -3,21 +3,23 @@ import { Box, Button, Flex, Select, Text } from "theme-ui";
 
 import FloatingWindow, { besidePartyRect } from "./FloatingWindow";
 import {
+  CURRENT_SHEET_STORAGE_KEY,
+  OPEN_SHEET_EVENT,
   SheetMeta,
   deleteSheet,
   editorOpenExt,
   editorSaveExt,
   getSheetFile,
   importAccept,
+  importSheetFiles,
+  isSheetFile,
   listSheets,
   putSheet,
-  splitFileName,
 } from "../helpers/characterSheets";
 
 /** Static OnlyOffice-in-the-browser editor (ranuts/document) */
 export const sheetEditorUrl = process.env.REACT_APP_SHEET_EDITOR_URL || "";
 
-const CURRENT_STORAGE_KEY = "characterSheets.current";
 const AUTOSAVE_DELAY = 3000;
 
 type SaveWaiter = { resolve: () => void; reject: (error: Error) => void };
@@ -41,7 +43,7 @@ function editorSrc() {
 
 function loadCurrentId() {
   try {
-    return localStorage.getItem(CURRENT_STORAGE_KEY);
+    return localStorage.getItem(CURRENT_SHEET_STORAGE_KEY);
   } catch {
     return null;
   }
@@ -58,6 +60,8 @@ function SheetWindow() {
   const [isReady, setIsReady] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [status, setStatus] = useState("");
+  const [isDropTarget, setIsDropTarget] = useState(false);
+  const readyRef = useRef(false);
 
   // The sheet the editor currently holds, which may lag behind currentId
   const openedRef = useRef<SheetMeta | null>(null);
@@ -111,9 +115,9 @@ function SheetWindow() {
       setCurrentId(id);
       try {
         if (id) {
-          localStorage.setItem(CURRENT_STORAGE_KEY, id);
+          localStorage.setItem(CURRENT_SHEET_STORAGE_KEY, id);
         } else {
-          localStorage.removeItem(CURRENT_STORAGE_KEY);
+          localStorage.removeItem(CURRENT_SHEET_STORAGE_KEY);
         }
       } catch {}
       const meta = (await listSheets()).find((sheet) => sheet.id === id);
@@ -147,6 +151,7 @@ function SheetWindow() {
       }
       const { type, payload } = event.data || {};
       if (type === "document:ready") {
+        readyRef.current = true;
         setIsReady(true);
       } else if (type === "document:opened") {
         setStatus("");
@@ -205,6 +210,51 @@ function SheetWindow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady]);
 
+  // Sheets imported elsewhere (e.g. dropped on the map) ask to be shown
+  useEffect(() => {
+    async function handleOpenSheet(event: Event) {
+      const id = (event as CustomEvent<string>).detail;
+      await refreshSheets();
+      if (readyRef.current) {
+        await openSheet(id);
+      } else {
+        // Opened by the readiness effect below
+        setCurrentId(id);
+      }
+    }
+    window.addEventListener(OPEN_SHEET_EVENT, handleOpenSheet);
+    return () => window.removeEventListener(OPEN_SHEET_EVENT, handleOpenSheet);
+  }, [refreshSheets, openSheet]);
+
+  // Show a drop zone over the editor while files are dragged into the page,
+  // since the editor iframe would otherwise take the drop
+  useEffect(() => {
+    function handleDragEnter(event: DragEvent) {
+      if (event.dataTransfer?.types.includes("Files")) {
+        setIsDropTarget(true);
+      }
+    }
+    function handleDragDone() {
+      setIsDropTarget(false);
+    }
+    function handleDragLeave(event: DragEvent) {
+      // A null related target means the drag left the browser window
+      if (!event.relatedTarget) {
+        setIsDropTarget(false);
+      }
+    }
+    window.addEventListener("dragenter", handleDragEnter);
+    window.addEventListener("dragleave", handleDragLeave);
+    window.addEventListener("drop", handleDragDone);
+    window.addEventListener("dragend", handleDragDone);
+    return () => {
+      window.removeEventListener("dragenter", handleDragEnter);
+      window.removeEventListener("dragleave", handleDragLeave);
+      window.removeEventListener("drop", handleDragDone);
+      window.removeEventListener("dragend", handleDragDone);
+    };
+  }, []);
+
   useEffect(() => {
     function handleBeforeUnload(event: BeforeUnloadEvent) {
       if (dirtyRef.current) {
@@ -224,14 +274,7 @@ function SheetWindow() {
     input.type = "file";
     input.accept = importAccept;
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) {
-        return;
-      }
-      const [name, ext] = splitFileName(file.name);
-      const meta = await putSheet({ name, ext }, await file.arrayBuffer());
-      await refreshSheets();
-      await openSheet(meta.id);
+      await importSheetFiles(Array.from(input.files || []));
     };
     input.click();
   }
@@ -271,6 +314,22 @@ function SheetWindow() {
     await deleteSheet(opened.id);
     const remaining = await refreshSheets();
     await openSheet(remaining[0]?.id || null);
+  }
+
+  function handleDragOver(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  async function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDropTarget(false);
+    const files = Array.from(event.dataTransfer.files).filter(isSheetFile);
+    if (files.length === 0) {
+      setStatus("Drop an Excel or Word file");
+      return;
+    }
+    await importSheetFiles(files);
   }
 
   const hasSheet = !!sheets.find((sheet) => sheet.id === currentId);
@@ -353,8 +412,32 @@ function SheetWindow() {
             p={3}
           >
             <Text>
-              Import an Excel or Word character sheet. It stays in this browser
-              only.
+              Import or drop an Excel or Word character sheet. It stays in this
+              browser only.
+            </Text>
+          </Flex>
+        )}
+        {isDropTarget && (
+          <Flex
+            aria-label="Drop Character Sheet"
+            bg="overlay"
+            onDragOver={handleDragOver}
+            onDragLeave={() => setIsDropTarget(false)}
+            onDrop={handleDrop}
+            sx={{
+              position: "absolute",
+              inset: 0,
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px dashed",
+              borderColor: "primary",
+              borderRadius: "12px",
+              m: 2,
+              cursor: "copy",
+            }}
+          >
+            <Text sx={{ pointerEvents: "none" }}>
+              Drop to open as character sheet
             </Text>
           </Flex>
         )}

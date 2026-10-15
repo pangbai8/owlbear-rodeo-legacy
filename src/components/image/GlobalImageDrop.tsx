@@ -19,8 +19,15 @@ import { useMapData } from "../../contexts/MapDataContext";
 import { useTokenData } from "../../contexts/TokenDataContext";
 import { useAssets } from "../../contexts/AssetsContext";
 import { useMapStage } from "../../contexts/MapStageContext";
+import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
 
 import useImageDrop, { ImageDropEvent } from "../../hooks/useImageDrop";
+import { sheetEditorUrl } from "../SheetWindow";
+import {
+  importSheetFiles,
+  isSheetDrag,
+  isSheetFile,
+} from "../../helpers/characterSheets";
 
 import { Map } from "../../types/Map";
 import { MapState } from "../../types/MapState";
@@ -45,6 +52,7 @@ function GlobalImageDrop({
   const { addAssets } = useAssets();
 
   const mapStageRef = useMapStage();
+  const sheetWindow = useFloatingWindow("sheets");
 
   const [isLargeImageWarningModalOpen, setShowLargeImageWarning] =
     useState(false);
@@ -171,13 +179,70 @@ function GlobalImageDrop({
     setDroppingType("tokens");
   }
 
-  const { dragging, containerListeners, overlayListeners } =
-    useImageDrop(handleDrop);
+  /** Open dropped Word / Excel files in the character sheet window */
+  function handleOtherFiles(files: File[]) {
+    const sheetFiles = files.filter(isSheetFile);
+    if (sheetFiles.length > 0) {
+      sheetWindow.setIsOpen(true);
+      importSheetFiles(sheetFiles).catch(() =>
+        addToast("Unable to import character sheet")
+      );
+    }
+    return files.filter((file) => !isSheetFile(file));
+  }
+
+  const { dragging, draggingOther, containerListeners, overlayListeners } =
+    useImageDrop(
+      handleDrop,
+      undefined,
+      sheetEditorUrl
+        ? { isOtherDrag: isSheetDrag, onOtherFiles: handleOtherFiles }
+        : {}
+    );
+
+  const dropZoneOutline = (
+    <Box
+      bg="overlay"
+      sx={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        margin: "4px 16px",
+        border: "1px dashed",
+        borderRadius: "12px",
+        pointerEvents: "none",
+      }}
+    />
+  );
 
   return (
     <Flex sx={{ height: "100%", flexGrow: 1 }} {...containerListeners}>
       {children}
-      {dragging && (
+      {dragging && draggingOther && (
+        <Flex
+          sx={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            left: 0,
+            bottom: 0,
+            cursor: "copy",
+            justifyContent: "center",
+            alignItems: "center",
+            color: "primary",
+            zIndex: 100,
+          }}
+          {...overlayListeners}
+        >
+          {dropZoneOutline}
+          <Text sx={{ pointerEvents: "none", userSelect: "none" }}>
+            Drop to open as character sheet
+          </Text>
+        </Flex>
+      )}
+      {dragging && !draggingOther && (
         <Flex
           sx={{
             position: "absolute",
@@ -203,20 +268,7 @@ function GlobalImageDrop({
             }}
             onDragEnter={handleMapsOver}
           >
-            <Box
-              bg="overlay"
-              sx={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                margin: "4px 16px",
-                border: "1px dashed",
-                borderRadius: "12px",
-                pointerEvents: "none",
-              }}
-            />
+            {dropZoneOutline}
             <Text sx={{ pointerEvents: "none", userSelect: "none" }}>
               Drop as map
             </Text>
@@ -233,20 +285,7 @@ function GlobalImageDrop({
             }}
             onDragEnter={handleTokensOver}
           >
-            <Box
-              bg="overlay"
-              sx={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                margin: "4px 16px",
-                border: "1px dashed",
-                borderRadius: "12px",
-                pointerEvents: "none",
-              }}
-            />
+            {dropZoneOutline}
             <Text sx={{ pointerEvents: "none", userSelect: "none" }}>
               Drop as token
             </Text>

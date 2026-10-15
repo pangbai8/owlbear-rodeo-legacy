@@ -108,9 +108,72 @@ export function splitFileName(fileName: string): [string, string] {
 const spreadsheetExts = ["xlsx", "xlsm", "xls", "ods"];
 const textExts = ["docx", "doc", "odt", "rtf", "txt"];
 
-export const importAccept = [...spreadsheetExts, "csv", ...textExts]
-  .map((ext) => `.${ext}`)
-  .join(",");
+const importExts = [...spreadsheetExts, "csv", ...textExts];
+
+export const importAccept = importExts.map((ext) => `.${ext}`).join(",");
+
+/** Whether a file can be imported as a character sheet, judged by its name */
+export function isSheetFile(file: File): boolean {
+  return importExts.includes(splitFileName(file.name)[1]);
+}
+
+/** MIME types of importable files, for recognising a drag before the drop */
+const sheetMimeTypes = [
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel.sheet.macroenabled.12",
+  "application/vnd.ms-excel",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "text/csv",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "application/vnd.oasis.opendocument.text",
+  "application/rtf",
+  "text/rtf",
+];
+
+/**
+ * Whether every file being dragged looks like a character sheet.
+ * Browsers expose only MIME types while dragging, and some leave them empty,
+ * so this can say no for a sheet; the drop itself is judged by file name.
+ */
+export function isSheetDrag(dataTransfer: DataTransfer | null): boolean {
+  const items = Array.from(dataTransfer?.items || []).filter(
+    (item) => item.kind === "file"
+  );
+  return (
+    items.length > 0 &&
+    items.every((item) => sheetMimeTypes.includes(item.type.toLowerCase()))
+  );
+}
+
+/** localStorage key of the sheet the window shows */
+export const CURRENT_SHEET_STORAGE_KEY = "characterSheets.current";
+
+/** Window event asking the character sheet window to show a sheet (detail: id) */
+export const OPEN_SHEET_EVENT = "owlbear:open-sheet";
+
+/**
+ * Store files as character sheets and ask the sheet window to show the last.
+ * The window may not exist yet, so the choice is also left in localStorage.
+ */
+export async function importSheetFiles(
+  files: File[]
+): Promise<SheetMeta | undefined> {
+  let last: SheetMeta | undefined;
+  for (const file of files) {
+    const [name, ext] = splitFileName(file.name);
+    last = await putSheet({ name, ext }, await file.arrayBuffer());
+  }
+  if (last) {
+    try {
+      localStorage.setItem(CURRENT_SHEET_STORAGE_KEY, last.id);
+    } catch {}
+    window.dispatchEvent(
+      new CustomEvent<string>(OPEN_SHEET_EVENT, { detail: last.id })
+    );
+  }
+  return last;
+}
 
 /**
  * Extension to tell the editor when opening. Its converter has no entry for

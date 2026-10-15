@@ -8,17 +8,27 @@ export type ImageDropEvent = {
   dropPosition: Vector2;
 };
 
+export type OtherFilesDropOptions = {
+  /** Whether a drag holds only files for onOtherFiles (shown as draggingOther) */
+  isOtherDrag?: (dataTransfer: DataTransfer | null) => boolean;
+  /** Receives dropped files that are not images; returns those it did not take */
+  onOtherFiles?: (files: File[]) => File[];
+};
+
 function useImageDrop(
   onImageDrop: (event: ImageDropEvent) => void,
-  supportFileTypes = ["image/jpeg", "image/gif", "image/png", "image/webp"]
+  supportFileTypes = ["image/jpeg", "image/gif", "image/png", "image/webp"],
+  { isOtherDrag, onOtherFiles }: OtherFilesDropOptions = {}
 ) {
   const { addToast } = useToasts();
 
   const [dragging, setDragging] = useState(false);
+  const [draggingOther, setDraggingOther] = useState(false);
   function onDragEnter(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
     setDragging(true);
+    setDraggingOther(!!isOtherDrag?.(event.dataTransfer));
   }
 
   function onDragLeave(event: React.DragEvent<HTMLDivElement>) {
@@ -78,22 +88,32 @@ function useImageDrop(
     }
 
     const files = event.dataTransfer?.files || [];
+    let otherFiles = [];
     for (let file of files) {
       if (supportFileTypes.includes(file.type)) {
         imageFiles.push(file);
       } else {
-        addToast(`Unsupported file type for ${file.name}`);
+        otherFiles.push(file);
       }
     }
+    if (onOtherFiles) {
+      otherFiles = onOtherFiles(otherFiles);
+    }
+    for (let file of otherFiles) {
+      addToast(`Unsupported file type for ${file.name}`);
+    }
     const dropPosition = new Vector2(event.clientX, event.clientY);
-    onImageDrop({ files: imageFiles, dropPosition });
+    // Nothing to do when only other files were dropped
+    if (imageFiles.length > 0 || !onOtherFiles) {
+      onImageDrop({ files: imageFiles, dropPosition });
+    }
     setDragging(false);
   }
 
   const containerListeners = { onDragEnter };
   const overlayListeners = { onDragLeave, onDragOver, onDrop };
 
-  return { dragging, containerListeners, overlayListeners };
+  return { dragging, draggingOther, containerListeners, overlayListeners };
 }
 
 export default useImageDrop;
