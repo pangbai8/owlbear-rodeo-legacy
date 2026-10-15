@@ -183,6 +183,20 @@ export function entriesToText(entries: any): string[] {
       entry.forEach((e) => walk(e, prefix));
     } else if (entry.type === "list" || Array.isArray(entry.items)) {
       for (const item of entry.items || []) walk(item, "• ");
+    } else if (entry.type === "table") {
+      // Tables become one line per row: "d4 | 决策"
+      const cell = (value: any): string =>
+        typeof value === "string" || typeof value === "number"
+          ? renderTags(String(value))
+          : value?.roll
+          ? String(value.roll.exact ?? `${value.roll.min}–${value.roll.max}`)
+          : entriesToText(value).join(" ");
+      if (entry.caption) out.push(prefix + renderTags(entry.caption));
+      if (entry.colLabels?.length) out.push(prefix + entry.colLabels.map(cell).join(" | "));
+      for (const row of entry.rows || []) {
+        const cells = Array.isArray(row) ? row : row?.row || [];
+        out.push(prefix + cells.map(cell).join(" | "));
+      }
     } else {
       const name = entry.name ? `${renderTags(entry.name)}。` : "";
       const body = [...(entry.entries || []), ...(entry.entry ? [entry.entry] : [])];

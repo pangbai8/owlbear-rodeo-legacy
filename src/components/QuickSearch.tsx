@@ -4,6 +4,8 @@ import { Box, Flex, IconButton, Input, Text } from "theme-ui";
 import SearchIcon from "../icons/SearchIcon";
 import OpenInNewIcon from "../icons/OpenInNewIcon";
 import MonsterCard from "./MonsterCard";
+import EntryCardView from "./EntryCardView";
+import { hasEntryCard } from "../helpers/fiveEEntries";
 import {
   MONSTER_DRAG_TYPE,
   SearchResult,
@@ -119,7 +121,14 @@ function QuickSearch() {
   }
 
   const showPanel = open && (query.trim() !== "" || selected !== null);
-  const showPage = selected !== null && (!selectedMonster || fullPage);
+  // Monsters, spells, items, ... get a card of their own; the rest (classes,
+  // books, ...) and "full page" show the 5etools page
+  const hasCard = selected !== null && (!!selectedMonster || hasEntryCard(selected));
+  const showPage = selected !== null && (!hasCard || fullPage);
+  const openFullPage = () => {
+    setPageLoading(true);
+    setFullPage(true);
+  };
 
   function select(result: SearchResult | null) {
     setSelected(result);
@@ -221,7 +230,7 @@ function QuickSearch() {
                 <Text
                   as="button"
                   onClick={() =>
-                    fullPage && selectedMonster
+                    fullPage && hasCard
                       ? setFullPage(false)
                       : select(null)
                   }
@@ -234,7 +243,7 @@ function QuickSearch() {
                     mr: 2,
                   }}
                 >
-                  {fullPage && selectedMonster ? "← 属性卡" : "← 结果"}
+                  {fullPage && hasCard ? "← 详情" : "← 结果"}
                 </Text>
                 <Text sx={{ flexGrow: 1, fontSize: 1 }} title={selected.url}>
                   {selected.name}
@@ -283,13 +292,17 @@ function QuickSearch() {
                 </Box>
               ) : (
                 <Box sx={{ flexGrow: 1, overflowY: "auto" }}>
-                  <MonsterCard
-                    monster={selectedMonster!}
-                    onOpenFullPage={() => {
-                      setPageLoading(true);
-                      setFullPage(true);
-                    }}
-                  />
+                  {selectedMonster ? (
+                    <MonsterCard
+                      monster={selectedMonster}
+                      onOpenFullPage={openFullPage}
+                    />
+                  ) : (
+                    <EntryCardView
+                      result={selected}
+                      onOpenFullPage={openFullPage}
+                    />
+                  )}
                 </Box>
               )}
             </Flex>

@@ -246,7 +246,7 @@ const SIZE_CELLS: Record<string, number> = { T: 1, S: 1, M: 1, L: 2, H: 3, G: 4 
 let bestiaryIndexPromise: Promise<Record<string, string>> | null = null;
 const bestiaryFiles = new Map<string, Promise<any[]>>();
 
-async function fetchJson(path: string) {
+export async function fetchJson(path: string) {
   const response = await fetch(FIVE_E_BASE + path);
   if (!response.ok) throw new Error(`HTTP ${response.status} for ${path}`);
   return response.json();
