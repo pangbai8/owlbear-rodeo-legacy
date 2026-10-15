@@ -386,7 +386,7 @@ function QuickSearch() {
                     px: 2,
                     py: "6px",
                     cursor: result.isMonster ? "grab" : "pointer",
-                    opacity: result.reprinted ? 0.6 : 1,
+                    opacity: result.modern || result.reprinted ? 0.5 : 1,
                     borderBottom: "1px solid",
                     borderColor: "muted",
                     "&:hover, &:focus": { bg: "highlight", outline: "none" },
@@ -425,7 +425,13 @@ function QuickSearch() {
                   </Box>
                   <Text
                     sx={{ fontSize: 0, color: "gray", ml: 2, whiteSpace: "nowrap" }}
-                    title={result.reprinted ? "已在新版书中重印" : undefined}
+                    title={
+                      result.modern
+                        ? "5e 2024 版规则"
+                        : result.reprinted
+                        ? "已在新版书中重印"
+                        : undefined
+                    }
                   >
                     {result.source}
                     {result.isMonster && " ⠿"}

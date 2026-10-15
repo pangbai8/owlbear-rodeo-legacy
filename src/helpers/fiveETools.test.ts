@@ -98,18 +98,36 @@ describe("searchFiveE", () => {
 
   beforeAll(() => {
     // A plain function: CRA resets jest.fn implementations before each test
-    (global as any).fetch = () =>
-      Promise.resolve({ ok: true, json: () => Promise.resolve(index) });
+    const files: Record<string, any> = {
+      "search/index.json": index,
+      "data/books.json": {
+        book: [
+          { id: "MM", published: "2014-09-30" },
+          { id: "XMM", published: "2025-02-18" },
+        ],
+      },
+      // Missing: search still works, only that list is not used
+      "data/adventures.json": undefined,
+    };
+    (global as any).fetch = (url: string) => {
+      const path = url.slice(FIVE_E_BASE.length);
+      return Promise.resolve({
+        ok: files[path] !== undefined,
+        status: 404,
+        json: () => Promise.resolve(files[path]),
+      });
+    };
   });
 
   test("exact names first, 2014 core books before newer ones, links per category", async () => {
     const results = await searchFiveE("地精");
     expect(results.map((r) => r.id)).toEqual([3, 1, 2, 5]);
-    expect(results[1]).toMatchObject({ source: "MM", reprinted: false });
+    expect(results[1]).toMatchObject({ source: "MM", reprinted: false, modern: false });
     expect(results[2]).toMatchObject({
       name: "地精头目",
       englishName: "Goblin Boss",
       source: "XMM",
+      modern: true,
       isMonster: true,
       categoryLabel: "怪物",
       url: `${FIVE_E_BASE}bestiary.html#goblin_xmm`,

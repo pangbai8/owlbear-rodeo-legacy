@@ -140,26 +140,52 @@ export type SearchResult = {
   source: string;
   url: string;
   reprinted: boolean;
+  /** From a 5e 2024 rules book (shown dimmed; the table plays 2014) */
+  modern: boolean;
   isMonster: boolean;
 };
 
-let indexPromise: Promise<{ entries: IndexEntry[]; sources: string[] }> | null =
-  null;
+type SearchIndex = {
+  entries: IndexEntry[];
+  sources: string[];
+  modernSources: Set<string>;
+};
+
+// Books and adventures from the 2024 Player's Handbook on use the 2024 rules
+const MODERN_SINCE = "2024-09-17";
+
+/** Sources published for the 2024 rules, from the site's book lists */
+async function loadModernSources() {
+  const lists = await Promise.all(
+    [
+      ["data/books.json", "book"],
+      ["data/adventures.json", "adventure"],
+    ].map(([path, key]) =>
+      fetchJson(path)
+        .then((data) => data[key] || [])
+        // Without the lists nothing is dimmed; search still works
+        .catch(() => [])
+    )
+  );
+  const modern = new Set<string>();
+  for (const book of lists.flat()) {
+    if ((book.published || "") >= MODERN_SINCE) modern.add(book.id);
+  }
+  return modern;
+}
+
+let indexPromise: Promise<SearchIndex> | null = null;
 
 /** Loads the search index once (about 3 MB, cached by the browser) */
 export function loadSearchIndex() {
   if (!indexPromise) {
-    indexPromise = fetch(`${FIVE_E_BASE}search/index.json`)
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      })
-      .then((data) => {
+    indexPromise = Promise.all([fetchJson("search/index.json"), loadModernSources()])
+      .then(([data, modernSources]) => {
         const sources: string[] = [];
         for (const [abbr, index] of Object.entries(data.m?.s || {})) {
           sources[index as number] = abbr;
         }
-        return { entries: data.x as IndexEntry[], sources };
+        return { entries: data.x as IndexEntry[], sources, modernSources };
       })
       .catch((error) => {
         indexPromise = null;
@@ -174,7 +200,10 @@ export function loadSearchIndex() {
 const PREFERRED_SOURCES = new Set(["MM", "PHB", "DMG"]);
 const PREFERRED_BOOST = 20;
 
-function toResult(entry: IndexEntry, sources: string[]): SearchResult {
+function toResult(
+  entry: IndexEntry,
+  { sources, modernSources }: Pick<SearchIndex, "sources" | "modernSources">
+): SearchResult {
   const source =
     typeof entry.s === "number" ? sources[entry.s] || "" : String(entry.s);
   const page = CATEGORY_PAGE[entry.c] || "search.html";
@@ -189,6 +218,7 @@ function toResult(entry: IndexEntry, sources: string[]): SearchResult {
     url: `${FIVE_E_BASE}${page}#${hash}`,
     // Not dimmed as "old" when it is a book the table prefers
     reprinted: entry.dR === 1 && !PREFERRED_SOURCES.has(source),
+    modern: modernSources.has(source),
     isMonster: entry.c === CATEGORY_CREATURE,
   };
 }
@@ -206,7 +236,8 @@ export function matchScore(name: string, query: string) {
 export async function searchFiveE(query: string, limit = 60) {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const { entries, sources } = await loadSearchIndex();
+  const index = await loadSearchIndex();
+  const { entries, sources } = index;
   const scored: [number, IndexEntry][] = [];
   for (const entry of entries) {
     const score = Math.max(
@@ -228,7 +259,7 @@ export async function searchFiveE(query: string, limit = 60) {
       (a[1].cn || a[1].n).length - (b[1].cn || b[1].n).length ||
       a[1].id - b[1].id
   );
-  return scored.slice(0, limit).map(([, entry]) => toResult(entry, sources));
+  return scored.slice(0, limit).map(([, entry]) => toResult(entry, index));
 }
 
 /* ---------- monsters ---------- */
