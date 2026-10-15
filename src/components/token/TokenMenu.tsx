@@ -18,6 +18,8 @@ import TokenMountIcon from "../../icons/TokenMountIcon";
 import TokenAttachmentIcon from "../../icons/TokenAttachmentIcon";
 
 import { useUserId } from "../../contexts/UserIdContext";
+import { useTokenData } from "../../contexts/TokenDataContext";
+import { openMonsterCard } from "../../helpers/fiveETools";
 
 import {
   RequestCloseEventHandler,
@@ -73,6 +75,12 @@ function TokenMenu({
   map,
 }: TokenMenuProps) {
   const userId = useUserId();
+  const { tokensById } = useTokenData();
+  // Monsters from the quick search keep their stat card; only the one who
+  // dropped them (the GM) has the token in their library
+  const token = tokenState ? tokensById[tokenState.tokenId] : undefined;
+  const monster =
+    token && token.owner === userId ? token.monster : undefined;
 
   const wasOpen = usePrevious(isOpen);
 
@@ -272,6 +280,31 @@ function TokenMenu({
               {tokenCategories[tokenState.category].icon}
             </IconButton>
           </Flex>
+        )}
+        {monster && (
+          <Text
+            as="button"
+            onClick={() => {
+              openMonsterCard(monster);
+              onRequestClose();
+            }}
+            title={`查看 ${monster.name} 的属性、攻击和动作`}
+            sx={{
+              display: "block",
+              width: "100%",
+              mt: 1,
+              p: 1,
+              bg: "transparent",
+              border: "1px solid",
+              borderColor: "border",
+              borderRadius: "4px",
+              color: "primary",
+              cursor: "pointer",
+              fontSize: 1,
+            }}
+          >
+            查看怪物资料
+          </Text>
         )}
       </Box>
     </MapMenu>

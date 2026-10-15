@@ -144,6 +144,7 @@ describe("loadEntryCard", () => {
     source: "XPHB",
     url: "",
     reprinted: false,
+    modern: false,
     isMonster: false,
     ...over,
   });

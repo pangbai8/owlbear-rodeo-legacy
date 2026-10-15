@@ -374,6 +374,8 @@
       initPending: true,
       initManual: false,
       created: Date.now(),
+      // Its stat card can be opened again from the 📖 button on the card
+      monster: { name: stats.name, englishName: stats.englishName, source: stats.source, url: stats.url },
     };
     var id = "c" + Math.random().toString(36).slice(2, 10);
     writes.push(db.doc("teams/" + team + "/members/" + id).set(npc));
@@ -381,6 +383,19 @@
       return name;
     });
   }
+
+  // 📖 on an NPC card from the quick search: the VTT shows its stat card
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest && event.target.closest('[data-act="monster"]');
+    if (!button) return;
+    var target = window.parent !== window ? window.parent : window.opener;
+    if (!target) return notice("请在 VTT 里打开小队面板查看怪物资料", true);
+    try {
+      var ref = JSON.parse(button.dataset.monster);
+      target.postMessage({ type: "party-panel-open-monster", ref: ref }, location.origin);
+      if (target === window.opener) notice("已在 VTT 窗口打开「" + ref.name + "」的资料");
+    } catch (e) {}
+  });
 
   document.addEventListener("dragenter", function (event) {
     if (!isMonsterDrag(event)) return;

@@ -4,6 +4,7 @@ import { useToasts } from "react-toast-notifications";
 import Vector2 from "../helpers/Vector2";
 import {
   isMonsterDrag,
+  MonsterRef,
   loadMonster,
   monsterTokenFile,
   parseMonsterDrag,
@@ -14,6 +15,8 @@ export type ImageDropEvent = {
   dropPosition: Vector2;
   /** A monster from the quick search: always a token, never a map */
   asToken?: boolean;
+  /** That monster, remembered on the token so its card can be opened again */
+  monster?: MonsterRef;
 };
 
 export type OtherFilesDropOptions = {
@@ -66,7 +69,7 @@ function useImageDrop(
       setDragging(false);
       try {
         const file = await monsterTokenFile(await loadMonster(monster));
-        onImageDrop({ files: [file], dropPosition, asToken: true });
+        onImageDrop({ files: [file], dropPosition, asToken: true, monster });
       } catch (e) {
         addToast(`无法添加怪物：${e instanceof Error ? e.message : e}`);
       }

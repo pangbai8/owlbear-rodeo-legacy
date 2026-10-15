@@ -8,6 +8,7 @@ import ConfirmModal from "../../modals/ConfirmModal";
 
 import { createMapFromFile } from "../../helpers/map";
 import { createTokenFromFile } from "../../helpers/token";
+import { MonsterRef } from "../../helpers/fiveETools";
 import {
   createTokenState,
   clientPositionToMapPosition,
@@ -60,15 +61,22 @@ function GlobalImageDrop({
 
   const droppedImagesRef = useRef<File[]>();
   const dropPositionRef = useRef<Vector2>();
+  const droppedMonsterRef = useRef<MonsterRef>();
   const [droppingType, setDroppingType] = useState<"maps" | "tokens">("maps");
 
-  async function handleDrop({ files, dropPosition, asToken }: ImageDropEvent) {
+  async function handleDrop({
+    files,
+    dropPosition,
+    asToken,
+    monster,
+  }: ImageDropEvent) {
     if (navigator.storage) {
       // Attempt to enable persistant storage
       await navigator.storage.persist();
     }
 
     dropPositionRef.current = dropPosition;
+    droppedMonsterRef.current = monster;
 
     droppedImagesRef.current = [];
     for (let file of files) {
@@ -137,6 +145,7 @@ function GlobalImageDrop({
       let tokens = [];
       for (let file of droppedImagesRef.current) {
         const { token, assets } = await createTokenFromFile(file, userId);
+        if (droppedMonsterRef.current) token.monster = droppedMonsterRef.current;
         await addToken(token);
         await addAssets(assets);
         tokens.push(token);

@@ -5,7 +5,12 @@ import { useParams } from "react-router-dom";
 import FloatingWindow, { besidePartyRect } from "./FloatingWindow";
 import OpenInNewIcon from "../icons/OpenInNewIcon";
 import ClearDataIcon from "../icons/ClearDataIcon";
-import { MonsterRef, loadMonster } from "../helpers/fiveETools";
+import {
+  MonsterRef,
+  isMonsterRef,
+  loadMonster,
+  openMonsterCard,
+} from "../helpers/fiveETools";
 
 /**
  * The GM party status panel (public/party-panel, see db-shim.js). With the
@@ -34,6 +39,15 @@ function PartyPanelWindow() {
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       const data = event.data;
+      // 📖 on an NPC the quick search added: show its stat card here
+      if (
+        event.origin === window.location.origin &&
+        data?.type === "party-panel-open-monster" &&
+        isMonsterRef(data.ref)
+      ) {
+        openMonsterCard(data.ref);
+        return;
+      }
       if (
         event.origin !== window.location.origin ||
         data?.type !== "party-panel-monster" ||

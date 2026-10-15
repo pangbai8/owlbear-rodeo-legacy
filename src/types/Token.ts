@@ -1,5 +1,6 @@
 import Konva from "konva";
 import { Outline } from "./Outline";
+import { MonsterRef } from "../helpers/fiveETools";
 
 export type TokenCategory = "character" | "vehicle" | "prop" | "attachment";
 
@@ -16,6 +17,8 @@ export type BaseToken = {
   created: number;
   lastModified: number;
   outline: Outline;
+  /** Dropped from the 5e quick search: its stat card can be opened again */
+  monster?: MonsterRef;
 };
 
 export type DefaultToken = BaseToken & {
