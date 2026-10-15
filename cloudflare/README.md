@@ -19,7 +19,8 @@ Wrangler uses a separate modern Node runtime (Node 22 here).
 yarn install --frozen-lockfile --ignore-engines
 $env:REACT_APP_BROKER_URL='https://vtt.pangbai.de'   # or your workers.dev URL
 $env:REACT_APP_BROKER_TRANSPORT='cloudflare'
-$env:REACT_APP_CHAT_URL='https://chat.pangbai.de/'  # optional chat side panel (see ../boluo-mirror, or https://discord.pangbai.de/ via ../discord-bridge)
+$env:REACT_APP_CHAT_URL='https://chat.pangbai.de/'  # optional Boluo chat window (see ../boluo-mirror)
+$env:REACT_APP_DISCORD_CHAT_URL='https://discord.pangbai.de/'  # optional Discord chat window (see ../discord-bridge)
 $env:REACT_APP_SHEET_EDITOR_URL='https://sheets.pangbai.de'  # optional character sheets (see ../sheet-editor)
 $env:GENERATE_SOURCEMAP='false'
 yarn build

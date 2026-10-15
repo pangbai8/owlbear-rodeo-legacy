@@ -1,27 +1,36 @@
 import { IconButton } from "theme-ui";
 
 import ChatIcon from "../../icons/ChatIcon";
-import { chatUrl } from "../ChatWindow";
+import DiscordIcon from "../../icons/DiscordIcon";
+import { ChatWindowConfig, chatWindows } from "../ChatWindow";
 import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
 
-function ChatButton() {
-  const { isOpen, toggle } = useFloatingWindow("chat");
-
-  if (!chatUrl) {
-    return null;
-  }
+function ChatWindowButton({ chat }: { chat: ChatWindowConfig }) {
+  const { isOpen, toggle } = useFloatingWindow(chat.name);
+  const label = `${isOpen ? "Hide" : "Show"} ${chat.title} Chat`;
 
   return (
     <IconButton
       m={1}
-      aria-label={isOpen ? "Hide Chat" : "Show Chat"}
-      title={isOpen ? "Hide Chat" : "Show Chat"}
+      aria-label={label}
+      title={label}
       aria-pressed={isOpen}
       onClick={toggle}
       sx={{ color: isOpen ? "primary" : "text" }}
     >
-      <ChatIcon />
+      {chat.name === "discordChat" ? <DiscordIcon /> : <ChatIcon />}
     </IconButton>
+  );
+}
+
+/** One button per configured chat window (Boluo, Discord) */
+function ChatButton() {
+  return (
+    <>
+      {chatWindows.map((chat) => (
+        <ChatWindowButton key={chat.name} chat={chat} />
+      ))}
+    </>
   );
 }
 
