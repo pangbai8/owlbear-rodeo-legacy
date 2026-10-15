@@ -211,6 +211,7 @@ body.pipdoc .mi-ac b{font-size:15px}
 .cbtn{text-align:left;border:1px solid var(--line);background:var(--sunk);border-radius:7px;padding:7px 9px;display:flex;flex-direction:column;gap:2px}
 .cbtn b{font-size:13.5px}
 .cbtn small{font-size:11.5px;color:var(--muted);line-height:1.35}
+#autoMapBtn[aria-pressed="true"]{border-color:var(--good);color:var(--good)}
 .cbtn[aria-pressed="true"]{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--sunk))}
 .presets{display:flex;flex-wrap:wrap;gap:5px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
@@ -312,7 +313,7 @@ body.pipdoc .toasts{bottom:8px}
     <button class="btn ghost full-only" data-act="io">导入 / 导出</button>
     <button class="btn ghost full-only" data-act="settings">设置</button>
     <button class="btn" data-act="pip" title="置顶显示在其他窗口和标签页之上">悬浮窗</button>
-    <button class="btn" data-act="pure" id="pureBtn" aria-pressed="false">纯先攻</button><button class="btn" data-act="npc">＋ NPC</button>
+    <button class="btn" data-act="pure" id="pureBtn" aria-pressed="false">纯先攻</button><button class="btn" data-act="npc">＋ NPC</button><button class="btn" id="autoMapBtn" aria-pressed="false" hidden title="打开后，从 5e 搜索拖到地图上的怪物也会自动作为 NPC 加入当前小队（只对这个浏览器生效）">地图怪物入队</button>
     <button class="btn" data-act="view" id="viewBtn">紧凑视图</button>
     <button class="btn primary full-only" data-act="add">＋ 角色</button>
   </div>

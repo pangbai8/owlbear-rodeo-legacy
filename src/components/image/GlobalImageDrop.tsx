@@ -268,7 +268,9 @@ function GlobalImageDrop({
             justifyContent: "center",
             alignItems: "center",
             color: "primary",
-            zIndex: 100,
+            // Below the floating windows (50+), so a monster can still be
+            // dropped into the party status panel instead of on the map
+            zIndex: 40,
           }}
           {...overlayListeners}
         >

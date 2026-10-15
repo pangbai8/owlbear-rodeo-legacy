@@ -9,6 +9,10 @@ import {
   monsterTokenFile,
   parseMonsterDrag,
 } from "../helpers/fiveETools";
+import {
+  addMonsterToPartyPanel,
+  autoAddMapMonsters,
+} from "../helpers/partyPanel";
 
 export type ImageDropEvent = {
   files: File[];
@@ -68,8 +72,11 @@ function useImageDrop(
     if (monster) {
       setDragging(false);
       try {
-        const file = await monsterTokenFile(await loadMonster(monster));
+        const stats = await loadMonster(monster);
+        const file = await monsterTokenFile(stats);
         onImageDrop({ files: [file], dropPosition, asToken: true, monster });
+        // The party panel's switch: also add it there as an NPC
+        if (autoAddMapMonsters()) addMonsterToPartyPanel(stats);
       } catch (e) {
         addToast(`无法添加怪物：${e instanceof Error ? e.message : e}`);
       }

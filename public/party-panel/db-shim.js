@@ -384,6 +384,68 @@
     });
   }
 
+  /* ---------- auto-add monsters dropped on the VTT map ---------- */
+
+  // Read by the VTT on a map drop (same origin), so it is per browser: only
+  // the GM who turns it on adds the monsters they drop
+  var AUTO_KEY = "partyPanel.autoAddMapMonsters";
+
+  function autoAddOn() {
+    try {
+      return localStorage.getItem(AUTO_KEY) === "true";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function setupAutoButton() {
+    var button = document.getElementById("autoMapBtn");
+    if (!button) return;
+    // Only inside the VTT (the iframe or its pop-out), where the map is
+    button.hidden = window.parent === window && !window.opener;
+    var sync = function () {
+      var on = autoAddOn();
+      button.setAttribute("aria-pressed", String(on));
+      button.textContent = on ? "地图怪物入队：开" : "地图怪物入队：关";
+    };
+    sync();
+    button.addEventListener("click", function () {
+      try {
+        localStorage.setItem(AUTO_KEY, String(!autoAddOn()));
+      } catch (e) {}
+      sync();
+      notice(autoAddOn() ? "已打开：拖到地图上的怪物会自动加入小队" : "已关闭地图怪物自动入队");
+    });
+    // The iframe and the pop-out show the same switch
+    window.addEventListener("storage", function (event) {
+      if (event.key === AUTO_KEY) sync();
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setupAutoButton);
+  else setupAutoButton();
+
+  // The VTT sends the stats of a monster just dropped on the map
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (event.origin !== location.origin || !data || data.type !== "party-panel-add-monster" || !event.source) return;
+    var reply = function (payload) {
+      payload.type = "party-panel-add-monster-result";
+      payload.id = data.id;
+      event.source.postMessage(payload, location.origin);
+    };
+    if (fatal) return reply({ error: "无法连接房间的小队数据" });
+    whenReady()
+      .then(function () {
+        return addMonster(data.stats);
+      })
+      .then(function (name) {
+        reply({ name: name });
+      })
+      .catch(function (error) {
+        reply({ error: error && error.message ? error.message : String(error) });
+      });
+  });
+
   // 📖 on an NPC card from the quick search: the VTT shows its stat card
   document.addEventListener("click", function (event) {
     var button = event.target.closest && event.target.closest('[data-act="monster"]');
