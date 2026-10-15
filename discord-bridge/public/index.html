@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Discord Chat</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <section id="login" class="screen" hidden>
+        <h1>Discord 聊天</h1>
+        <p id="login-message">用 Discord 账号登录后就能在这里收发消息。</p>
+        <button id="login-button" class="primary" type="button">用 Discord 登录</button>
+        <p class="hint">登录会在弹出窗口中进行。</p>
+      </section>
+
+      <section id="loading" class="screen">
+        <p>正在连接…</p>
+      </section>
+
+      <section id="chat" hidden>
+        <header id="topbar">
+          <select id="channel-select" aria-label="频道"></select>
+          <span id="channel-name"></span>
+          <span id="status" class="status" title=""></span>
+          <span class="spacer"></span>
+          <img id="me-avatar" class="avatar small" alt="" />
+          <button id="logout-button" type="button" class="ghost" title="退出登录">退出</button>
+        </header>
+        <div id="scroller">
+          <div id="older" class="older" hidden>正在加载更早的消息…</div>
+          <ol id="messages"></ol>
+        </div>
+        <div id="jump" hidden><button type="button" id="jump-button">有新消息 ↓</button></div>
+        <form id="composer">
+          <div id="pending-files"></div>
+          <div class="composer-row">
+            <label class="attach" title="上传文件">
+              ＋<input id="file-input" type="file" multiple hidden />
+            </label>
+            <textarea id="input" rows="1" maxlength="2000" placeholder="发送消息" autocomplete="off"></textarea>
+            <button id="send-button" type="submit" class="primary">发送</button>
+          </div>
+          <p id="composer-error" class="error" hidden></p>
+        </form>
+      </section>
+    </div>
+  </body>
+</html>
