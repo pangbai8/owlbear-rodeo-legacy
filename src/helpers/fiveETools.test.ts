@@ -2,14 +2,23 @@ import {
   FIVE_E_BASE,
   MONSTER_DRAG_TYPE,
   isMonsterDrag,
+  isMonsterRef,
   matchScore,
+  monsterResult,
   monsterStats,
+  onOpenMonsterCard,
+  openMonsterCard,
   parseMonsterDrag,
   proficiencyBonus,
   searchFiveE,
 } from "./fiveETools";
 
-const ref = { name: "地精头目", englishName: "Goblin Boss", source: "XMM", url: "u" };
+const ref = {
+  name: "地精头目",
+  englishName: "Goblin Boss",
+  source: "XMM",
+  url: `${FIVE_E_BASE}bestiary.html#goblin%20boss_xmm`,
+};
 
 describe("monsterStats", () => {
   test("reads size, AC, HP, CR and builds the token URL", () => {
@@ -159,4 +168,28 @@ test("monster drag data", () => {
   expect(isMonsterDrag(other)).toBe(false);
   expect(parseMonsterDrag(other)).toBeNull();
   expect(isMonsterDrag(null)).toBe(false);
+});
+
+test("stored monsters: checked, turned back into a result, opened by event", () => {
+  expect(isMonsterRef(ref)).toBe(true);
+  expect(isMonsterRef({ ...ref, url: "https://example.com/x" })).toBe(false);
+  expect(isMonsterRef({ name: "x" })).toBe(false);
+  expect(isMonsterRef(null)).toBe(false);
+
+  expect(monsterResult(ref)).toMatchObject({
+    name: "地精头目",
+    englishName: "Goblin Boss",
+    source: "XMM",
+    url: ref.url,
+    isMonster: true,
+    categoryLabel: "怪物",
+  });
+
+  const opened: unknown[] = [];
+  const stop = onOpenMonsterCard((r) => opened.push(r));
+  openMonsterCard(ref);
+  openMonsterCard({ ...ref, url: "javascript:alert(1)" });
+  stop();
+  openMonsterCard(ref);
+  expect(opened).toEqual([ref]);
 });

@@ -1,11 +1,18 @@
 import { useEffect, useRef } from "react";
 import { IconButton } from "theme-ui";
 import { useParams } from "react-router-dom";
+import { useToasts } from "react-toast-notifications";
 
 import FloatingWindow, { besidePartyRect } from "./FloatingWindow";
 import OpenInNewIcon from "../icons/OpenInNewIcon";
 import ClearDataIcon from "../icons/ClearDataIcon";
-import { MonsterRef, loadMonster } from "../helpers/fiveETools";
+import {
+  MonsterRef,
+  isMonsterRef,
+  loadMonster,
+  openMonsterCard,
+} from "../helpers/fiveETools";
+import { onAddMonsterToPartyPanel } from "../helpers/partyPanel";
 
 /**
  * The GM party status panel (public/party-panel, see db-shim.js). With the
@@ -34,6 +41,15 @@ function PartyPanelWindow() {
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       const data = event.data;
+      // 📖 on an NPC the quick search added: show its stat card here
+      if (
+        event.origin === window.location.origin &&
+        data?.type === "party-panel-open-monster" &&
+        isMonsterRef(data.ref)
+      ) {
+        openMonsterCard(data.ref);
+        return;
+      }
       if (
         event.origin !== window.location.origin ||
         data?.type !== "party-panel-monster" ||
@@ -54,6 +70,49 @@ function PartyPanelWindow() {
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
+  // A monster dropped on the map with the panel's auto-add switch on: the
+  // panel (always loaded, even while this window is closed) adds the NPC
+  const { addToast } = useToasts();
+  // Latest addToast for the listener below (registered once)
+  const addToastRef = useRef(addToast);
+  addToastRef.current = addToast;
+  useEffect(() => {
+    let nextId = 1;
+    const waiting = new Map<number, (data: any) => void>();
+    function handleResult(event: MessageEvent) {
+      const data = event.data;
+      if (
+        event.origin !== window.location.origin ||
+        data?.type !== "party-panel-add-monster-result"
+      ) {
+        return;
+      }
+      waiting.get(data.id)?.(data);
+      waiting.delete(data.id);
+    }
+    window.addEventListener("message", handleResult);
+    const stop = onAddMonsterToPartyPanel((stats) => {
+      const frame = frameRef.current?.contentWindow;
+      if (!frame) return;
+      const id = nextId++;
+      waiting.set(id, (data) =>
+        addToastRef.current(
+          data.error
+            ? `没能加入小队面板：${data.error}`
+            : `已把「${data.name}」加入小队面板`
+        )
+      );
+      frame.postMessage(
+        { type: "party-panel-add-monster", id, stats },
+        window.location.origin
+      );
+    });
+    return () => {
+      stop();
+      window.removeEventListener("message", handleResult);
+    };
   }, []);
 
   function clearRoomData() {

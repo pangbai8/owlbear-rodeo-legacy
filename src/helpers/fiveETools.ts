@@ -412,6 +412,50 @@ export function loadMonsterRecord(ref: MonsterRef) {
   return monsterRecord(ref.source, ref.englishName);
 }
 
+/** Whether a value (e.g. from the party panel frame) looks like a MonsterRef */
+export function isMonsterRef(value: any): value is MonsterRef {
+  return (
+    !!value &&
+    typeof value.name === "string" &&
+    typeof value.englishName === "string" &&
+    typeof value.source === "string" &&
+    typeof value.url === "string" &&
+    value.url.startsWith(FIVE_E_BASE)
+  );
+}
+
+/** The search result a stored monster stands for, to show its card again */
+export function monsterResult(ref: MonsterRef): SearchResult {
+  return {
+    id: -1,
+    name: ref.name,
+    englishName: ref.englishName !== ref.name ? ref.englishName : "",
+    category: CATEGORY_CREATURE,
+    categoryLabel: CATEGORY_LABEL[CATEGORY_CREATURE],
+    source: ref.source,
+    url: ref.url,
+    reprinted: false,
+    modern: false,
+    isMonster: true,
+  };
+}
+
+const OPEN_MONSTER_EVENT = "fiveE:openMonster";
+
+/** Opens a monster's stat card in the quick search bar (from anywhere) */
+export function openMonsterCard(ref: MonsterRef) {
+  window.dispatchEvent(new CustomEvent(OPEN_MONSTER_EVENT, { detail: ref }));
+}
+
+export function onOpenMonsterCard(listener: (ref: MonsterRef) => void) {
+  const handler = (event: Event) => {
+    const ref = (event as CustomEvent).detail;
+    if (isMonsterRef(ref)) listener(ref);
+  };
+  window.addEventListener(OPEN_MONSTER_EVENT, handler);
+  return () => window.removeEventListener(OPEN_MONSTER_EVENT, handler);
+}
+
 export function monsterRefOf(result: SearchResult): MonsterRef {
   return {
     name: result.name,
@@ -469,10 +513,7 @@ export function parseMonsterDrag(dataTransfer: DataTransfer | null) {
   if (!raw) return null;
   try {
     const ref = JSON.parse(raw);
-    return typeof ref?.englishName === "string" &&
-      typeof ref?.source === "string"
-      ? (ref as MonsterRef)
-      : null;
+    return isMonsterRef(ref) ? ref : null;
   } catch {
     return null;
   }

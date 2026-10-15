@@ -4,16 +4,23 @@ import { useToasts } from "react-toast-notifications";
 import Vector2 from "../helpers/Vector2";
 import {
   isMonsterDrag,
+  MonsterRef,
   loadMonster,
   monsterTokenFile,
   parseMonsterDrag,
 } from "../helpers/fiveETools";
+import {
+  addMonsterToPartyPanel,
+  autoAddMapMonsters,
+} from "../helpers/partyPanel";
 
 export type ImageDropEvent = {
   files: File[];
   dropPosition: Vector2;
   /** A monster from the quick search: always a token, never a map */
   asToken?: boolean;
+  /** That monster, remembered on the token so its card can be opened again */
+  monster?: MonsterRef;
 };
 
 export type OtherFilesDropOptions = {
@@ -65,8 +72,11 @@ function useImageDrop(
     if (monster) {
       setDragging(false);
       try {
-        const file = await monsterTokenFile(await loadMonster(monster));
-        onImageDrop({ files: [file], dropPosition, asToken: true });
+        const stats = await loadMonster(monster);
+        const file = await monsterTokenFile(stats);
+        onImageDrop({ files: [file], dropPosition, asToken: true, monster });
+        // The party panel's switch: also add it there as an NPC
+        if (autoAddMapMonsters()) addMonsterToPartyPanel(stats);
       } catch (e) {
         addToast(`无法添加怪物：${e instanceof Error ? e.message : e}`);
       }

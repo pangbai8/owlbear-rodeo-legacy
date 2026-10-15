@@ -13,6 +13,8 @@ import {
   loadMonster,
   loadSearchIndex,
   monsterRefOf,
+  monsterResult,
+  onOpenMonsterCard,
   searchFiveE,
 } from "../helpers/fiveETools";
 
@@ -128,6 +130,19 @@ function QuickSearch() {
       window.removeEventListener("pointerdown", onPointerDown);
     };
   }, []);
+
+  // A token or party panel NPC asks for its monster's card
+  useEffect(
+    () =>
+      onOpenMonsterCard((ref) => {
+        setVisibleRef.current(true);
+        setOpen(true);
+        setSelected(monsterResult(ref));
+        setFullPage(false);
+        setPageLoading(true);
+      }),
+    []
+  );
 
   function handleFocus() {
     setOpen(true);
