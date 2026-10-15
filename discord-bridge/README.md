@@ -26,7 +26,11 @@ map. Runs on Cloudflare Workers + one SQLite Durable Object, within the free pla
   read-only, without Attach Files there are no uploads, without Read Message
   History no history. Rechecked every few minutes while connected.
   `ALLOWED_ROLE_IDS` can restrict it further.
-- Channels can come from several servers (the channel picker groups them).
+- **Channels are listed automatically:** every text/announcement channel of
+  every server the bot is in, shown to whoever can see it in Discord. Pick the
+  server, then the channel (grouped by category). Channels the bot cannot read
+  are left out; where it lacks Manage Webhooks they are read-only.
+  `CHANNEL_IDS` can turn this into an allow-list.
 - Renders Discord markdown, mentions, custom emoji, timestamps, attachments,
   embeds (dice bots), stickers, replies and slash-command lines.
 
@@ -47,14 +51,15 @@ Messages sent from the page carry Discord's `APP` tag (they are webhook messages
 5. Invite the bot to each server with View Channel, Read Message History and
    Manage Webhooks (also per channel, for private channels):
    `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&scope=bot&permissions=536937472`
-6. Enable Developer Mode in Discord (Settings → Advanced) and copy the channel
-   ids you want to open up into `CHANNEL_IDS` (any mix of servers).
+6. That's it: the channels show up by themselves. To open only some of them,
+   enable Developer Mode in Discord (Settings → Advanced) and list their ids in
+   `CHANNEL_IDS`.
 
 ## Deploy
 
 ```powershell
 npm install
-# Fill DISCORD_CLIENT_ID, DISCORD_PUBLIC_KEY, CHANNEL_IDS (and ALLOWED_ROLE_IDS) in wrangler.deploy.jsonc
+# Fill DISCORD_CLIENT_ID, DISCORD_PUBLIC_KEY (and optionally CHANNEL_IDS, ALLOWED_ROLE_IDS) in wrangler.deploy.jsonc
 npx wrangler secret put DISCORD_BOT_TOKEN --config wrangler.deploy.jsonc
 npx wrangler secret put DISCORD_CLIENT_SECRET --config wrangler.deploy.jsonc
 npx wrangler secret put SESSION_SECRET --config wrangler.deploy.jsonc   # any long random string
@@ -101,5 +106,5 @@ Free plan: Durable Object requests (100k/day) and duration (13k GB-s/day) — th
 object stays awake while the chat is open, about 1,800 GB-s for a 4-hour session.
 Discord rate limits webhooks to about 5 messages per 2 seconds per channel.
 Sessions last 30 days; changing `SESSION_SECRET` signs everyone out. Members,
-roles and channel overwrites are cached for 1–5 minutes. Up to 100 characters
+roles and channel overwrites are cached for 1–5 minutes; the list of servers for 1 minute. Up to 100 characters
 per player; avatars up to 1 MB (larger images are shrunk to 512 px).

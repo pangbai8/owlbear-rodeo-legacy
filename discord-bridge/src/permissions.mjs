@@ -7,6 +7,7 @@ export const VIEW_CHANNEL = 1n << 10n;
 export const SEND_MESSAGES = 1n << 11n;
 export const ATTACH_FILES = 1n << 15n;
 export const READ_MESSAGE_HISTORY = 1n << 16n;
+export const MANAGE_WEBHOOKS = 1n << 29n;
 const ALL = (1n << 64n) - 1n;
 
 const big = (value) => {

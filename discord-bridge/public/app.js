@@ -184,18 +184,11 @@ function initChat(me) {
   $("me-avatar").src = me.user.avatar;
   $("me-avatar").title = me.user.name;
 
-  const select = $("channel-select");
-  const guilds = [...new Set(me.channels.map((c) => c.guildId))];
-  const option = (c) => el("option", { value: c.id, text: `# ${c.name}` });
-  select.replaceChildren(
-    ...(guilds.length > 1
-      ? guilds.map((g) => {
-          const channels = me.channels.filter((c) => c.guildId === g);
-          return el("optgroup", { label: channels[0].guildName }, channels.map(option));
-        })
-      : me.channels.map(option)),
-  );
-  select.hidden = me.channels.length < 2;
+  const guilds = [];
+  for (const c of me.channels) if (!guilds.some((g) => g.id === c.guildId)) guilds.push({ id: c.guildId, name: c.guildName });
+  $("guild-select").replaceChildren(...guilds.map((g) => el("option", { value: g.id, text: g.name })));
+  // Always shown, so it is clear which server the channel belongs to
+  $("guild-select").hidden = false;
 
   state.identity = safeStorage("get", IDENTITY_KEY) || "";
   characterPanel ??= createCharacterPanel({ api, getMe: () => state.me, onChange: setCharacters });
@@ -203,7 +196,7 @@ function initChat(me) {
   characterPanel.load().catch((error) => showComposerError(`加载角色失败：${error.message}`));
 
   const wanted = new URLSearchParams(location.search).get("channel") || safeStorage("get", CHANNEL_KEY);
-  const channel = me.channels.find((c) => c.id === wanted) || me.channels[0];
+  const channel = me.channels.find((c) => c.id === wanted) || me.channels.find((c) => c.access.send) || me.channels[0];
   showScreen("chat");
   switchChannel(channel.id);
 }
@@ -223,15 +216,35 @@ function switchChannel(channelId) {
   state.hasMore = true;
   state.editing = null;
   state.stick = true;
-  $("channel-select").value = channelId;
   const channel = state.channels.find((c) => c.id === channelId);
-  $("channel-name").textContent = state.channels.length < 2 ? `# ${channel?.name || ""}` : "";
+  renderChannelOptions(channel.guildId);
+  $("guild-select").value = channel.guildId;
+  $("channel-select").value = channelId;
+  const single = state.channels.filter((c) => c.guildId === channel.guildId).length < 2;
+  $("channel-name").textContent = single ? `# ${channel?.name || ""}` : "";
   $("channel-name").title = channel?.guildName || "";
   safeStorage("set", CHANNEL_KEY, channelId);
+  safeStorage("set", `${CHANNEL_KEY}.${channel.guildId}`, channelId);
   applyAccess(channel?.access);
   renderIdentity();
   render();
   connect();
+}
+
+/** Channels of one server, grouped by category like the Discord sidebar */
+function renderChannelOptions(guildId) {
+  const channels = state.channels.filter((c) => c.guildId === guildId);
+  const option = (c) => el("option", { value: c.id, text: `# ${c.name}` });
+  const groups = [];
+  for (const c of channels) {
+    const group = groups.at(-1);
+    if (group && group.category === c.category) group.channels.push(c);
+    else groups.push({ category: c.category, channels: [c] });
+  }
+  $("channel-select").replaceChildren(
+    ...groups.map((g) => (g.category ? el("optgroup", { label: g.category }, g.channels.map(option)) : g.channels.map(option))).flat(),
+  );
+  $("channel-select").hidden = channels.length < 2;
 }
 
 function currentChannel() {
@@ -246,7 +259,11 @@ function applyAccess(access) {
   input.disabled = !canSend;
   $("send-button").disabled = !canSend;
   $("identity-select").disabled = !canSend;
-  input.placeholder = canSend ? `发送到 #${channel?.name || ""}` : "你在这个频道没有发言权限（只能看）";
+  input.placeholder = canSend
+    ? `发送到 #${channel?.name || ""}`
+    : access?.botCannotPost
+      ? "机器人在这个频道不能发言（缺少「管理 Webhook」权限），只能看"
+      : "你在这个频道没有发言权限（只能看）";
   document.querySelector(".attach").hidden = !access?.attach;
   if (!access?.attach && state.files.length) {
     state.files = [];
@@ -870,6 +887,13 @@ $("jump-button").addEventListener("click", () => {
 });
 
 $("channel-select").addEventListener("change", (event) => switchChannel(event.target.value));
+// Switching servers opens the last channel used there, or its first channel
+$("guild-select").addEventListener("change", (event) => {
+  const guildId = event.target.value;
+  const last = safeStorage("get", `${CHANNEL_KEY}.${guildId}`);
+  const channels = state.channels.filter((c) => c.guildId === guildId);
+  switchChannel((channels.find((c) => c.id === last) || channels[0]).id);
+});
 $("login-button").onclick = login;
 $("logout-button").addEventListener("click", logout);
 

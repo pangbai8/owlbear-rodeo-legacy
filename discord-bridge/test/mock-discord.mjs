@@ -3,11 +3,13 @@
 //   node test/mock-discord.mjs            (listens on 8792)
 //   .dev.vars: DISCORD_API_URL=http://127.0.0.1:8792/api
 //              DISCORD_GATEWAY_URL=ws://127.0.0.1:8792/gateway
-//              CHANNEL_IDS=2000,2001,2002,2100,2999
-// Two servers: 1000 has a public channel (2000), a private one only role 1500
-// can see (2001) and a read-only one (2002); 1100 has 2100. User 111 is in both
-// servers without role 1500; user 222 is only in 1000, with role 1500. The bot
-// cannot see 2999.
+//              CHANNEL_IDS=   (empty: every channel is listed automatically)
+// The bot (4000) is in three servers. 1000 has a category "跑团区" with a
+// public channel (2000), plus a private channel only role 1500 can see (2001),
+// a read-only announcement channel (2002), one hidden from the bot (2003) and
+// a voice channel (2004). 1100 has 2100 and 2101 (where the bot may not manage
+// webhooks). User 111 is in 1000 and 1100 without role 1500; user 222 is only
+// in 1000, with role 1500; nobody but the bot is in 1200.
 // Simulate activity on the Discord side with
 //   POST /_test/messages        {"content": "...", "nick": "...", "channel": "2000"}
 //   POST /_test/messages/:id    {"content": "..."}   (edit)
@@ -24,35 +26,46 @@ const VIEW = 1n << 10n;
 const SEND = 1n << 11n;
 const ATTACH = 1n << 15n;
 const HISTORY = 1n << 16n;
+const MANAGE_WEBHOOKS = 1n << 29n;
 const EVERYONE_PERMS = String(VIEW | SEND | ATTACH | HISTORY);
 
 export const MEMBER = { id: "111", username: "pangbai", global_name: "Pangbai", avatar: null, discriminator: "0" };
 const OTHER = { id: "222", username: "bob", global_name: "Bob", avatar: null, discriminator: "0" };
 const APPLICATION_ID = "4000";
+const BOT = { id: APPLICATION_ID, username: "BridgeBot", bot: true, avatar: null, discriminator: "0" };
 
+const everyone = (id) => ({ id, name: "@everyone", permissions: EVERYONE_PERMS, color: 0 });
+const botRole = (id) => ({ id, name: "BridgeBot", permissions: String(MANAGE_WEBHOOKS), color: 0 });
 const guilds = {
-  1000: { id: "1000", name: "服务器 A", owner_id: "1", roles: [{ id: "1000", name: "@everyone", permissions: EVERYONE_PERMS, color: 0 }, { id: "1500", name: "玩家", permissions: "0", color: 0x3366ff }] },
-  1100: { id: "1100", name: "服务器 B", owner_id: "1", roles: [{ id: "1100", name: "@everyone", permissions: EVERYONE_PERMS, color: 0 }] },
+  1000: { id: "1000", name: "服务器 A", owner_id: "1", roles: [everyone("1000"), { id: "1500", name: "玩家", permissions: "0", color: 0x3366ff }, botRole("1900")] },
+  1100: { id: "1100", name: "服务器 B", owner_id: "1", roles: [everyone("1100"), botRole("1990")] },
+  1200: { id: "1200", name: "服务器 C", owner_id: "1", roles: [everyone("1200")] },
 };
+const text = (id, guild_id, name, position, extra = {}) => ({ id, guild_id, name, type: 0, position, permission_overwrites: [], ...extra });
 const channels = {
-  2000: { id: "2000", guild_id: "1000", name: "跑团", type: 0, permission_overwrites: [] },
-  2001: {
-    id: "2001",
-    guild_id: "1000",
-    name: "私密",
-    type: 0,
+  2050: { id: "2050", guild_id: "1000", name: "跑团区", type: 4, position: 0, permission_overwrites: [] },
+  2000: text("2000", "1000", "跑团", 0, { parent_id: "2050" }),
+  2001: text("2001", "1000", "私密", 1, {
     permission_overwrites: [
       { id: "1000", type: 0, allow: "0", deny: String(VIEW) },
       { id: "1500", type: 0, allow: String(VIEW), deny: "0" },
+      { id: "1900", type: 0, allow: String(VIEW), deny: "0" },
     ],
-  },
-  2002: { id: "2002", guild_id: "1000", name: "公告", type: 0, permission_overwrites: [{ id: "1000", type: 0, allow: "0", deny: String(SEND) }] },
-  2100: { id: "2100", guild_id: "1100", name: "B服跑团", type: 0, permission_overwrites: [] },
+  }),
+  2002: text("2002", "1000", "公告", 2, { type: 5, permission_overwrites: [{ id: "1000", type: 0, allow: "0", deny: String(SEND) }] }),
+  2003: text("2003", "1000", "机器人看不到", 3, { permission_overwrites: [{ id: BOT.id, type: 1, allow: "0", deny: String(VIEW) }] }),
+  2004: text("2004", "1000", "语音", 4, { type: 2 }),
+  2100: text("2100", "1100", "B服跑团", 0),
+  2101: text("2101", "1100", "B服闲聊", 1, { permission_overwrites: [{ id: BOT.id, type: 1, allow: "0", deny: String(MANAGE_WEBHOOKS) }] }),
+  2200: text("2200", "1200", "C服", 0),
 };
 const members = {
   "1000:111": { user: MEMBER, nick: "GM 胖白", avatar: null, roles: [] },
   "1000:222": { user: OTHER, nick: "Bob the DM", avatar: null, roles: ["1500"] },
   "1100:111": { user: MEMBER, nick: "B服的胖白", avatar: null, roles: [] },
+  "1000:4000": { user: BOT, nick: null, avatar: null, roles: ["1900"] },
+  "1100:4000": { user: BOT, nick: null, avatar: null, roles: ["1990"] },
+  "1200:4000": { user: BOT, nick: null, avatar: null, roles: [] },
 };
 
 let nextId = 5000n;
@@ -120,6 +133,8 @@ const server = http.createServer(async (req, res) => {
   const path = url.pathname.replace(/^\/api/, "");
   let match;
   try {
+    if (req.method === "GET" && path === "/users/@me") return send(res, 200, BOT);
+    if (req.method === "GET" && path === "/users/@me/guilds") return send(res, 200, Object.values(guilds).map((g) => ({ id: g.id, name: g.name })));
     if (req.method === "GET" && (match = path.match(/^\/guilds\/(\d+)\/members\/(\d+)$/))) {
       const member = members[`${match[1]}:${match[2]}`];
       return member ? send(res, 200, member) : send(res, 404, { message: "Unknown Member", code: 10007 });

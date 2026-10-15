@@ -12,12 +12,13 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
   "vars": {
-    // Not secret. CHANNEL_IDS: comma-separated, may span several servers (the bot
-    // must be in each one, with View Channel, Read Message History, Manage Webhooks).
+    // Not secret.
     "DISCORD_CLIENT_ID": "1560258744237957150",
     // General Information -> Public Key (verifies POST /interactions)
     "DISCORD_PUBLIC_KEY": "3c1be30a358fb64dec48c5e354d013807a29866403848de77045081a4e0a3d8f",
-    "CHANNEL_IDS": "1447262254625194176",
+    // Empty: every text channel of every server the bot is in, for whoever can see
+    // it in Discord. Or a comma-separated allow-list of channel ids.
+    "CHANNEL_IDS": "",
     // Optional extra gate on top of Discord channel permissions: only members
     // with one of these role ids (from any of the servers) may use the chat
     "ALLOWED_ROLE_IDS": "",

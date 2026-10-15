@@ -7,7 +7,7 @@ SESSION_SECRET=
 DISCORD_CLIENT_ID=
 # Only used by `npm run register` to remove old server-only commands
 GUILD_ID=
-# Comma-separated; may span several servers
+# Optional allow-list (comma-separated); empty lists every channel the bot can use
 CHANNEL_IDS=
 # Developer Portal -> General Information -> Public Key (only for the /interactions endpoint)
 DISCORD_PUBLIC_KEY=

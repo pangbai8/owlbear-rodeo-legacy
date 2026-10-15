@@ -65,14 +65,21 @@ console.log("ok  unauthenticated / cross-origin / non-member requests rejected")
 
 // Several servers and Discord channel permissions
 const me = await call("GET", "/api/me");
+// Listed automatically, uncategorised channels first and then by category like
+// Discord; 2001 is private, 2003 hidden from the bot, 2004 is voice, 111 is not in 1200
 assert.deepEqual(
-  me.data.channels.map((c) => [c.id, c.guildName, c.access.send]),
+  me.data.channels.map((c) => [c.id, c.guildName, c.category, c.access.send]),
   [
-    ["2000", "服务器 A", true],
-    ["2002", "服务器 A", false],
-    ["2100", "服务器 B", true],
+    ["2002", "服务器 A", "", false],
+    ["2000", "服务器 A", "跑团区", true],
+    ["2100", "服务器 B", "", true],
+    ["2101", "服务器 B", "", false],
   ],
 );
+assert.equal(me.data.channels.find((c) => c.id === "2101").access.botCannotPost, true);
+assert.match((await call("POST", "/api/channels/2101/messages", { content: "x" })).data.message, /管理 Webhook/);
+assert.equal((await call("GET", "/api/channels/2003/messages")).status, 403);
+assert.equal((await call("GET", "/api/channels/2200/messages")).status, 403);
 assert.equal(me.data.channels.find((c) => c.id === "2100").self.name, "B服的胖白");
 assert.equal((await call("GET", "/api/channels/2001/messages")).status, 403);
 assert.equal((await call("POST", "/api/channels/2002/messages", { content: "只读频道" })).status, 403);
@@ -86,14 +93,14 @@ await new Promise((resolve) => {
 });
 const bobCookie = `db_session=${await signSession({ uid: "222", exp: Date.now() + 3600000 }, SECRET)}`;
 const bobMe = await fetch(`${BRIDGE}/api/me`, { headers: { Cookie: bobCookie } }).then((r) => r.json());
-assert.deepEqual(bobMe.channels.map((c) => c.id), ["2000", "2001", "2002"]);
+assert.deepEqual(bobMe.channels.map((c) => c.id), ["2001", "2002", "2000"]);
 const bobSecret = await fetch(`${BRIDGE}/api/channels/2001/messages`, { headers: { Cookie: bobCookie } }).then((r) => r.json());
 assert.equal(bobSecret.messages[0].content, "只有玩家身份组能看到的秘密");
 const otherServer = await call("POST", "/api/channels/2100/messages", { content: "B 服发言" });
 assert.equal(otherServer.status, 200);
 assert.equal(otherServer.data.message.author.name, "B服的胖白");
 await call("DELETE", `/api/channels/2100/messages/${otherServer.data.message.id}`);
-console.log("ok  per-channel permissions (private, read-only) and a second server");
+console.log("ok  channels listed automatically across servers, following Discord and bot permissions");
 
 // Web -> Discord
 const sent = await call("POST", `/api/channels/${CHANNEL}/messages`, { content: "掷骰 **1d20** = 17" });

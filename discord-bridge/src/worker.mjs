@@ -40,6 +40,8 @@ function withSecurityHeaders(response, config) {
   headers.set("Content-Security-Policy", contentSecurityPolicy(config.frameAncestors));
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "same-origin");
+  // Revalidate every time, so players get a new version right after a deploy
+  headers.set("Cache-Control", "no-cache");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 

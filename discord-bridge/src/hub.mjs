@@ -17,12 +17,11 @@ import {
 } from "./discord.mjs";
 import { GatewayClient } from "./gateway.mjs";
 import { handleInteraction } from "./interactions.mjs";
-import { channelAccess, channelPermissions } from "./permissions.mjs";
+import { MANAGE_WEBHOOKS, channelAccess, channelPermissions } from "./permissions.mjs";
 import { MAX_CHARACTERS, characterDisplayName, fromTupperboxExport, matchProxy, normalizeCharacter } from "../public/proxy.js";
 
 const MEMBER_TTL = 5 * 60 * 1000;
-const CHANNEL_TTL = 60 * 1000;
-const GUILD_TTL = 2 * 60 * 1000;
+const GUILD_TTL = 60 * 1000;
 const RECHECK_INTERVAL = 5 * 60 * 1000;
 const IDLE_SHUTDOWN = 60 * 1000;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -33,6 +32,10 @@ const MAX_AVATAR_BYTES = 1024 * 1024;
 const MAX_AVATARS_PER_USER = 200;
 const AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const NO_ACCESS = { view: false, history: false, send: false, attach: false };
+const CATEGORY = 4;
+// Text and announcement channels (voice-channel chats and threads are left out)
+const TEXT_CHANNEL_TYPES = [0, 5];
+const compareIds = (a, b) => (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0);
 
 function json(data, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -91,8 +94,8 @@ export class Hub extends DurableObject {
     );
     /** @type {Map<WebSocket, {userId: string, channelId: string}>} */
     this.clients = new Map();
-    this.channelCache = new TtlCache(CHANNEL_TTL); // channel id -> { id, guildId, name, overwrites } | null
-    this.guildCache = new TtlCache(GUILD_TTL); // guild id -> { id, name, ownerId, roles, roleInfo, channelNames }
+    this.guildCache = new TtlCache(GUILD_TTL); // guild id -> { id, name, ownerId, roles, roleInfo, channelNames, categories, channels }
+    this.channelGuild = new Map(); // channel id -> guild id
     this.memberCache = new TtlCache(MEMBER_TTL); // "guild:user" -> member | null
     this.nicks = new Map(); // "guild:user" -> nickname seen on gateway events
     this.recheckTimer = null;
@@ -108,23 +111,17 @@ export class Hub extends DurableObject {
 
   // ---- Discord lookups -------------------------------------------------------
 
-  getChannel(channelId) {
-    return this.channelCache.settle(
-      channelId,
-      this.channelCache.get(channelId, async () => {
-        try {
-          const c = await discordRequest(this.env, `/channels/${channelId}`);
-          return { id: c.id, guildId: c.guild_id, name: c.name, overwrites: c.permission_overwrites || [] };
-        } catch (e) {
-          // The bot cannot see it (missing permission, deleted, wrong id)
-          if (e instanceof DiscordError && (e.status === 403 || e.status === 404)) {
-            console.error(`channel ${channelId} is not accessible to the bot: ${e.message}`);
-            return null;
-          }
-          throw e;
-        }
-      }),
-    );
+  /** The bot's own user (its id is needed for its channel permissions) */
+  getBotUser() {
+    return this.guildCache.get("@bot", () => discordRequest(this.env, "/users/@me"));
+  }
+
+  /** Servers the bot is in */
+  getBotGuilds() {
+    return this.guildCache.get("@guilds", async () => {
+      const guilds = await discordRequest(this.env, "/users/@me/guilds?limit=200");
+      return guilds.map((g) => ({ id: g.id, name: g.name }));
+    });
   }
 
   getGuild(guildId) {
@@ -132,8 +129,28 @@ export class Hub extends DurableObject {
       const [guild, roles, channels] = await Promise.all([
         discordRequest(this.env, `/guilds/${guildId}`),
         discordRequest(this.env, `/guilds/${guildId}/roles`),
-        discordRequest(this.env, `/guilds/${guildId}/channels`).catch(() => []),
+        discordRequest(this.env, `/guilds/${guildId}/channels`),
       ]);
+      const categories = Object.fromEntries(
+        channels.filter((c) => c.type === CATEGORY).map((c) => [c.id, { name: c.name, position: c.position }]),
+      );
+      const textChannels = channels
+        .filter((c) => TEXT_CHANNEL_TYPES.includes(c.type))
+        .map((c) => ({
+          id: c.id,
+          guildId,
+          name: c.name,
+          position: c.position,
+          parentId: c.parent_id || null,
+          overwrites: c.permission_overwrites || [],
+        }))
+        // Discord's order: uncategorised first, then categories by position, channels by position
+        .sort((a, b) => {
+          const pa = a.parentId ? (categories[a.parentId]?.position ?? 0) + 1 : 0;
+          const pb = b.parentId ? (categories[b.parentId]?.position ?? 0) + 1 : 0;
+          return pa - pb || a.position - b.position || compareIds(a.id, b.id);
+        });
+      for (const c of textChannels) this.channelGuild.set(c.id, guildId);
       return {
         id: guildId,
         name: guild.name,
@@ -141,6 +158,8 @@ export class Hub extends DurableObject {
         roles: Object.fromEntries(roles.map((r) => [r.id, r.permissions])),
         roleInfo: Object.fromEntries(roles.map((r) => [r.id, { name: r.name, color: r.color }])),
         channelNames: Object.fromEntries(channels.map((c) => [c.id, c.name])),
+        categories,
+        channels: textChannels,
       };
     });
   }
@@ -160,21 +179,79 @@ export class Hub extends DurableObject {
     );
   }
 
-  /** The user's rights in one configured channel, or null if it is not configured / not visible to the bot */
-  async accessFor(userId, channelId) {
-    if (!this.config.channelIds.includes(channelId)) return null;
-    const channel = await this.getChannel(channelId);
-    if (!channel) return null;
-    const [guild, member] = await Promise.all([this.getGuild(channel.guildId), this.getMember(channel.guildId, userId)]);
-    const allowed = memberAllowed(member, this.config.allowedRoleIds);
-    const perms = allowed ? channelPermissions({ userId, member, guild, overwrites: channel.overwrites }) : 0n;
-    return { channel, guild, member, access: allowed ? channelAccess(perms) : NO_ACCESS };
+  /** Which server a channel belongs to (from loaded servers, else one lookup) */
+  async guildOfChannel(channelId) {
+    if (this.channelGuild.has(channelId)) return this.channelGuild.get(channelId);
+    try {
+      const channel = await discordRequest(this.env, `/channels/${channelId}`);
+      if (channel.guild_id) this.channelGuild.set(channelId, channel.guild_id);
+      return channel.guild_id || null;
+    } catch (e) {
+      // The bot cannot see it (missing permission, deleted, wrong id)
+      if (e instanceof DiscordError && (e.status === 403 || e.status === 404)) return null;
+      throw e;
+    }
   }
 
-  /** Configured channels this user can see, in config order */
+  /** Whether CHANNEL_IDS (if set) allows this channel */
+  channelListed(channelId) {
+    return !this.config.channelIds.length || this.config.channelIds.includes(channelId);
+  }
+
+  /** The user's rights in one channel of one server; null if the bot cannot use it */
+  async accessIn(userId, guild, channel) {
+    if (!this.channelListed(channel.id)) return null;
+    const bot = await this.getBotUser();
+    const [member, botMember] = await Promise.all([this.getMember(guild.id, userId), this.getMember(guild.id, bot.id)]);
+    // The bot has to read the channel itself, and needs Manage Webhooks to post
+    const botPerms = channelPermissions({ userId: bot.id, member: botMember, guild, overwrites: channel.overwrites });
+    const botAccess = channelAccess(botPerms);
+    if (!botAccess.history) return null;
+    const allowed = memberAllowed(member, this.config.allowedRoleIds);
+    const access = allowed ? channelAccess(channelPermissions({ userId, member, guild, overwrites: channel.overwrites })) : NO_ACCESS;
+    if (!(botPerms & MANAGE_WEBHOOKS)) {
+      access.send = false;
+      access.attach = false;
+      access.botCannotPost = true;
+    }
+    return { channel, guild, member, access };
+  }
+
+  /** The user's rights in a channel given only its id */
+  async accessFor(userId, channelId) {
+    const guildId = await this.guildOfChannel(channelId);
+    if (!guildId) return null;
+    const guild = await this.getGuild(guildId);
+    const channel = guild.channels.find((c) => c.id === channelId);
+    if (!channel) return null;
+    return this.accessIn(userId, guild, channel);
+  }
+
+  /** Every text channel, in every server the bot is in, that this user can see in Discord */
   async visibleChannels(userId) {
-    const all = await Promise.all(this.config.channelIds.map((id) => this.accessFor(userId, id).catch(() => null)));
-    return all.filter((entry) => entry?.access.view);
+    const guilds = await this.getBotGuilds();
+    const perGuild = await Promise.all(
+      guilds.map(async ({ id }) => {
+        try {
+          // Skip servers the user is not in before loading their channels
+          if (!(await this.getMember(id, userId))) return [];
+          const guild = await this.getGuild(id);
+          const entries = await Promise.all(guild.channels.map((c) => this.accessIn(userId, guild, c)));
+          return entries.filter((entry) => entry?.access.view);
+        } catch (e) {
+          console.error(`server ${id} could not be loaded`, e);
+          return [];
+        }
+      }),
+    );
+    return perGuild.flat();
+  }
+
+  /** Any server the bot is in where this user is a member */
+  async memberships(userId) {
+    const guilds = await this.getBotGuilds();
+    const members = await Promise.all(guilds.map(({ id }) => this.getMember(id, userId).catch(() => null)));
+    return members.filter(Boolean);
   }
 
   profileOf(member, guildId) {
@@ -187,7 +264,7 @@ export class Hub extends DurableObject {
 
   ownerOf = (messageId) => this.sql.exec("SELECT user_id FROM sent WHERE message_id = ?", messageId).toArray()[0]?.user_id ?? null;
 
-  clientMessage(message, guildId = this.channelCache.peek(message.channel_id)?.guildId) {
+  clientMessage(message, guildId = this.channelGuild.get(message.channel_id)) {
     const nickOf = (userId) =>
       this.nicks.get(`${guildId}:${userId}`) || this.memberCache.peek(`${guildId}:${userId}`)?.nick || null;
     return toClientMessage(message, { guildId, ownerOf: this.ownerOf, nickOf });
@@ -305,7 +382,7 @@ export class Hub extends DurableObject {
       );
       return;
     }
-    if (!data || !this.config.channelIds.includes(data.channel_id)) return;
+    if (!data?.channel_id || ![...this.clients.values()].some((c) => c.channelId === data.channel_id)) return;
     try {
       if (type === "MESSAGE_CREATE" || type === "MESSAGE_UPDATE") {
         if (data.member?.nick !== undefined && data.author && data.guild_id) {
@@ -380,7 +457,8 @@ export class Hub extends DurableObject {
         return this.history(entry, url);
       }
       if (!messageId && request.method === "POST") {
-        if (!entry.access.send) return error(403, "no_send", "你在这个频道没有发言权限");
+        if (!entry.access.send)
+          return error(403, "no_send", entry.access.botCannotPost ? "机器人在这个频道没有「管理 Webhook」权限，发不了消息" : "你在这个频道没有发言权限");
         return this.send(entry, request);
       }
       if (messageId && request.method === "PATCH") return this.edit(channelId, messageId, request, userId);
@@ -400,10 +478,8 @@ export class Hub extends DurableObject {
   async loginCheck(userId) {
     const visible = await this.visibleChannels(userId);
     if (visible.length) return { ok: true };
-    const channels = (await Promise.all(this.config.channelIds.map((id) => this.getChannel(id).catch(() => null)))).filter(Boolean);
-    const guildIds = [...new Set(channels.map((c) => c.guildId))];
-    const members = await Promise.all(guildIds.map((g) => this.getMember(g, userId).catch(() => null)));
-    if (!members.some(Boolean)) return { ok: false, reason: "not_member" };
+    const members = await this.memberships(userId);
+    if (!members.length) return { ok: false, reason: "not_member" };
     if (this.config.allowedRoleIds.length && !members.some((m) => memberAllowed(m, this.config.allowedRoleIds)))
       return { ok: false, reason: "missing_role" };
     return { ok: false, reason: "no_channels" };
@@ -414,9 +490,9 @@ export class Hub extends DurableObject {
     if (!visible.length) {
       const check = await this.loginCheck(userId);
       const messages = {
-        not_member: "你不在这些 Discord 服务器里",
+        not_member: "你和这个机器人没有共同的 Discord 服务器",
         missing_role: "你没有使用这个聊天窗口所需的身份组",
-        no_channels: "你在 Discord 里看不到任何开放的频道",
+        no_channels: "你在 Discord 里看不到机器人能用的任何频道",
       };
       return error(403, check.reason || "no_access", messages[check.reason] || "没有可用的频道");
     }
@@ -434,6 +510,7 @@ export class Hub extends DurableObject {
         name: guild.channelNames[channel.id] || channel.name,
         guildId: guild.id,
         guildName: guild.name,
+        category: channel.parentId ? guild.categories[channel.parentId]?.name || "" : "",
         access,
         self: this.profileOf(member, guild.id),
       })),
