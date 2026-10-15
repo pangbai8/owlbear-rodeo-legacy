@@ -3,7 +3,8 @@ const ERRORS = {
   denied: "你取消了授权。",
   state: "登录已过期，请回到聊天窗口重新登录。",
   token: "Discord 登录失败，请重试。",
-  not_member: "你不在这个 Discord 服务器里，请先加入服务器。",
+  not_member: "你不在开放了聊天的 Discord 服务器里，请先加入服务器。",
+  no_channels: "你在 Discord 里看不到任何开放的频道，请找管理员要频道权限。",
   missing_role: "你没有使用这个聊天窗口所需的身份组。",
   server: "服务器出错了，请稍后再试。",
 };

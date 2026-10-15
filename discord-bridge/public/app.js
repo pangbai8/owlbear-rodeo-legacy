@@ -185,7 +185,16 @@ function initChat(me) {
   $("me-avatar").title = me.user.name;
 
   const select = $("channel-select");
-  select.replaceChildren(...me.channels.map((c) => el("option", { value: c.id, text: `# ${c.name}` })));
+  const guilds = [...new Set(me.channels.map((c) => c.guildId))];
+  const option = (c) => el("option", { value: c.id, text: `# ${c.name}` });
+  select.replaceChildren(
+    ...(guilds.length > 1
+      ? guilds.map((g) => {
+          const channels = me.channels.filter((c) => c.guildId === g);
+          return el("optgroup", { label: channels[0].guildName }, channels.map(option));
+        })
+      : me.channels.map(option)),
+  );
   select.hidden = me.channels.length < 2;
 
   state.identity = safeStorage("get", IDENTITY_KEY) || "";
@@ -217,10 +226,32 @@ function switchChannel(channelId) {
   $("channel-select").value = channelId;
   const channel = state.channels.find((c) => c.id === channelId);
   $("channel-name").textContent = state.channels.length < 2 ? `# ${channel?.name || ""}` : "";
-  input.placeholder = `发送到 #${channel?.name || ""}`;
+  $("channel-name").title = channel?.guildName || "";
   safeStorage("set", CHANNEL_KEY, channelId);
+  applyAccess(channel?.access);
+  renderIdentity();
   render();
   connect();
+}
+
+function currentChannel() {
+  return state.channels.find((c) => c.id === state.channelId);
+}
+
+/** Mirrors the Discord permissions of this channel: read-only, no uploads, ... */
+function applyAccess(access) {
+  const channel = currentChannel();
+  if (channel && access) channel.access = access;
+  const canSend = !!access?.send;
+  input.disabled = !canSend;
+  $("send-button").disabled = !canSend;
+  $("identity-select").disabled = !canSend;
+  input.placeholder = canSend ? `发送到 #${channel?.name || ""}` : "你在这个频道没有发言权限（只能看）";
+  document.querySelector(".attach").hidden = !access?.attach;
+  if (!access?.attach && state.files.length) {
+    state.files = [];
+    renderFiles();
+  }
 }
 
 // ---- socket ----------------------------------------------------------------
@@ -273,12 +304,17 @@ function connect() {
     else if (message.type === "upsert") upsert([message.message], { live: true });
     else if (message.type === "delete") removeMessages(message.ids);
     else if (message.type === "resync") loadLatest();
+    else if (message.type === "access") applyAccess(message.access);
   };
-  socket.onclose = async () => {
+  socket.onclose = async (event) => {
     clearInterval(socket.pingTimer);
     if (state.socket !== socket) return;
     state.socket = null;
     setStatus("offline");
+    if (event.code === 4003) {
+      showComposerError("你已经没有这个频道的权限了");
+      return start();
+    }
     // The upgrade fails silently when the session expired; check before retrying
     try {
       await api("/api/me");
@@ -327,6 +363,8 @@ async function loadLatest() {
   try {
     const data = await api(`/api/channels/${channelId}/messages`);
     if (channelId !== state.channelId) return;
+    $("older").hidden = !data.noHistory;
+    if (data.noHistory) $("older").textContent = "你在这个频道没有「阅读消息历史」权限，只能看到之后的新消息";
     const fresh = new Set(data.messages.map((m) => m.id));
     const oldest = data.messages[0]?.id;
     // Anything in the refreshed range that is gone was deleted while we were away
@@ -346,6 +384,7 @@ async function loadOlder() {
   if (state.loadingOlder || !state.hasMore || !state.order.length) return;
   const channelId = state.channelId;
   state.loadingOlder = true;
+  $("older").textContent = "正在加载更早的消息…";
   $("older").hidden = false;
   try {
     const data = await api(`/api/channels/${channelId}/messages?before=${state.order[0]}`);
@@ -665,7 +704,8 @@ function setCharacters(characters) {
 
 function renderIdentity() {
   const select = $("identity-select");
-  const options = [el("option", { value: "", text: `${state.me?.name || "我"}（自己）` })];
+  const self = currentChannel()?.self || state.me;
+  const options = [el("option", { value: "", text: `${self?.name || "我"}（自己）` })];
   for (const c of state.characters) options.push(el("option", { value: c.id, text: characterDisplayName(c) }));
   select.replaceChildren(...options);
   select.value = state.identity;
@@ -681,7 +721,7 @@ function currentIdentity() {
 
 function updateIdentityHint() {
   const { character, viaBrackets } = currentIdentity();
-  $("identity-avatar").src = character?.avatarUrl || state.me?.avatar || "";
+  $("identity-avatar").src = character?.avatarUrl || (currentChannel()?.self || state.me)?.avatar || "";
   const hint = $("proxy-hint");
   hint.textContent = viaBrackets ? `括号 → 以「${characterDisplayName(character)}」发送` : "";
   hint.classList.toggle("active", viaBrackets);

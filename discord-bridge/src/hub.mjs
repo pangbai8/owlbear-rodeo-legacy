@@ -1,6 +1,8 @@
 // One Durable Object for the whole bridge: holds the browser WebSockets, keeps a
 // Gateway connection open while any of them is connected, and sends messages
-// through one webhook per channel so they show the player's Discord name/avatar.
+// through one webhook per channel so they show the player's (or character's)
+// name and avatar. Channels may belong to different servers; every request is
+// checked against the user's Discord permissions in that channel.
 import { DurableObject } from "cloudflare:workers";
 
 import {
@@ -15,10 +17,13 @@ import {
 } from "./discord.mjs";
 import { GatewayClient } from "./gateway.mjs";
 import { handleInteraction } from "./interactions.mjs";
+import { channelAccess, channelPermissions } from "./permissions.mjs";
 import { MAX_CHARACTERS, characterDisplayName, fromTupperboxExport, matchProxy, normalizeCharacter } from "../public/proxy.js";
 
 const MEMBER_TTL = 5 * 60 * 1000;
-const NAMES_TTL = 10 * 60 * 1000;
+const CHANNEL_TTL = 60 * 1000;
+const GUILD_TTL = 2 * 60 * 1000;
+const RECHECK_INTERVAL = 5 * 60 * 1000;
 const IDLE_SHUTDOWN = 60 * 1000;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_CONTENT = 2000;
@@ -27,6 +32,7 @@ const UNKNOWN_WEBHOOK = 10015;
 const MAX_AVATAR_BYTES = 1024 * 1024;
 const MAX_AVATARS_PER_USER = 200;
 const AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const NO_ACCESS = { view: false, history: false, send: false, attach: false };
 
 function json(data, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -34,6 +40,34 @@ function json(data, status = 200) {
 
 function error(status, code, message) {
   return json({ error: code, message }, status);
+}
+
+/** Caches async lookups for `ttl` ms; concurrent callers share one request */
+class TtlCache {
+  constructor(ttl) {
+    this.ttl = ttl;
+    this.entries = new Map();
+  }
+  get(key, load) {
+    const entry = this.entries.get(key);
+    if (entry && Date.now() - entry.at < this.ttl) return entry.value;
+    const value = load().catch((e) => {
+      this.entries.delete(key);
+      throw e;
+    });
+    this.entries.set(key, { at: Date.now(), value });
+    return value;
+  }
+  peek(key) {
+    const entry = this.entries.get(key);
+    return entry?.settled;
+  }
+  async settle(key, promise) {
+    const value = await promise;
+    const entry = this.entries.get(key);
+    if (entry) entry.settled = value;
+    return value;
+  }
 }
 
 export class Hub extends DurableObject {
@@ -57,9 +91,11 @@ export class Hub extends DurableObject {
     );
     /** @type {Map<WebSocket, {userId: string, channelId: string}>} */
     this.clients = new Map();
-    this.members = new Map(); // user id -> { member, at }
-    this.nicks = new Map(); // user id -> nickname seen on gateway events
-    this.names = null; // { at, channels, roles }
+    this.channelCache = new TtlCache(CHANNEL_TTL); // channel id -> { id, guildId, name, overwrites } | null
+    this.guildCache = new TtlCache(GUILD_TTL); // guild id -> { id, name, ownerId, roles, roleInfo, channelNames }
+    this.memberCache = new TtlCache(MEMBER_TTL); // "guild:user" -> member | null
+    this.nicks = new Map(); // "guild:user" -> nickname seen on gateway events
+    this.recheckTimer = null;
     this.gatewayState = "idle";
     this.gateway = new GatewayClient({
       token: env.DISCORD_BOT_TOKEN,
@@ -70,50 +106,94 @@ export class Hub extends DurableObject {
     });
   }
 
-  // ---- helpers -------------------------------------------------------------
+  // ---- Discord lookups -------------------------------------------------------
 
-  ownerOf = (messageId) => this.sql.exec("SELECT user_id FROM sent WHERE message_id = ?", messageId).toArray()[0]?.user_id ?? null;
-
-  nickOf = (userId) => this.nicks.get(userId) || this.members.get(userId)?.member?.nick || null;
-
-  clientMessage(message) {
-    return toClientMessage(message, { guildId: this.config.guildId, ownerOf: this.ownerOf, nickOf: this.nickOf });
+  getChannel(channelId) {
+    return this.channelCache.settle(
+      channelId,
+      this.channelCache.get(channelId, async () => {
+        try {
+          const c = await discordRequest(this.env, `/channels/${channelId}`);
+          return { id: c.id, guildId: c.guild_id, name: c.name, overwrites: c.permission_overwrites || [] };
+        } catch (e) {
+          // The bot cannot see it (missing permission, deleted, wrong id)
+          if (e instanceof DiscordError && (e.status === 403 || e.status === 404)) {
+            console.error(`channel ${channelId} is not accessible to the bot: ${e.message}`);
+            return null;
+          }
+          throw e;
+        }
+      }),
+    );
   }
 
-  async getMember(userId, { fresh = false } = {}) {
-    const cached = this.members.get(userId);
-    if (!fresh && cached && Date.now() - cached.at < MEMBER_TTL) return cached.member;
-    let member = null;
-    try {
-      member = await discordRequest(this.env, `/guilds/${this.config.guildId}/members/${userId}`);
-    } catch (e) {
-      if (!(e instanceof DiscordError && e.status === 404)) throw e;
-    }
-    this.members.set(userId, { member, at: Date.now() });
-    return member;
+  getGuild(guildId) {
+    return this.guildCache.get(guildId, async () => {
+      const [guild, roles, channels] = await Promise.all([
+        discordRequest(this.env, `/guilds/${guildId}`),
+        discordRequest(this.env, `/guilds/${guildId}/roles`),
+        discordRequest(this.env, `/guilds/${guildId}/channels`).catch(() => []),
+      ]);
+      return {
+        id: guildId,
+        name: guild.name,
+        ownerId: guild.owner_id,
+        roles: Object.fromEntries(roles.map((r) => [r.id, r.permissions])),
+        roleInfo: Object.fromEntries(roles.map((r) => [r.id, { name: r.name, color: r.color }])),
+        channelNames: Object.fromEntries(channels.map((c) => [c.id, c.name])),
+      };
+    });
   }
 
-  profileOf(member) {
+  getMember(guildId, userId) {
+    const key = `${guildId}:${userId}`;
+    return this.memberCache.settle(
+      key,
+      this.memberCache.get(key, async () => {
+        try {
+          return await discordRequest(this.env, `/guilds/${guildId}/members/${userId}`);
+        } catch (e) {
+          if (e instanceof DiscordError && e.status === 404) return null;
+          throw e;
+        }
+      }),
+    );
+  }
+
+  /** The user's rights in one configured channel, or null if it is not configured / not visible to the bot */
+  async accessFor(userId, channelId) {
+    if (!this.config.channelIds.includes(channelId)) return null;
+    const channel = await this.getChannel(channelId);
+    if (!channel) return null;
+    const [guild, member] = await Promise.all([this.getGuild(channel.guildId), this.getMember(channel.guildId, userId)]);
+    const allowed = memberAllowed(member, this.config.allowedRoleIds);
+    const perms = allowed ? channelPermissions({ userId, member, guild, overwrites: channel.overwrites }) : 0n;
+    return { channel, guild, member, access: allowed ? channelAccess(perms) : NO_ACCESS };
+  }
+
+  /** Configured channels this user can see, in config order */
+  async visibleChannels(userId) {
+    const all = await Promise.all(this.config.channelIds.map((id) => this.accessFor(userId, id).catch(() => null)));
+    return all.filter((entry) => entry?.access.view);
+  }
+
+  profileOf(member, guildId) {
     return {
       id: member.user.id,
       name: displayName(member.user, member),
-      avatar: avatarUrl(member.user, member, this.config.guildId),
+      avatar: avatarUrl(member.user, member, guildId),
     };
   }
 
-  async getNames() {
-    if (this.names && Date.now() - this.names.at < NAMES_TTL) return this.names;
-    const [channels, roles] = await Promise.all([
-      discordRequest(this.env, `/guilds/${this.config.guildId}/channels`).catch(() => []),
-      discordRequest(this.env, `/guilds/${this.config.guildId}/roles`).catch(() => []),
-    ]);
-    this.names = {
-      at: Date.now(),
-      channels: Object.fromEntries(channels.map((c) => [c.id, c.name])),
-      roles: Object.fromEntries(roles.map((r) => [r.id, { name: r.name, color: r.color }])),
-    };
-    return this.names;
+  ownerOf = (messageId) => this.sql.exec("SELECT user_id FROM sent WHERE message_id = ?", messageId).toArray()[0]?.user_id ?? null;
+
+  clientMessage(message, guildId = this.channelCache.peek(message.channel_id)?.guildId) {
+    const nickOf = (userId) =>
+      this.nicks.get(`${guildId}:${userId}`) || this.memberCache.peek(`${guildId}:${userId}`)?.nick || null;
+    return toClientMessage(message, { guildId, ownerOf: this.ownerOf, nickOf });
   }
+
+  // ---- webhooks ----------------------------------------------------------------
 
   async getWebhook(channelId, { recreate = false } = {}) {
     if (recreate) this.sql.exec("DELETE FROM webhooks WHERE channel_id = ?", channelId);
@@ -143,6 +223,8 @@ export class Hub extends DurableObject {
     }
   }
 
+  // ---- browser sockets ---------------------------------------------------------
+
   broadcast(channelId, payload) {
     const text = JSON.stringify(payload);
     for (const [socket, client] of this.clients) {
@@ -157,7 +239,52 @@ export class Hub extends DurableObject {
 
   dropClient(socket) {
     if (!this.clients.delete(socket)) return;
-    if (this.clients.size === 0) this.ctx.storage.setAlarm(Date.now() + IDLE_SHUTDOWN);
+    if (this.clients.size === 0) {
+      clearInterval(this.recheckTimer);
+      this.recheckTimer = null;
+      this.ctx.storage.setAlarm(Date.now() + IDLE_SHUTDOWN);
+    }
+  }
+
+  /** Disconnects people who lost access to their channel (roles changed, kicked, ...) */
+  async recheckClients() {
+    for (const [socket, client] of [...this.clients]) {
+      try {
+        const entry = await this.accessFor(client.userId, client.channelId);
+        const access = entry?.access || NO_ACCESS;
+        if (!access.view) {
+          socket.close(4003, "forbidden");
+          this.dropClient(socket);
+        } else {
+          socket.send(JSON.stringify({ type: "access", access }));
+        }
+      } catch (e) {
+        console.error("recheck failed", e);
+      }
+    }
+  }
+
+  openSocket(request, url, userId, entry) {
+    if (request.headers.get("Upgrade") !== "websocket") return error(426, "upgrade_required", "Expected WebSocket");
+    const channelId = entry.channel.id;
+    const { 0: client, 1: server } = new WebSocketPair();
+    server.accept();
+    this.clients.set(server, { userId, channelId });
+    server.addEventListener("message", (event) => {
+      if (event.data === "ping") {
+        try {
+          server.send("pong");
+        } catch {}
+      }
+    });
+    server.addEventListener("close", () => this.dropClient(server));
+    server.addEventListener("error", () => this.dropClient(server));
+    this.ctx.storage.deleteAlarm();
+    this.recheckTimer ??= setInterval(() => this.recheckClients(), RECHECK_INTERVAL);
+    server.send(JSON.stringify({ type: "status", state: this.gatewayState }));
+    server.send(JSON.stringify({ type: "access", access: entry.access }));
+    this.gateway.start();
+    return new Response(null, { status: 101, webSocket: client });
   }
 
   // ---- gateway -------------------------------------------------------------
@@ -181,15 +308,16 @@ export class Hub extends DurableObject {
     if (!data || !this.config.channelIds.includes(data.channel_id)) return;
     try {
       if (type === "MESSAGE_CREATE" || type === "MESSAGE_UPDATE") {
-        if (data.member?.nick !== undefined && data.author) {
-          if (data.member.nick) this.nicks.set(data.author.id, data.member.nick);
-          else this.nicks.delete(data.author.id);
+        if (data.member?.nick !== undefined && data.author && data.guild_id) {
+          const key = `${data.guild_id}:${data.author.id}`;
+          if (data.member.nick) this.nicks.set(key, data.member.nick);
+          else this.nicks.delete(key);
         }
         // Older-style partial updates (e.g. link previews) lack the author
         const message = data.author
           ? data
           : await discordRequest(this.env, `/channels/${data.channel_id}/messages/${data.id}`);
-        this.broadcast(data.channel_id, { type: "upsert", message: this.clientMessage(message) });
+        this.broadcast(data.channel_id, { type: "upsert", message: this.clientMessage(message, data.guild_id) });
       } else if (type === "MESSAGE_DELETE") {
         this.sql.exec("DELETE FROM sent WHERE message_id = ?", data.id);
         this.broadcast(data.channel_id, { type: "delete", ids: [data.id] });
@@ -217,31 +345,44 @@ export class Hub extends DurableObject {
 
   async route(request) {
     const url = new URL(request.url);
-    // Only the Worker can reach these (it never forwards /internal from browsers)
-    if (url.pathname === "/internal/interaction" && request.method === "POST") return json(await this.interaction(await request.json()));
-    const avatarMatch = url.pathname.match(/^\/internal\/avatars\/([0-9a-f]{32})$/);
-    if (avatarMatch) return this.avatar(avatarMatch[1]);
-
-    const userId = request.headers.get("X-Bridge-User");
-    if (!userId) return error(401, "unauthorized", "未登录");
     try {
-      const member = await this.getMember(userId);
-      if (!member) return error(403, "not_member", "你不在这个 Discord 服务器里");
-      if (!memberAllowed(member, this.config.allowedRoleIds))
-        return error(403, "missing_role", "你没有使用这个聊天窗口所需的身份组");
+      // Only the Worker can reach these (it never forwards /internal from browsers)
+      if (url.pathname === "/internal/interaction" && request.method === "POST")
+        return json(await this.interaction(await request.json()));
+      if (url.pathname === "/internal/access" && request.method === "POST") {
+        const { userId } = await request.json();
+        return json(await this.loginCheck(userId));
+      }
+      const avatarMatch = url.pathname.match(/^\/internal\/avatars\/([0-9a-f]{32})$/);
+      if (avatarMatch) return this.avatar(avatarMatch[1]);
 
-      if (url.pathname === "/ws") return this.openSocket(request, url, userId);
-      if (url.pathname === "/api/me" && request.method === "GET") return this.me(member);
-      if (url.pathname.startsWith("/api/characters") || url.pathname === "/api/avatars")
+      const userId = request.headers.get("X-Bridge-User");
+      if (!userId) return error(401, "unauthorized", "未登录");
+
+      if (url.pathname === "/api/me" && request.method === "GET") return this.me(userId);
+      if (url.pathname.startsWith("/api/characters") || url.pathname === "/api/avatars") {
+        if (!(await this.visibleChannels(userId)).length) return error(403, "no_access", "你没有可用的频道");
         return this.characterRoute(request, url, userId);
+      }
 
-      const match = url.pathname.match(/^\/api\/channels\/(\d+)\/messages(?:\/(\d+))?$/);
+      const channelId = url.pathname === "/ws" ? url.searchParams.get("channel") : url.pathname.match(/^\/api\/channels\/(\d+)\//)?.[1];
+      if (!channelId) return error(404, "not_found", "Not found");
+      const entry = await this.accessFor(userId, channelId);
+      if (!entry?.access.view) return error(403, "no_access", "你看不到这个频道");
+
+      if (url.pathname === "/ws") return this.openSocket(request, url, userId, entry);
+
+      const match = url.pathname.match(/^\/api\/channels\/\d+\/messages(?:\/(\d+))?$/);
       if (!match) return error(404, "not_found", "Not found");
-      const [, channelId, messageId] = match;
-      if (!this.config.channelIds.includes(channelId)) return error(404, "unknown_channel", "这个频道没有开放");
-
-      if (!messageId && request.method === "GET") return this.history(channelId, url);
-      if (!messageId && request.method === "POST") return this.send(channelId, request, member);
+      const messageId = match[1];
+      if (!messageId && request.method === "GET") {
+        if (!entry.access.history) return json({ messages: [], hasMore: false, noHistory: true });
+        return this.history(entry, url);
+      }
+      if (!messageId && request.method === "POST") {
+        if (!entry.access.send) return error(403, "no_send", "你在这个频道没有发言权限");
+        return this.send(entry, request);
+      }
       if (messageId && request.method === "PATCH") return this.edit(channelId, messageId, request, userId);
       if (messageId && request.method === "DELETE") return this.remove(channelId, messageId, userId);
       return error(405, "method_not_allowed", "Method not allowed");
@@ -255,51 +396,68 @@ export class Hub extends DurableObject {
     }
   }
 
-  async me(member) {
-    const names = await this.getNames();
+  /** Used by the OAuth callback: may this user sign in at all? */
+  async loginCheck(userId) {
+    const visible = await this.visibleChannels(userId);
+    if (visible.length) return { ok: true };
+    const channels = (await Promise.all(this.config.channelIds.map((id) => this.getChannel(id).catch(() => null)))).filter(Boolean);
+    const guildIds = [...new Set(channels.map((c) => c.guildId))];
+    const members = await Promise.all(guildIds.map((g) => this.getMember(g, userId).catch(() => null)));
+    if (!members.some(Boolean)) return { ok: false, reason: "not_member" };
+    if (this.config.allowedRoleIds.length && !members.some((m) => memberAllowed(m, this.config.allowedRoleIds)))
+      return { ok: false, reason: "missing_role" };
+    return { ok: false, reason: "no_channels" };
+  }
+
+  async me(userId) {
+    const visible = await this.visibleChannels(userId);
+    if (!visible.length) {
+      const check = await this.loginCheck(userId);
+      const messages = {
+        not_member: "你不在这些 Discord 服务器里",
+        missing_role: "你没有使用这个聊天窗口所需的身份组",
+        no_channels: "你在 Discord 里看不到任何开放的频道",
+      };
+      return error(403, check.reason || "no_access", messages[check.reason] || "没有可用的频道");
+    }
+    const channelNames = {};
+    const roles = {};
+    for (const { guild } of visible) {
+      Object.assign(channelNames, guild.channelNames);
+      Object.assign(roles, guild.roleInfo);
+    }
+    const user = visible[0].member.user;
     return json({
-      user: this.profileOf(member),
-      guildId: this.config.guildId,
-      channels: this.config.channelIds.map((id) => ({ id, name: names.channels[id] || id })),
-      names: { channels: names.channels, roles: names.roles },
+      user: { id: user.id, name: displayName(user, null), avatar: avatarUrl(user, null) },
+      channels: visible.map(({ channel, guild, member, access }) => ({
+        id: channel.id,
+        name: guild.channelNames[channel.id] || channel.name,
+        guildId: guild.id,
+        guildName: guild.name,
+        access,
+        self: this.profileOf(member, guild.id),
+      })),
+      names: { channels: channelNames, roles },
       gateway: this.gatewayState,
     });
   }
 
-  openSocket(request, url, userId) {
-    if (request.headers.get("Upgrade") !== "websocket") return error(426, "upgrade_required", "Expected WebSocket");
-    const channelId = url.searchParams.get("channel");
-    if (!this.config.channelIds.includes(channelId)) return error(404, "unknown_channel", "这个频道没有开放");
-    const { 0: client, 1: server } = new WebSocketPair();
-    server.accept();
-    this.clients.set(server, { userId, channelId });
-    server.addEventListener("message", (event) => {
-      if (event.data === "ping") {
-        try {
-          server.send("pong");
-        } catch {}
-      }
-    });
-    server.addEventListener("close", () => this.dropClient(server));
-    server.addEventListener("error", () => this.dropClient(server));
-    this.ctx.storage.deleteAlarm();
-    server.send(JSON.stringify({ type: "status", state: this.gatewayState }));
-    this.gateway.start();
-    return new Response(null, { status: 101, webSocket: client });
-  }
-
-  async history(channelId, url) {
+  async history({ channel }, url) {
     const params = new URLSearchParams({ limit: "50" });
     const before = url.searchParams.get("before");
     if (before && /^\d+$/.test(before)) params.set("before", before);
-    const messages = await discordRequest(this.env, `/channels/${channelId}/messages?${params}`);
+    const messages = await discordRequest(this.env, `/channels/${channel.id}/messages?${params}`);
     // History has no member objects; look up authors once so server nicknames show
     const unknown = new Set();
     for (const m of messages) {
-      if (!m.webhook_id && m.author && !this.nicks.has(m.author.id) && !this.members.has(m.author.id)) unknown.add(m.author.id);
+      const key = `${channel.guildId}:${m.author?.id}`;
+      if (!m.webhook_id && m.author && !this.nicks.has(key) && this.memberCache.peek(key) === undefined) unknown.add(m.author.id);
     }
-    await Promise.all([...unknown].slice(0, 20).map((id) => this.getMember(id).catch(() => null)));
-    return json({ messages: messages.reverse().map((m) => this.clientMessage(m)), hasMore: messages.length === 50 });
+    await Promise.all([...unknown].slice(0, 20).map((id) => this.getMember(channel.guildId, id).catch(() => null)));
+    return json({
+      messages: messages.reverse().map((m) => this.clientMessage(m, channel.guildId)),
+      hasMore: messages.length === 50,
+    });
   }
 
   async readMessageInput(request) {
@@ -313,11 +471,12 @@ export class Hub extends DurableObject {
     return { content: String(body.content || ""), characterId: String(body.characterId || ""), files: [] };
   }
 
-  async send(channelId, request, member) {
+  async send({ channel, guild, member, access }, request) {
     const input = await this.readMessageInput(request);
     const { files } = input;
+    if (files.length && !access.attach) return error(403, "no_attach", "你在这个频道没有上传文件的权限");
     // Brackets (e.g. "n: hello") pick a character, like Tupperbox; otherwise the chosen one, if any
-    const profile = this.profileOf(member);
+    const profile = this.profileOf(member, guild.id);
     const characters = this.listCharacters(profile.id);
     const proxied = matchProxy(input.content.trim(), characters);
     const character = proxied?.character || characters.find((c) => c.id === input.characterId) || null;
@@ -333,7 +492,7 @@ export class Hub extends DurableObject {
       avatar_url: character?.avatarUrl || profile.avatar,
       allowed_mentions: { parse: ["users", "roles"] },
     };
-    const message = await this.withWebhook(channelId, ({ id, token }) => {
+    const message = await this.withWebhook(channel.id, ({ id, token }) => {
       const path = `/webhooks/${id}/${token}?wait=true`;
       if (!files.length) return discordRequest(this.env, path, { method: "POST", json: payload, auth: null });
       const form = new FormData();
@@ -344,12 +503,12 @@ export class Hub extends DurableObject {
     this.sql.exec(
       "INSERT OR REPLACE INTO sent (message_id, channel_id, user_id, created_at) VALUES (?, ?, ?, ?)",
       message.id,
-      channelId,
+      channel.id,
       profile.id,
       Date.now(),
     );
-    const result = this.clientMessage(message);
-    this.broadcast(channelId, { type: "upsert", message: result });
+    const result = this.clientMessage(message, guild.id);
+    this.broadcast(channel.id, { type: "upsert", message: result });
     return json({ message: result });
   }
 
@@ -537,4 +696,3 @@ export class Hub extends DurableObject {
     });
   }
 }
-

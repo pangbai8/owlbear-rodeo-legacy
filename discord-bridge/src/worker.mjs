@@ -3,7 +3,7 @@
 // the Hub Durable Object. Must be served on the same site as the VTT
 // (e.g. discord.pangbai.de next to vtt.pangbai.de) so the session cookie
 // still reaches the page when it is embedded in an iframe.
-import { API, DiscordError, discordRequest, memberAllowed, readConfig } from "./discord.mjs";
+import { API, discordRequest, readConfig } from "./discord.mjs";
 import { verifyInteraction } from "./interactions.mjs";
 import {
   SESSION_COOKIE,
@@ -41,6 +41,10 @@ function withSecurityHeaders(response, config) {
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "same-origin");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function hubOf(env) {
+  return env.HUB.get(env.HUB.idFromName("hub"));
 }
 
 function redirect(location, cookies = []) {
@@ -99,15 +103,14 @@ async function callback(request, url, env, config) {
     return done("token");
   }
 
+  // Must see at least one configured channel in Discord (any of the servers)
   try {
-    const member = await discordRequest(env, `/guilds/${config.guildId}/members/${user.id}`).catch((e) => {
-      if (e instanceof DiscordError && e.status === 404) return null;
-      throw e;
-    });
-    if (!member) return done("not_member");
-    if (!memberAllowed(member, config.allowedRoleIds)) return done("missing_role");
+    const check = await hubOf(env)
+      .fetch("https://hub/internal/access", { method: "POST", body: JSON.stringify({ userId: user.id }) })
+      .then((r) => r.json());
+    if (!check.ok) return done(check.reason || "no_channels");
   } catch (e) {
-    console.error("member lookup failed", e);
+    console.error("access check failed", e);
     return done("server");
   }
 
@@ -137,7 +140,7 @@ async function handle(request, env) {
   const config = readConfig(env);
 
   if (url.pathname === "/health") return Response.json({ ok: true });
-  const hub = () => env.HUB.get(env.HUB.idFromName("hub"));
+  const hub = () => hubOf(env);
 
   // Discord -> Interactions Endpoint URL (context-menu commands)
   if (url.pathname === "/interactions" && request.method === "POST") {

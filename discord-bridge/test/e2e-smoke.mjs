@@ -56,10 +56,44 @@ console.log("ok  gateway ready");
 // Rejections
 assert.equal((await fetch(`${BRIDGE}/api/me`)).status, 401);
 assert.equal((await fetch(`${BRIDGE}/api/channels/${CHANNEL}/messages`, { method: "POST", headers: { Cookie: cookie } })).status, 403);
-assert.equal((await call("GET", "/api/channels/9999/messages")).status, 404);
+assert.equal((await call("GET", "/api/channels/9999/messages")).status, 403);
 const outsider = `db_session=${await signSession({ uid: "999", exp: Date.now() + 3600000 }, SECRET)}`;
-assert.equal((await fetch(`${BRIDGE}/api/me`, { headers: { Cookie: outsider } })).status, 403);
+const outsiderMe = await fetch(`${BRIDGE}/api/me`, { headers: { Cookie: outsider } });
+assert.equal(outsiderMe.status, 403);
+assert.equal((await outsiderMe.json()).error, "not_member");
 console.log("ok  unauthenticated / cross-origin / non-member requests rejected");
+
+// Several servers and Discord channel permissions
+const me = await call("GET", "/api/me");
+assert.deepEqual(
+  me.data.channels.map((c) => [c.id, c.guildName, c.access.send]),
+  [
+    ["2000", "服务器 A", true],
+    ["2002", "服务器 A", false],
+    ["2100", "服务器 B", true],
+  ],
+);
+assert.equal(me.data.channels.find((c) => c.id === "2100").self.name, "B服的胖白");
+assert.equal((await call("GET", "/api/channels/2001/messages")).status, 403);
+assert.equal((await call("POST", "/api/channels/2002/messages", { content: "只读频道" })).status, 403);
+const hidden = new WebSocket(`${BRIDGE.replace("http", "ws")}/ws?channel=2001`, { headers });
+await new Promise((resolve) => {
+  hidden.on("unexpected-response", (_, response) => {
+    assert.equal(response.statusCode, 403);
+    resolve();
+  });
+  hidden.on("open", () => assert.fail("opened a socket for a hidden channel"));
+});
+const bobCookie = `db_session=${await signSession({ uid: "222", exp: Date.now() + 3600000 }, SECRET)}`;
+const bobMe = await fetch(`${BRIDGE}/api/me`, { headers: { Cookie: bobCookie } }).then((r) => r.json());
+assert.deepEqual(bobMe.channels.map((c) => c.id), ["2000", "2001", "2002"]);
+const bobSecret = await fetch(`${BRIDGE}/api/channels/2001/messages`, { headers: { Cookie: bobCookie } }).then((r) => r.json());
+assert.equal(bobSecret.messages[0].content, "只有玩家身份组能看到的秘密");
+const otherServer = await call("POST", "/api/channels/2100/messages", { content: "B 服发言" });
+assert.equal(otherServer.status, 200);
+assert.equal(otherServer.data.message.author.name, "B服的胖白");
+await call("DELETE", `/api/channels/2100/messages/${otherServer.data.message.id}`);
+console.log("ok  per-channel permissions (private, read-only) and a second server");
 
 // Web -> Discord
 const sent = await call("POST", `/api/channels/${CHANNEL}/messages`, { content: "掷骰 **1d20** = 17" });

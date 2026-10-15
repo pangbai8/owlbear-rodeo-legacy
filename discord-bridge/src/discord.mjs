@@ -49,7 +49,6 @@ export function readConfig(env) {
       .map((item) => item.trim())
       .filter(Boolean);
   return {
-    guildId: String(env.GUILD_ID || "").trim(),
     channelIds: list(env.CHANNEL_IDS),
     allowedRoleIds: list(env.ALLOWED_ROLE_IDS),
     clientId: String(env.DISCORD_CLIENT_ID || "").trim(),

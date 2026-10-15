@@ -42,10 +42,9 @@ test("role gate", () => {
 });
 
 test("config lists accept commas and spaces", () => {
-  const config = readConfig({ CHANNEL_IDS: "1, 2,,3", FRAME_ANCESTORS: "https://a https://b", GUILD_ID: " 9 " });
+  const config = readConfig({ CHANNEL_IDS: "1, 2,,3", FRAME_ANCESTORS: "https://a https://b" });
   assert.deepEqual(config.channelIds, ["1", "2", "3"]);
   assert.deepEqual(config.frameAncestors, ["https://a", "https://b"]);
-  assert.equal(config.guildId, "9");
   assert.deepEqual(config.allowedRoleIds, []);
 });
 

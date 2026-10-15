@@ -1,7 +1,9 @@
 // Registers the message context-menu commands (编辑（Owlbear） / 删除（Owlbear）)
-// on the server. Guild commands show up immediately.
+// globally, so they work in every server the bot is in.
 //   npm run register              (reads .dev.vars)
 //   npm run register -- path/to/vars-file
+// If GUILD_ID is set, commands registered on that one server by older versions
+// are removed, so they do not show up twice.
 import { readFileSync } from "node:fs";
 import { COMMANDS } from "../src/interactions.mjs";
 
@@ -16,24 +18,30 @@ try {
   console.log(`(no ${file}; using environment variables)`);
 }
 
-for (const name of ["DISCORD_BOT_TOKEN", "DISCORD_CLIENT_ID", "GUILD_ID"]) {
+for (const name of ["DISCORD_BOT_TOKEN", "DISCORD_CLIENT_ID"]) {
   if (!vars[name]) {
     console.error(`missing ${name}`);
     process.exit(1);
   }
 }
 
-const response = await fetch(
-  `https://discord.com/api/v10/applications/${vars.DISCORD_CLIENT_ID}/guilds/${vars.GUILD_ID}/commands`,
-  {
+async function put(path, body) {
+  const response = await fetch(`https://discord.com/api/v10/applications/${vars.DISCORD_CLIENT_ID}${path}`, {
     method: "PUT",
     headers: { Authorization: `Bot ${vars.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(COMMANDS),
-  },
-);
-const body = await response.json();
-if (!response.ok) {
-  console.error("failed:", response.status, JSON.stringify(body, null, 2));
-  process.exit(1);
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    console.error("failed:", response.status, JSON.stringify(data, null, 2));
+    process.exit(1);
+  }
+  return data;
 }
-console.log("registered:", body.map((c) => c.name).join(", "));
+
+const registered = await put("/commands", COMMANDS);
+console.log("registered globally:", registered.map((c) => c.name).join(", "));
+if (vars.GUILD_ID) {
+  await put(`/guilds/${vars.GUILD_ID}/commands`, []);
+  console.log(`removed server-only commands from ${vars.GUILD_ID}`);
+}
