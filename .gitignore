@@ -29,3 +29,5 @@ tsconfig.tsbuildinfo
 /cloudflare/.wrangler/
 /cloudflare/.dev.vars
 /cloudflare/test-results/
+/boluo-mirror/node_modules/
+/boluo-mirror/.wrangler/

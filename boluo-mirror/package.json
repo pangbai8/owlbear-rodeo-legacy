@@ -1,0 +1,13 @@
+{
+  "name": "boluo-mirror",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8790",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
