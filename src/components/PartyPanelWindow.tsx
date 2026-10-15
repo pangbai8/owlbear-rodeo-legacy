@@ -1,10 +1,11 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { IconButton } from "theme-ui";
 import { useParams } from "react-router-dom";
 
 import FloatingWindow, { besidePartyRect } from "./FloatingWindow";
 import OpenInNewIcon from "../icons/OpenInNewIcon";
 import ClearDataIcon from "../icons/ClearDataIcon";
+import { MonsterRef, loadMonster } from "../helpers/fiveETools";
 
 /**
  * The GM party status panel (public/party-panel, see db-shim.js). With the
@@ -27,6 +28,33 @@ function PartyPanelWindow() {
   const { id: gameId }: { id: string } = useParams();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const url = partyPanelUrl(gameId);
+
+  // The panel (in this iframe or its pop-out window) asks for the stats of a
+  // monster dropped on it from the quick search; one loader serves map and panel
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      const data = event.data;
+      if (
+        event.origin !== window.location.origin ||
+        data?.type !== "party-panel-monster" ||
+        !event.source
+      ) {
+        return;
+      }
+      const reply = (payload: object) =>
+        (event.source as Window).postMessage(
+          { type: "party-panel-monster-result", id: data.id, ...payload },
+          window.location.origin
+        );
+      loadMonster(data.ref as MonsterRef)
+        .then((stats) => reply({ stats }))
+        .catch((error) =>
+          reply({ error: error instanceof Error ? error.message : String(error) })
+        );
+    }
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   function clearRoomData() {
     if (

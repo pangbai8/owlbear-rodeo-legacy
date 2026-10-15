@@ -62,7 +62,7 @@ function GlobalImageDrop({
   const dropPositionRef = useRef<Vector2>();
   const [droppingType, setDroppingType] = useState<"maps" | "tokens">("maps");
 
-  async function handleDrop({ files, dropPosition }: ImageDropEvent) {
+  async function handleDrop({ files, dropPosition, asToken }: ImageDropEvent) {
     if (navigator.storage) {
       // Attempt to enable persistant storage
       await navigator.storage.persist();
@@ -85,7 +85,7 @@ function GlobalImageDrop({
       return;
     }
 
-    if (droppingType === "maps") {
+    if (droppingType === "maps" && !asToken) {
       await handleMaps();
     } else {
       await handleTokens();
@@ -191,14 +191,19 @@ function GlobalImageDrop({
     return files.filter((file) => !isSheetFile(file));
   }
 
-  const { dragging, draggingOther, containerListeners, overlayListeners } =
-    useImageDrop(
-      handleDrop,
-      undefined,
-      sheetEditorUrl
-        ? { isOtherDrag: isSheetDrag, onOtherFiles: handleOtherFiles }
-        : {}
-    );
+  const {
+    dragging,
+    draggingOther,
+    draggingMonster,
+    containerListeners,
+    overlayListeners,
+  } = useImageDrop(
+    handleDrop,
+    undefined,
+    sheetEditorUrl
+      ? { isOtherDrag: isSheetDrag, onOtherFiles: handleOtherFiles }
+      : {}
+  );
 
   const dropZoneOutline = (
     <Box
@@ -242,7 +247,29 @@ function GlobalImageDrop({
           </Text>
         </Flex>
       )}
-      {dragging && !draggingOther && (
+      {dragging && draggingMonster && (
+        <Flex
+          sx={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            left: 0,
+            bottom: 0,
+            cursor: "copy",
+            justifyContent: "center",
+            alignItems: "center",
+            color: "primary",
+            zIndex: 100,
+          }}
+          {...overlayListeners}
+        >
+          {dropZoneOutline}
+          <Text sx={{ pointerEvents: "none", userSelect: "none" }}>
+            放下即可添加为棋子（按体型设置大小）
+          </Text>
+        </Flex>
+      )}
+      {dragging && !draggingOther && !draggingMonster && (
         <Flex
           sx={{
             position: "absolute",

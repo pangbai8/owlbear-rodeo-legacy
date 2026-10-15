@@ -13,6 +13,7 @@ import DiceTrayButton from "./DiceTrayButton";
 import ChatButton from "./ChatButton";
 import SheetButton from "./SheetButton";
 import PartyPanelButton from "./PartyPanelButton";
+import QuickSearchButton from "./QuickSearchButton";
 
 import useSetting from "../../hooks/useSetting";
 
@@ -188,6 +189,7 @@ function Party({
           <ChatButton />
           <SheetButton />
           <PartyPanelButton />
+          <QuickSearchButton />
           <SettingsButton />
         </Flex>
       </Box>
