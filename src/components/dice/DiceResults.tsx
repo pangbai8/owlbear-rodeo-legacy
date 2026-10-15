@@ -4,7 +4,7 @@ import { Flex, Text, Button, IconButton } from "theme-ui";
 import ClearDiceIcon from "../../icons/ClearDiceIcon";
 import RerollDiceIcon from "../../icons/RerollDiceIcon";
 
-import { getDiceRollTotal } from "../../helpers/dice";
+import { getDiceRollTotal } from "../../helpers/diceRolls";
 import { DiceRoll } from "../../types/Dice";
 
 const maxDiceRollsShown = 6;

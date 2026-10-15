@@ -1,13 +1,10 @@
+import React from "react";
 import { ThemeProvider } from "theme-ui";
 import { BrowserRouter as Router, Switch, Route } from "react-router-dom";
 
 import theme from "./theme";
 import Home from "./routes/Home";
 import Game from "./routes/Game";
-import About from "./routes/About";
-import FAQ from "./routes/FAQ";
-import ReleaseNotes from "./routes/ReleaseNotes";
-import HowTo from "./routes/HowTo";
 
 import { AuthProvider } from "./contexts/AuthContext";
 import { SettingsProvider } from "./contexts/SettingsContext";
@@ -17,6 +14,12 @@ import { UserIdProvider } from "./contexts/UserIdContext";
 
 import { ToastProvider } from "./components/Toast";
 
+// Info pages are loaded when visited, not with every game
+const About = React.lazy(() => import("./routes/About"));
+const FAQ = React.lazy(() => import("./routes/FAQ"));
+const ReleaseNotes = React.lazy(() => import("./routes/ReleaseNotes"));
+const HowTo = React.lazy(() => import("./routes/HowTo"));
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -25,30 +28,32 @@ function App() {
           <KeyboardProvider>
             <ToastProvider>
               <Router>
-                <Switch>
-                  <Route path="/how-to">
-                    <HowTo />
-                  </Route>
-                  <Route path="/release-notes">
-                    <ReleaseNotes />
-                  </Route>
-                  <Route path="/about">
-                    <About />
-                  </Route>
-                  <Route path="/faq">
-                    <FAQ />
-                  </Route>
-                  <Route path="/game/:id">
-                    <DatabaseProvider>
-                      <UserIdProvider>
-                        <Game />
-                      </UserIdProvider>
-                    </DatabaseProvider>
-                  </Route>
-                  <Route path="/">
-                    <Home />
-                  </Route>
-                </Switch>
+                <React.Suspense fallback={null}>
+                  <Switch>
+                    <Route path="/how-to">
+                      <HowTo />
+                    </Route>
+                    <Route path="/release-notes">
+                      <ReleaseNotes />
+                    </Route>
+                    <Route path="/about">
+                      <About />
+                    </Route>
+                    <Route path="/faq">
+                      <FAQ />
+                    </Route>
+                    <Route path="/game/:id">
+                      <DatabaseProvider>
+                        <UserIdProvider>
+                          <Game />
+                        </UserIdProvider>
+                      </DatabaseProvider>
+                    </Route>
+                    <Route path="/">
+                      <Home />
+                    </Route>
+                  </Switch>
+                </React.Suspense>
               </Router>
             </ToastProvider>
           </KeyboardProvider>

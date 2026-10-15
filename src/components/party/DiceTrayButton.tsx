@@ -15,7 +15,15 @@ import {
 } from "../../types/Events";
 import { DiceRoll } from "../../types/Dice";
 
-const DiceTrayOverlay = React.lazy(() => import("../dice/DiceTrayOverlay"));
+// The 3D dice (Babylon + Ammo physics) are the largest part of the app, so
+// they are downloaded when the tray is first opened (or hovered), not with the
+// game page
+const loadDiceTrayOverlay = () => import("../dice/DiceTrayOverlay");
+const DiceTrayOverlay = React.lazy(loadDiceTrayOverlay);
+// Warm-up only: if it fails, opening the tray loads it again
+const prefetchDiceTrayOverlay = () => {
+  loadDiceTrayOverlay().catch(() => {});
+};
 
 type DiceTrayButtonProps = {
   shareDice: boolean;
@@ -31,6 +39,8 @@ function DiceTrayButton({
   onDiceRollsChange,
 }: DiceTrayButtonProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  // Stays mounted after the first open so the dice keep their state
+  const [hasOpened, setHasOpened] = useState(false);
   const [fullScreen] = useSetting("map.fullScreen");
 
   return (
@@ -50,7 +60,12 @@ function DiceTrayButton({
       <IconButton
         aria-label={isExpanded ? "Hide Dice Tray" : "Show Dice Tray"}
         title={isExpanded ? "Hide Dice Tray" : "Show Dice Tray"}
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => {
+          setIsExpanded(!isExpanded);
+          setHasOpened(true);
+        }}
+        onMouseEnter={prefetchDiceTrayOverlay}
+        onFocus={prefetchDiceTrayOverlay}
         sx={{
           display: "block",
           backgroundColor: "overlay",
@@ -79,13 +94,15 @@ function DiceTrayButton({
             )
           }
         >
-          <DiceTrayOverlay
-            isOpen={isExpanded}
-            shareDice={shareDice}
-            onShareDiceChange={onShareDiceChange}
-            diceRolls={diceRolls}
-            onDiceRollsChange={onDiceRollsChange}
-          />
+          {hasOpened && (
+            <DiceTrayOverlay
+              isOpen={isExpanded}
+              shareDice={shareDice}
+              onShareDiceChange={onShareDiceChange}
+              diceRolls={diceRolls}
+              onDiceRollsChange={onDiceRollsChange}
+            />
+          )}
         </React.Suspense>
       </DiceLoadingProvider>
     </Flex>

@@ -1,7 +1,7 @@
 import { InstancedMesh, TransformNode } from "@babylonjs/core";
 import { Vector3 } from "@babylonjs/core/Maths/math";
 
-import { DiceMesh, DiceRoll } from "../types/Dice";
+import { DiceMesh } from "../types/Dice";
 
 /**
  * Find the number facing up on a mesh instance of a dice
@@ -46,14 +46,4 @@ export function getDiceRoll(dice: DiceMesh) {
     number = 10;
   }
   return { type: dice.type, roll: number };
-}
-
-export function getDiceRollTotal(diceRolls: DiceRoll[]) {
-  return diceRolls.reduce((accumulator: number, dice) => {
-    if (dice.roll === "unknown") {
-      return accumulator;
-    } else {
-      return accumulator + dice.roll;
-    }
-  }, 0);
 }
