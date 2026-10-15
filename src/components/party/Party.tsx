@@ -11,6 +11,7 @@ import StartTimerButton from "./StartTimerButton";
 import Timer from "./Timer";
 import DiceTrayButton from "./DiceTrayButton";
 import ChatButton from "./ChatButton";
+import SheetButton from "./SheetButton";
 
 import useSetting from "../../hooks/useSetting";
 
@@ -184,6 +185,7 @@ function Party({
             timer={playerState.timer}
           />
           <ChatButton />
+          <SheetButton />
           <SettingsButton />
         </Flex>
       </Box>

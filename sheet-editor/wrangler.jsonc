@@ -1,0 +1,14 @@
+{
+  "name": "sheet-editor",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "routes": [{ "pattern": "sheets.pangbai.de", "custom_domain": true }],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    // dist/_headers sets COOP/COEP and caching; only the Brotli module needs code
+    "run_worker_first": ["/sdkjs/common/wasm/x2t/x2t.wasm.br"],
+  },
+}

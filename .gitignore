@@ -31,3 +31,7 @@ tsconfig.tsbuildinfo
 /cloudflare/test-results/
 /boluo-mirror/node_modules/
 /boluo-mirror/.wrangler/
+/sheet-editor/node_modules/
+/sheet-editor/.wrangler/
+/sheet-editor/.work/
+/sheet-editor/dist/

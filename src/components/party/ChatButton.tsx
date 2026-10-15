@@ -1,10 +1,11 @@
 import { IconButton } from "theme-ui";
 
 import ChatIcon from "../../icons/ChatIcon";
-import { chatUrl, useChatPanel } from "../../contexts/ChatPanelContext";
+import { chatUrl } from "../ChatWindow";
+import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
 
 function ChatButton() {
-  const { isOpen, setIsOpen } = useChatPanel();
+  const { isOpen, toggle } = useFloatingWindow("chat");
 
   if (!chatUrl) {
     return null;
@@ -16,7 +17,7 @@ function ChatButton() {
       aria-label={isOpen ? "Hide Chat" : "Show Chat"}
       title={isOpen ? "Hide Chat" : "Show Chat"}
       aria-pressed={isOpen}
-      onClick={() => setIsOpen((open) => !open)}
+      onClick={toggle}
       sx={{ color: isOpen ? "primary" : "text" }}
     >
       <ChatIcon />

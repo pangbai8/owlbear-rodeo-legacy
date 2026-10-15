@@ -8,6 +8,7 @@ import ReconnectBanner from "../components/banner/ReconnectBanner";
 import OfflineBanner from "../components/banner/OfflineBanner";
 import LoadingOverlay from "../components/LoadingOverlay";
 import ChatWindow from "../components/ChatWindow";
+import SheetWindow from "../components/SheetWindow";
 import Link from "../components/Link";
 import MapLoadingOverlay from "../components/map/MapLoadingOverlay";
 import UpgradingLoadingOverlay from "../components/UpgradingLoadingOverlay";
@@ -26,7 +27,7 @@ import { AssetsProvider, AssetURLsProvider } from "../contexts/AssetsContext";
 import { MapDataProvider } from "../contexts/MapDataContext";
 import { TokenDataProvider } from "../contexts/TokenDataContext";
 import { MapLoadingProvider } from "../contexts/MapLoadingContext";
-import { ChatPanelProvider } from "../contexts/ChatPanelContext";
+import { FloatingWindowProvider } from "../contexts/FloatingWindowContext";
 
 import NetworkedMapAndTokens from "../network/NetworkedMapAndTokens";
 import NetworkedParty from "../network/NetworkedParty";
@@ -126,7 +127,7 @@ function Game() {
               <PlayerProvider session={session}>
                 <PartyProvider session={session}>
                   <MapStageProvider value={mapStageRef}>
-                    <ChatPanelProvider>
+                    <FloatingWindowProvider>
                       <Flex
                         sx={{
                           justifyContent: "space-between",
@@ -174,7 +175,8 @@ function Game() {
                       />
                       <MapLoadingOverlay />
                       <ChatWindow />
-                    </ChatPanelProvider>
+                      <SheetWindow />
+                    </FloatingWindowProvider>
                   </MapStageProvider>
                 </PartyProvider>
               </PlayerProvider>
