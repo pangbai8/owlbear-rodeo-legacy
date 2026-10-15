@@ -9,7 +9,7 @@
   "assets": {
     "directory": "../build",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/ws", "/health", "/iceservers"],
+    "run_worker_first": ["/ws", "/party/ws", "/health", "/iceservers"],
   },
   "durable_objects": {
     "bindings": [{ "name": "ROOMS", "class_name": "Room" }],

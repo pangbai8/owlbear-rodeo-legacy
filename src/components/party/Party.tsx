@@ -12,6 +12,7 @@ import Timer from "./Timer";
 import DiceTrayButton from "./DiceTrayButton";
 import ChatButton from "./ChatButton";
 import SheetButton from "./SheetButton";
+import PartyPanelButton from "./PartyPanelButton";
 
 import useSetting from "../../hooks/useSetting";
 
@@ -186,6 +187,7 @@ function Party({
           />
           <ChatButton />
           <SheetButton />
+          <PartyPanelButton />
           <SettingsButton />
         </Flex>
       </Box>

@@ -9,6 +9,7 @@ import OfflineBanner from "../components/banner/OfflineBanner";
 import LoadingOverlay from "../components/LoadingOverlay";
 import ChatWindow from "../components/ChatWindow";
 import SheetWindow from "../components/SheetWindow";
+import PartyPanelWindow from "../components/PartyPanelWindow";
 import Link from "../components/Link";
 import MapLoadingOverlay from "../components/map/MapLoadingOverlay";
 import UpgradingLoadingOverlay from "../components/UpgradingLoadingOverlay";
@@ -176,6 +177,7 @@ function Game() {
                       <MapLoadingOverlay />
                       <ChatWindow />
                       <SheetWindow />
+                      <PartyPanelWindow />
                     </FloatingWindowProvider>
                   </MapStageProvider>
                 </PartyProvider>
