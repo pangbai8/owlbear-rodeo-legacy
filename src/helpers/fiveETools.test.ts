@@ -102,10 +102,11 @@ describe("searchFiveE", () => {
       Promise.resolve({ ok: true, json: () => Promise.resolve(index) });
   });
 
-  test("exact names first, reprints after newer books, links per category", async () => {
+  test("exact names first, 2014 core books before newer ones, links per category", async () => {
     const results = await searchFiveE("地精");
-    expect(results.map((r) => r.id)).toEqual([3, 2, 5, 1]);
-    expect(results[1]).toMatchObject({
+    expect(results.map((r) => r.id)).toEqual([3, 1, 2, 5]);
+    expect(results[1]).toMatchObject({ source: "MM", reprinted: false });
+    expect(results[2]).toMatchObject({
       name: "地精头目",
       englishName: "Goblin Boss",
       source: "XMM",
@@ -113,9 +114,11 @@ describe("searchFiveE", () => {
       categoryLabel: "怪物",
       url: `${FIVE_E_BASE}bestiary.html#goblin_xmm`,
     });
-    expect(results[3].reprinted).toBe(true);
-    expect(results[2].url).toBe(`${FIVE_E_BASE}classes.html#class_hash`);
-    expect(results[2].source).toBe("EFA");
+    expect(results[3].url).toBe(`${FIVE_E_BASE}classes.html#class_hash`);
+    expect(results[3].source).toBe("EFA");
+    // A better name match still wins over the 2014 boost
+    expect((await searchFiveE("地精头目")).map((r) => r.id)).toEqual([1, 2]);
+    expect((await searchFiveE("goblin")).map((r) => r.id)[0]).toBe(3);
   });
 
   test("English names match too; empty queries return nothing", async () => {

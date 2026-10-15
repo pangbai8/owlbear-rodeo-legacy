@@ -169,6 +169,11 @@ export function loadSearchIndex() {
   return indexPromise;
 }
 
+// 2014 core books come first; the table plays with those rules. The boost
+// only reorders equally good name matches (exact > prefix > contains).
+const PREFERRED_SOURCES = new Set(["MM", "PHB", "DMG"]);
+const PREFERRED_BOOST = 20;
+
 function toResult(entry: IndexEntry, sources: string[]): SearchResult {
   const source =
     typeof entry.s === "number" ? sources[entry.s] || "" : String(entry.s);
@@ -182,7 +187,8 @@ function toResult(entry: IndexEntry, sources: string[]): SearchResult {
     categoryLabel: CATEGORY_LABEL[entry.c] || "其他",
     source,
     url: `${FIVE_E_BASE}${page}#${hash}`,
-    reprinted: entry.dR === 1,
+    // Not dimmed as "old" when it is a book the table prefers
+    reprinted: entry.dR === 1 && !PREFERRED_SOURCES.has(source),
     isMonster: entry.c === CATEGORY_CREATURE,
   };
 }
@@ -208,10 +214,13 @@ export async function searchFiveE(query: string, limit = 60) {
       matchScore(entry.n, q) - 5
     );
     if (score === 0) continue;
-    scored.push([
-      score + (CATEGORY_BOOST[entry.c] || 0) - (entry.dR ? 15 : 0),
-      entry,
-    ]);
+    const source = typeof entry.s === "number" ? sources[entry.s] : entry.s;
+    const sourceBonus = PREFERRED_SOURCES.has(source)
+      ? PREFERRED_BOOST
+      : entry.dR
+      ? -15
+      : 0;
+    scored.push([score + (CATEGORY_BOOST[entry.c] || 0) + sourceBonus, entry]);
   }
   scored.sort(
     (a, b) =>

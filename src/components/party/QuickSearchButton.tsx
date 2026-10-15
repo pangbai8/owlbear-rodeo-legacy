@@ -1,9 +1,9 @@
 import { IconButton } from "theme-ui";
 
-import SearchIcon from "../../icons/SearchIcon";
+import ReferenceOpenIcon from "../../icons/ReferenceOpenIcon";
+import ReferenceClosedIcon from "../../icons/ReferenceClosedIcon";
 import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
 
-/** Shows or hides the 5e quick search bar at the top of the game page */
 function QuickSearchButton() {
   const { isOpen, toggle } = useFloatingWindow("quickSearch");
 
@@ -11,12 +11,12 @@ function QuickSearchButton() {
     <IconButton
       m={1}
       aria-label={isOpen ? "Hide 5e Search" : "Show 5e Search"}
-      title={isOpen ? "隐藏 5e 资料搜索" : "5e 资料搜索（Ctrl+K）"}
+      title={isOpen ? "收起 5e 资料搜索栏" : "显示 5e 资料搜索栏（Ctrl+K）"}
       aria-pressed={isOpen}
       onClick={toggle}
       sx={{ color: isOpen ? "primary" : "text" }}
     >
-      <SearchIcon />
+      {isOpen ? <ReferenceOpenIcon /> : <ReferenceClosedIcon />}
     </IconButton>
   );
 }
