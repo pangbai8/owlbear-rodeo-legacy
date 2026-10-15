@@ -4,6 +4,7 @@ import { Box, Flex, IconButton, Input, Text } from "theme-ui";
 import SearchIcon from "../icons/SearchIcon";
 import OpenInNewIcon from "../icons/OpenInNewIcon";
 import MonsterCard from "./MonsterCard";
+import { useFloatingWindow } from "../contexts/FloatingWindowContext";
 import EntryCardView from "./EntryCardView";
 import { hasEntryCard } from "../helpers/fiveEEntries";
 import {
@@ -20,7 +21,27 @@ import {
  * results expand below it, a click shows the page, and monsters can be
  * dragged onto the map (as a token) or into the party status panel.
  */
+const VISIBLE_KEY = "quickSearch.visible";
+
 function QuickSearch() {
+  // The sidebar's search button shows or hides the bar (remembered per browser)
+  const { isOpen: visible, setIsOpen: setVisible } =
+    useFloatingWindow("quickSearch");
+  // Latest setter for the window-level Ctrl+K listener (registered once)
+  const setVisibleRef = useRef(setVisible);
+  setVisibleRef.current = setVisible;
+  // Set while restoring the saved choice, so that does not grab the focus
+  const restoring = useRef(true);
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(VISIBLE_KEY);
+    } catch {}
+    if (stored === "false") restoring.current = false;
+    else setVisible(true);
+    // Run once: restore the saved choice
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -70,11 +91,28 @@ function QuickSearch() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Ctrl+K focuses the bar; Esc or a click elsewhere folds it
+  // Showing the bar (button or Ctrl+K) puts the cursor in it
+  useEffect(() => {
+    if (restoring.current) {
+      // The first render (hidden), then the restored "shown"
+      if (visible) restoring.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(VISIBLE_KEY, String(visible));
+    } catch {}
+    if (visible) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [visible]);
+
+  // Ctrl+K shows and focuses the bar; Esc or a click elsewhere folds it
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        setVisibleRef.current(true);
         inputRef.current?.focus();
         inputRef.current?.select();
         setOpen(true);
@@ -134,6 +172,10 @@ function QuickSearch() {
     setSelected(result);
     setFullPage(false);
     setPageLoading(true);
+  }
+
+  if (!visible) {
+    return null;
   }
 
   return (
