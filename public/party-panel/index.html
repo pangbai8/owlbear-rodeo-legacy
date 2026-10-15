@@ -1,0 +1,1697 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>冒险小队面板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Serif+SC:wght@700;900&display=swap">
+<style>
+/* Layout: sticky initiative bar on top, responsive grid of character sheets below; each sheet reads HP → slots → resources → conditions → effects */
+:root{
+  --bg:#E7EAE3; --surface:#F7F8F4; --sunk:#EEF0EA; --ink:#1B2420; --muted:#5D6A63; --line:#CDD3C9;
+  --accent:#9B2A1E; --accent-ink:#FFF6F3; --arcane:#3A47B0; --res:#1D7566;
+  --good:#2E8640; --warn:#B67F0E; --crit:#C0392B; --buff:#2A7A57; --debuff:#A3366A;
+  --shadow:0 1px 0 rgba(27,36,32,.06),0 6px 18px -10px rgba(27,36,32,.25);
+  --f-display:"Noto Serif SC","Songti SC","STSong",serif;
+  --f-body:"IBM Plex Sans","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111513; --surface:#1A201D; --sunk:#151A17; --ink:#E5EBE4; --muted:#93A098; --line:#2D3631;
+  --accent:#E2654F; --accent-ink:#1A0D0A; --arcane:#8E98F3; --res:#4CC1AC;
+  --good:#5BC46B; --warn:#E2B23F; --crit:#F06A59; --buff:#5BC593; --debuff:#E27BAA;
+  --shadow:0 1px 0 rgba(0,0,0,.3),0 8px 22px -12px rgba(0,0,0,.7); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111513; --surface:#1A201D; --sunk:#151A17; --ink:#E5EBE4; --muted:#93A098; --line:#2D3631;
+  --accent:#E2654F; --accent-ink:#1A0D0A; --arcane:#8E98F3; --res:#4CC1AC;
+  --good:#5BC46B; --warn:#E2B23F; --crit:#F06A59; --buff:#5BC593; --debuff:#E27BAA;
+  --shadow:0 1px 0 rgba(0,0,0,.3),0 8px 22px -12px rgba(0,0,0,.7); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+
+/* top bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar-in{max-width:1400px;margin:0 auto;padding:10px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.brand{font-family:var(--f-display);font-weight:900;font-size:20px;letter-spacing:.02em;margin:0;white-space:nowrap}
+.brand small{font-family:var(--f-body);font-weight:500;font-size:12px;color:var(--muted);margin-left:8px;letter-spacing:.04em}
+.combat{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.round{display:flex;align-items:baseline;gap:6px;padding:4px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--line)}
+.round b{font-family:var(--f-num);font-size:18px}
+.round span{font-size:12px;color:var(--muted)}
+.spacer{flex:1}
+.teamsel{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 8px;font-weight:600;max-width:min(220px,100%);min-width:0}
+.tlist{display:flex;flex-direction:column;gap:6px}
+.trow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--sunk)}
+.trow.cur{border-color:var(--accent)}
+.trow b{font-family:var(--f-display);font-size:15px;overflow-wrap:anywhere}
+.trow p{margin:1px 0 0;font-size:12px;color:var(--muted)}
+.trow input{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:4px 8px;width:100%;min-width:0}
+.trow .group{justify-content:flex-end}
+.newteam{display:flex;gap:6px;flex-wrap:wrap}
+.newteam input{flex:1;min-width:140px;border:1px solid var(--line);background:var(--sunk);border-radius:6px;padding:6px 8px}
+body.pipdoc .pip-bar{flex-wrap:nowrap;gap:4px;margin-bottom:5px}
+.pip-round{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px;color:var(--muted)}
+.pip-round b{font-family:var(--f-num);color:var(--ink);margin-right:1px}
+.pbtn{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:2px 7px;font-size:12px;line-height:1.4;color:var(--ink)}
+.pbtn:disabled{opacity:.45}
+.pbtn.armed{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.pip-amt{flex:none;width:52px;border:1px solid var(--line);border-radius:5px;background:var(--sunk);padding:2px 5px;font-family:var(--f-num);font-size:12.5px;text-align:center}
+body.pipdoc .mini{gap:4px}
+body.pipdoc .mrow{padding:6px 8px;gap:6px;grid-template-columns:24px minmax(0,1fr) auto auto}
+body.pipdoc .mi-btns button{width:28px;height:28px;font-size:15px}
+body.pipdoc .mi-ac b{font-size:15px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 11px;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--crit)}
+.btn.sm{padding:3px 8px;font-size:12.5px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.group{display:flex;gap:6px;flex-wrap:wrap}
+
+.wrap{max-width:1400px;margin:0 auto;padding-inline:16px;padding-block:16px 48px}
+.notice{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:8px 12px;border:1px dashed var(--line);border-radius:8px;margin-bottom:14px;color:var(--muted);font-size:13px}
+.notice strong{color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:14px;align-items:start}
+
+/* character sheet */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0;transition:border-color .2s}
+.card.turn{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--shadow)}
+.card.down{background:color-mix(in srgb,var(--crit) 6%,var(--surface))}
+.head{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+.init{display:flex;flex-direction:column;align-items:center;gap:2px}
+.init-l{font-size:10px;letter-spacing:.08em;color:var(--muted);line-height:1.1}
+.init input{text-align:center;border:1px solid var(--line);border-radius:5px;background:var(--sunk);font-family:var(--f-num);-moz-appearance:textfield;appearance:textfield}
+.init input::-webkit-inner-spin-button,.init input::-webkit-outer-spin-button,.mi-init::-webkit-inner-spin-button,.mi-init::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.init .init-v{width:52px;height:30px;font-size:16px;font-weight:600;background:var(--surface)}
+.init-b{display:flex;gap:2px;width:52px}
+.init-b input{width:0;flex:1;font-size:12px;padding:1px 0}
+.init-d{flex:none;width:22px;border:1px solid var(--line);border-radius:5px;background:var(--surface);padding:0;font-size:12px;line-height:1}
+.init-d:hover{border-color:var(--accent)}
+.pending{border-color:var(--warn)!important;background:color-mix(in srgb,var(--warn) 14%,var(--sunk))!important}
+.mi-init{width:30px;text-align:center;border:1px solid transparent;background:transparent;border-radius:5px;padding:2px 0;font-family:var(--f-num);font-weight:600;color:var(--muted);-moz-appearance:textfield;appearance:textfield}
+.init-handle{display:inline-flex;align-items:center;justify-content:center;cursor:grab;min-height:28px}.init-handle:active{cursor:grabbing}.init-handle .mi-init[readonly]{pointer-events:none}.init-dragging{opacity:.45}.mrow.init-drop-before{box-shadow:inset 0 3px 0 var(--accent)}.mrow.init-drop-after{box-shadow:inset 0 -3px 0 var(--accent)}
+.mi-init[readonly]{cursor:pointer;caret-color:transparent}.initiative-list{width:100%;grid-column:1/-1}.initiative-list .initiative-row,body.pipdoc .initiative-row{grid-template-columns:40px minmax(0,1fr) auto;padding:10px 12px}.initiative-name{overflow-wrap:anywhere}
+.mi-init:hover,.mi-init:focus{border-color:var(--line);background:var(--sunk);color:var(--ink)}
+.who{min-width:0}
+.who h2{font-family:var(--f-display);font-weight:700;font-size:18px;margin:0;line-height:1.2;overflow-wrap:anywhere;text-wrap:balance}
+.who p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+.turn-tag{display:inline-block;font-size:10.5px;letter-spacing:.06em;background:var(--accent);color:var(--accent-ink);border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:2px;font-family:var(--f-body)}
+.acbox{display:flex;align-items:center;gap:8px}
+.shield{width:46px;height:52px;background:var(--ink);color:var(--surface);clip-path:polygon(50% 0,100% 13%,100% 56%,50% 100%,0 56%,0 13%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:6px}
+.shield b{font-family:var(--f-num);font-size:18px;line-height:1}
+.shield i{font-style:normal;font-size:9px;letter-spacing:.1em;opacity:.75}
+.shield.up{background:var(--buff)} .shield.dn{background:var(--debuff)}
+.iconbtn{border:0;background:transparent;width:30px;height:30px;border-radius:6px;color:var(--muted);font-size:18px;line-height:1}
+.iconbtn:hover{background:var(--sunk);color:var(--ink)}
+
+.hp{display:flex;flex-direction:column;gap:6px}
+.hp-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.hp-cur{font-family:var(--f-num);font-weight:600;font-size:26px;line-height:1}
+.hp-max{font-family:var(--f-num);color:var(--muted)}
+.temp{font-family:var(--f-num);font-size:12.5px;color:var(--arcane);border:1px solid color-mix(in srgb,var(--arcane) 40%,transparent);border-radius:4px;padding:0 6px}
+.status-pill{margin-left:auto;font-size:11.5px;font-weight:600;letter-spacing:.04em;border-radius:999px;padding:1px 8px;background:var(--sunk);color:var(--muted)}
+.status-pill.warn{color:var(--warn)} .status-pill.crit{color:var(--crit)} .status-pill.down{background:var(--crit);color:var(--surface)}
+.meter{height:8px;border-radius:4px;background:var(--sunk);border:1px solid var(--line);overflow:hidden;display:flex}
+.meter i{display:block;height:100%;background:var(--good);transition:width .25s}
+.meter i.warn{background:var(--warn)} .meter i.crit{background:var(--crit)}
+.meter i.tmp{background:var(--arcane);opacity:.55}
+.hp-ctl{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:6px}
+.hp-ctl input{min-width:0;border:1px solid var(--line);border-radius:6px;background:var(--sunk);padding:5px 8px;font-family:var(--f-num)}
+.hp-ctl .dmg{color:var(--crit)} .hp-ctl .heal{color:var(--good)} .hp-ctl .tmpb{color:var(--arcane)}
+
+.ds{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;align-items:center;padding:6px 8px;border-radius:6px;background:var(--sunk)}
+.ds span{color:var(--muted)}
+
+.sec{display:flex;flex-direction:column;gap:6px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sec-h h3{margin:0;font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--muted)}
+.slots{display:flex;flex-wrap:wrap;gap:6px 12px}
+.slot{display:flex;align-items:center;gap:5px}
+.slot .lv{font-family:var(--f-num);font-size:11.5px;color:var(--muted);min-width:1.4em}
+.pips{display:inline-flex;gap:3px;flex-wrap:wrap}
+.pip{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--c,var(--arcane));background:var(--c,var(--arcane));padding:0}
+.pip.spent{background:transparent;opacity:.6}
+.pip.sq{border-radius:3px}
+.slots .pip{--c:var(--arcane)}
+.pact .pip{--c:var(--accent);transform:rotate(45deg);border-radius:2px;width:12px;height:12px;margin:1px}
+.res-list{display:flex;flex-direction:column;gap:5px}
+.res{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center}
+.res .nm{font-size:13px;overflow-wrap:anywhere}
+.res .rs{font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:0 4px;white-space:nowrap}
+.res .pip{--c:var(--res)}
+.counter{display:inline-flex;align-items:center;gap:4px}
+.counter button{width:24px;height:24px;border:1px solid var(--line);background:var(--sunk);border-radius:5px;padding:0;line-height:1}
+.counter b{font-family:var(--f-num);font-size:13px;min-width:4.5em;text-align:center}
+
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:5px;padding:2px 8px;font-size:12.5px;border:1px solid var(--line);background:var(--sunk)}
+.chip.cond{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));color:var(--ink)}
+.chip.cond::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--warn)}
+.chip.conc{border-color:var(--arcane);color:var(--arcane)}
+.chip.buff{border-color:color-mix(in srgb,var(--buff) 55%,var(--line))}
+.chip.buff .k{color:var(--buff)}
+.chip.debuff{border-color:color-mix(in srgb,var(--debuff) 55%,var(--line))}
+.chip.debuff .k{color:var(--debuff)}
+.chip .rd{font-family:var(--f-num);font-size:11px;color:var(--muted)}
+.chip .x{border:0;background:transparent;padding:0 0 0 2px;color:var(--muted);font-size:14px;line-height:1}
+.chip .x:hover{color:var(--crit)}
+.empty-line{font-size:12.5px;color:var(--muted)}
+.fx-note{font-size:11.5px;color:var(--muted)}
+
+.empty{grid-column:1/-1;text-align:center;padding:48px 16px;border:1px dashed var(--line);border-radius:10px;color:var(--muted)}
+.empty h2{font-family:var(--f-display);color:var(--ink);font-size:20px;margin:0 0 6px}
+.empty .group{justify-content:center;margin-top:14px}
+
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(10,14,12,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+@media (min-width:640px){.scrim{align-items:center}}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:12px;width:min(560px,100%);max-height:min(88vh,100%);overflow:auto;padding:18px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 50px -20px rgba(0,0,0,.5)}
+.modal h2{font-family:var(--f-display);font-size:19px;margin:0}
+.modal .sub{margin:-8px 0 0;color:var(--muted);font-size:13px}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field label{font-size:11.5px;color:var(--muted);letter-spacing:.04em}
+.field input,.field select,.field textarea{border:1px solid var(--line);background:var(--sunk);border-radius:6px;padding:6px 8px;min-width:0;width:100%}
+.field.wide{grid-column:1/-1}
+.slotgrid{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:4px}
+.slotgrid div{display:flex;flex-direction:column;align-items:center;gap:2px}
+.slotgrid span{font-size:10.5px;color:var(--muted);font-family:var(--f-num)}
+.slotgrid input{width:100%;text-align:center;border:1px solid var(--line);background:var(--sunk);border-radius:5px;padding:4px 0;font-family:var(--f-num)}
+.reslist{display:flex;flex-direction:column;gap:6px}
+.resrow{display:grid;grid-template-columns:auto minmax(0,1fr) 64px 76px auto;gap:6px;align-items:center;border-radius:6px}
+.mv{display:inline-flex;align-items:center;gap:2px}
+.grip{cursor:grab;color:var(--muted);padding:0 2px;font-size:15px;line-height:1;user-select:none}
+.grip:active{cursor:grabbing}
+.mvb{width:22px;height:28px;border:1px solid var(--line);background:var(--surface);border-radius:4px;padding:0;font-size:9px;color:var(--muted);line-height:1}
+.mvb:hover:not(:disabled){color:var(--ink);border-color:var(--muted)}
+.mvb:disabled{opacity:.3;cursor:default}
+.dragging{opacity:.45}
+.drop-over{outline:2px dashed var(--accent);outline-offset:2px}
+@media (hover:none){.grip{display:none}}
+.resrow.dcrow{grid-template-columns:auto minmax(0,1fr) 64px auto}
+.dcs{display:flex;flex-wrap:wrap;gap:6px}
+.dcb{display:inline-flex;align-items:baseline;gap:5px;border:1px solid var(--line);border-radius:6px;padding:3px 9px;background:var(--sunk);font-size:12.5px}
+.dcb b{font-family:var(--f-num);font-size:15px;color:var(--ink)}
+.dcb i{font-style:normal;font-size:10.5px;letter-spacing:.06em;color:var(--muted)}
+.mi-dc{font-size:11.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 10px}
+.mi-dc b{font-family:var(--f-num);color:var(--ink);font-weight:600}
+.resrow input,.resrow select{border:1px solid var(--line);background:var(--sunk);border-radius:6px;padding:5px 7px;min-width:0;width:100%}
+.mfoot{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;padding-top:4px;border-top:1px solid var(--line);padding-block:12px 0}
+.mfoot .left{margin-right:auto}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.condentry{position:relative;display:flex;min-width:0}.condentry .cbtn{flex:1;width:100%;overflow-wrap:anywhere}.condentry small{white-space:pre-wrap}.condentry.managing .cbtn b{padding-right:26px}.condentry.menu-open{z-index:3}.cond-more{position:absolute;right:4px;top:4px;width:24px;height:24px;padding:0;border:1px solid transparent;border-radius:5px;background:var(--surface);color:var(--muted);font-size:19px;line-height:1;cursor:pointer}.cond-more:hover,.cond-more[aria-expanded="true"]{border-color:var(--line);color:var(--ink)}.cond-menu{position:absolute;right:4px;top:31px;min-width:112px;max-width:calc(100% - 8px);padding:4px;display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);border-radius:7px;background:var(--surface);box-shadow:var(--shadow)}.cond-menu button{text-align:left;border:0;background:transparent;padding:6px 8px;border-radius:4px;font-size:12.5px}.cond-menu button:hover{background:var(--sunk)}.cond-menu .danger{color:var(--crit)}.cond-tools{gap:4px}.cond-tools .active{border-color:var(--accent);color:var(--accent)}.cond-editor-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.condgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.cbtn{text-align:left;border:1px solid var(--line);background:var(--sunk);border-radius:7px;padding:7px 9px;display:flex;flex-direction:column;gap:2px}
+.cbtn b{font-size:13.5px}
+.cbtn small{font-size:11.5px;color:var(--muted);line-height:1.35}
+.cbtn[aria-pressed="true"]{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--sunk))}
+.presets{display:flex;flex-wrap:wrap;gap:5px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:var(--sunk);padding:5px 12px}
+.seg button[aria-pressed="true"].b{background:var(--buff);color:var(--surface)}
+.seg button[aria-pressed="true"].d{background:var(--debuff);color:var(--surface)}
+.targets{display:flex;flex-wrap:wrap;gap:6px}
+.targets label{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:3px 8px;background:var(--sunk);font-size:13px}
+textarea.json{font-family:var(--f-num);font-size:12px;min-height:180px;resize:vertical}
+.clist{display:flex;flex-direction:column;gap:6px}
+.citem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--sunk)}
+.citem b{font-family:var(--f-display);font-size:15px}
+.citem p{margin:1px 0 0;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.crow{display:grid;grid-template-columns:auto minmax(0,1.4fr) minmax(0,.9fr) minmax(0,1fr) minmax(0,1.1fr) 64px auto;gap:6px;align-items:end;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.crow .field input,.crow .field select{background:var(--surface)}
+.crow .field input:disabled{opacity:.6}
+.crow .iconbtn{align-self:end;margin-bottom:2px}
+.crow .mv{align-self:end;margin-bottom:2px}
+@media (max-width:600px){.crow{grid-template-columns:repeat(3,minmax(0,1fr))}.crow .c-name{grid-column:1/-1}.crow .iconbtn{justify-self:start}}
+.check{display:flex;gap:6px;align-items:center;font-size:13px}
+.concadd{display:flex;gap:6px}
+.concadd input{flex:1;min-width:0;border:1px solid var(--line);background:var(--sunk);border-radius:6px;padding:5px 8px}
+.preview{border:1px dashed var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.preview .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.preview input[type=range]{flex:1;min-width:140px;accent-color:var(--accent)}
+.preview ul{margin:0;padding-left:18px;font-size:13px}
+.preview li span{font-family:var(--f-num);color:var(--muted)}
+/* compact view */
+body.mini .full-only{display:none}
+body.mini .wrap{max-width:560px}
+body.mini .bar-in{max-width:560px}
+.mini{display:flex;flex-direction:column;gap:6px;grid-column:1/-1}
+.mini-amt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.mini-amt label{font-size:12px;color:var(--muted)}
+.mini-amt input{width:84px;border:1px solid var(--line);border-radius:6px;background:var(--sunk);padding:4px 8px;font-family:var(--f-num)}
+.mini-amt .hint{flex:1;min-width:140px}
+.mrow{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.mrow.turn{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.mrow.down{background:color-mix(in srgb,var(--crit) 7%,var(--surface))}
+.mi-init{font-family:var(--f-num);font-weight:600;color:var(--muted);text-align:center}
+.mi-main{min-width:0;display:flex;flex-direction:column;gap:3px}
+.mi-top{display:flex;align-items:baseline;gap:8px;min-width:0}
+.mi-top b{font-family:var(--f-display);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;cursor:pointer}
+.mi-hp{margin-left:auto;font-family:var(--f-num);font-size:13px;white-space:nowrap}
+.mi-hp em{font-style:normal;color:var(--arcane)}
+.mrow .meter{height:6px}
+.mi-tags{font-size:11.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 8px}
+.mi-tags .c{color:var(--warn)} .mi-tags .b{color:var(--buff)} .mi-tags .d{color:var(--debuff)} .mi-tags .k{color:var(--arcane)}
+.mi-ac{display:flex;flex-direction:column;align-items:center;font-size:9.5px;letter-spacing:.1em;color:var(--muted);line-height:1.1}
+.mi-ac b{font-family:var(--f-num);font-size:17px;color:var(--ink);letter-spacing:0}
+.mi-ac b.up{color:var(--buff)} .mi-ac b.dn{color:var(--debuff)}
+.mi-btns{display:flex;gap:4px}
+.mi-btns button{width:34px;height:34px;border-radius:7px;border:1px solid var(--line);background:var(--sunk);font-size:17px;font-weight:600;padding:0}
+.mi-btns .m{color:var(--crit)} .mi-btns .p{color:var(--good)}
+.slot .cnt{font-family:var(--f-num);font-size:11px;color:var(--muted)}
+.sp{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sp-lbl{font-size:12px;color:var(--muted)}
+.sp-num{font-family:var(--f-num);font-size:20px;font-weight:600;color:var(--arcane);line-height:1}
+.sp-num small{font-size:12px;color:var(--muted);font-weight:500}
+.sp-cast{display:flex;flex-wrap:wrap;gap:4px}
+.spb{border:1px solid color-mix(in srgb,var(--arcane) 45%,var(--line));background:var(--sunk);border-radius:5px;padding:2px 7px;font-size:12px;color:var(--arcane);display:inline-flex;gap:4px;align-items:baseline}
+.spb span{font-family:var(--f-num);font-size:11px;color:var(--muted)}
+.spb em{font-style:normal;font-size:10.5px;color:var(--muted)}
+.spb:disabled{opacity:.4;cursor:not-allowed}
+.mi-spell{display:flex;flex-direction:column;gap:4px;margin-top:3px}
+.mi-spell .pip{width:13px;height:13px}
+.mi-spell .pact .pip{width:10px;height:10px}
+.mi-spell .slots{gap:4px 10px}
+.mi-spell .sp-num{font-size:15px}
+.mi-spell .slot .lv{min-width:auto}
+body.pipdoc{padding-inline:6px;padding-block:6px}
+.pip-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.pip-bar .round{padding:2px 8px}
+.pip-bar .grow{flex:1}
+body.pipdoc .toasts{bottom:8px}
+.seg.wide button{padding:7px 14px}
+.pipvid{position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0;pointer-events:none}
+.tag-custom{font-size:10px;letter-spacing:.06em;border:1px solid var(--line);border-radius:3px;padding:0 4px;color:var(--muted);margin-left:4px;vertical-align:1px}
+
+.toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:60;display:flex;flex-direction:column;gap:6px;width:min(420px,calc(100% - 32px))}
+.toast{background:var(--ink);color:var(--surface);border-radius:8px;padding:9px 12px;font-size:13px;box-shadow:var(--shadow);animation:tin .2s ease-out}
+@keyframes tin{from{transform:translateY(6px);opacity:.3}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:520px){.brand small{display:none}.hp-ctl{grid-template-columns:minmax(0,1fr) auto auto}.hp-ctl .tmpb{grid-column:2/4}}
+</style>
+</head>
+<body>
+
+
+<header class="bar"><div class="bar-in">
+  <h1 class="brand">冒险小队面板<small>资源追踪</small></h1>
+  <select id="teamSel" class="teamsel" aria-label="切换小队"></select>
+  <div class="combat" id="combat"></div>
+  <div class="spacer"></div>
+  <div class="group" id="tools">
+    <button class="btn full-only" data-act="rest" data-kind="short">短休</button>
+    <button class="btn full-only" data-act="rest" data-kind="long">长休</button>
+    <button class="btn ghost full-only" data-act="classes">自定义职业</button>
+    <button class="btn ghost full-only" data-act="io">导入 / 导出</button>
+    <button class="btn ghost full-only" data-act="settings">设置</button>
+    <button class="btn" data-act="pip" title="置顶显示在其他窗口和标签页之上">悬浮窗</button>
+    <button class="btn" data-act="pure" id="pureBtn" aria-pressed="false">纯先攻</button><button class="btn" data-act="npc">＋ NPC</button>
+    <button class="btn" data-act="view" id="viewBtn">紧凑视图</button>
+    <button class="btn primary full-only" data-act="add">＋ 角色</button>
+  </div>
+</div></header>
+
+<main class="wrap">
+  <div id="notices"></div>
+  <div class="grid" id="grid"><div class="empty"><h2>正在载入小队…</h2><p>稍等片刻，正在读取保存的角色。</p></div></div>
+</main>
+<div id="modalRoot"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="/party-panel/db-shim.js"></script>
+<script>
+(function(){
+"use strict";
+/* ---------- rules data ---------- */
+const FULL=[[],[2],[3],[4,2],[4,3],[4,3,2],[4,3,3],[4,3,3,1],[4,3,3,2],[4,3,3,3,1],[4,3,3,3,2],[4,3,3,3,2,1],[4,3,3,3,2,1],[4,3,3,3,2,1,1],[4,3,3,3,2,1,1],[4,3,3,3,2,1,1,1],[4,3,3,3,2,1,1,1],[4,3,3,3,2,1,1,1,1],[4,3,3,3,3,1,1,1,1],[4,3,3,3,3,2,1,1,1],[4,3,3,3,3,2,2,1,1]];
+const R=(name,max,reset)=>({id:uid(),name,max,used:0,reset});
+const CLASSES={
+  barbarian:{n:"野蛮人",hd:12,res:l=>[R("狂暴",l<3?2:l<6?3:l<12?4:l<17?5:6,"long")]},
+  bard:{n:"吟游诗人",hd:8,cast:"full",res:l=>[R("诗人激励",3,l>=5?"short":"long")]},
+  cleric:{n:"牧师",hd:8,cast:"full",res:l=>l<2?[]:[R("引导神力",l<6?2:l<18?3:4,"short")]},
+  druid:{n:"德鲁伊",hd:8,cast:"full",res:l=>l<2?[]:[R("荒野变形",l<6?2:l<17?3:4,"short")]},
+  fighter:{n:"战士",hd:10,res:l=>{const a=[R("回气",l<4?2:l<10?3:4,"short")];if(l>=2)a.push(R("动作如潮",l<17?1:2,"short"));if(l>=9)a.push(R("不屈",l<13?1:l<17?2:3,"long"));return a}},
+  monk:{n:"武僧",hd:8,res:l=>l<2?[]:[R("气",l,"short")]},
+  paladin:{n:"圣武士",hd:10,cast:"half",res:l=>{const a=[R("圣疗池",5*l,"long")];if(l>=3)a.push(R("引导神力",l<11?2:3,"short"));return a}},
+  ranger:{n:"游侠",hd:10,cast:"half",res:l=>[R("宿敌（猎人印记）",l<5?2:l<9?3:l<13?4:l<17?5:6,"long")]},
+  rogue:{n:"游荡者",hd:8,res:()=>[]},
+  sorcerer:{n:"术士",hd:6,cast:"full",res:l=>{const a=[R("先天术法",2,"long")];if(l>=2)a.unshift(R("术法点",l,"long"));return a}},
+  warlock:{n:"邪术师",hd:8,cast:"pact",res:l=>[[11,6],[13,7],[15,8],[17,9]].filter(([L])=>l>=L).map(([,s])=>R("秘法奥义·"+s+"环",1,"long"))},
+  wizard:{n:"法师",hd:6,cast:"full",res:()=>[R("奥术回复",1,"long")]},
+  artificer:{n:"奇械师",hd:8,cast:"half",res:()=>[]}
+};
+const CONDS=[
+  ["目盲","看不见；攻击检定劣势，攻击你的检定有优势"],
+  ["魅惑","不能攻击魅惑者；对方社交检定对你有优势"],
+  ["耳聋","听不见；依赖听觉的检定自动失败"],
+  ["恐慌","看得见恐惧源时，攻击与属性检定劣势，不能主动靠近"],
+  ["受擒","速度为 0"],
+  ["失能","不能执行动作、附赠动作或反应"],
+  ["隐形","攻击检定有优势，攻击你的检定劣势"],
+  ["麻痹","失能且不能移动；力量敏捷豁免自动失败，5 尺内命中即重击"],
+  ["石化","化为石像，失能；对大多数伤害有抗性"],
+  ["中毒","攻击检定与属性检定劣势"],
+  ["倒地","只能爬行；攻击劣势；5 尺内攻击你有优势，远程攻击劣势"],
+  ["束缚","速度为 0；攻击劣势，攻击你有优势，敏捷豁免劣势"],
+  ["震慑","失能；力量敏捷豁免自动失败，攻击你有优势"],
+  ["昏迷","失能并倒地；力量敏捷豁免失败，5 尺内命中即重击"]
+];
+const FX_PRESETS=[
+  {name:"祝福",kind:"buff",rounds:10,ac:0,note:"攻击与豁免 +1d4 · 专注"},
+  {name:"加速术",kind:"buff",rounds:10,ac:2,note:"速度翻倍，额外动作 · 专注"},
+  {name:"护盾术",kind:"buff",rounds:1,ac:5,note:"持续到你下回合开始"},
+  {name:"信仰护盾",kind:"buff",rounds:100,ac:2,note:"专注，至多 10 分钟"},
+  {name:"狂暴",kind:"buff",rounds:100,ac:0,note:"钝击/穿刺/挥砍抗性，力量伤害加值"},
+  {name:"英雄气概",kind:"buff",rounds:10,ac:0,note:"免疫恐慌，每回合获得临时生命 · 专注"},
+  {name:"灾祸",kind:"debuff",rounds:10,ac:0,note:"攻击与豁免 −1d4 · 专注"},
+  {name:"减速术",kind:"debuff",rounds:10,ac:-2,note:"速度减半，敏捷豁免 −2 · 专注"},
+  {name:"妖术",kind:"debuff",rounds:600,ac:0,note:"受到额外 1d6 黯蚀伤害 · 专注"},
+  {name:"猎人印记",kind:"debuff",rounds:600,ac:0,note:"受到额外 1d6 伤害 · 专注"},
+  {name:"妖火",kind:"debuff",rounds:10,ac:0,note:"攻击它有优势，无法隐形 · 专注"}
+];
+
+/* ---------- helpers ---------- */
+function uid(){return Math.random().toString(36).slice(2,10)}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const int=(v,d=0)=>{const n=parseInt(v,10);return Number.isFinite(n)?n:d};
+const clone=o=>JSON.parse(JSON.stringify(o));
+const $=s=>document.querySelector(s);
+
+function slotsFor(cast,l){
+  if(cast==="full")return pad(FULL[clamp(l,0,20)]);
+  if(cast==="half")return pad(FULL[Math.ceil(clamp(l,0,20)/2)]);
+  if(cast==="third")return pad(l<3?[]:FULL[Math.ceil(clamp(l,0,20)/3)]);
+  return pad([]);
+}
+function pad(a){const r=a.slice();while(r.length<9)r.push(0);return r}
+function pactFor(l){return {lvl:Math.min(5,Math.ceil(l/2)),max:l<2?1:l<11?2:l<17?3:4,used:0}}
+
+function blank(){
+  return {name:"新角色",cls:"",level:1,hp:10,maxHp:10,temp:0,ac:10,init:0,
+    slots:pad([]),used:pad([]),pact:{lvl:0,max:0,used:0},res:[],conds:[],exh:0,fx:[],conc:"",ds:{s:0,f:0},created:Date.now()};
+}
+function normalize(c){
+  const b=blank();const o=Object.assign(b,c||{});
+  o.slots=pad((o.slots||[]).slice(0,9).map(n=>clamp(int(n),0,9)));
+  o.used=pad((o.used||[]).slice(0,9).map(n=>Math.max(0,int(n))));
+  o.used=o.used.map((u,i)=>clamp(u,0,o.slots[i]));
+  o.spUsed=clamp(int(o.spUsed),0,spMax(o));
+  o.spHigh=(Array.isArray(o.spHigh)?o.spHigh:[]).map(n=>int(n)).filter(n=>n>=6&&n<=9);
+  o.pact=Object.assign({lvl:0,max:0,used:0},o.pact||{});o.pact.used=clamp(int(o.pact.used),0,int(o.pact.max));
+  o.res=(o.res||[]).map(r=>({id:r.id||uid(),name:String(r.name||"资源"),max:Math.max(0,int(r.max)),used:clamp(int(r.used),0,Math.max(0,int(r.max))),reset:r.reset==="short"?"short":r.reset==="none"?"none":"long"}));
+  o.fx=(o.fx||[]).map(f=>({id:f.id||uid(),name:String(f.name||"效果"),kind:f.kind==="debuff"?"debuff":"buff",rounds:f.rounds==null||f.rounds===""?null:Math.max(0,int(f.rounds)),ac:int(f.ac),note:String(f.note||"")}));
+  o.conds=Array.isArray(o.conds)?o.conds.filter(x=>typeof x==="string"):[];
+  const notes=Object.create(null);for(const n of o.conds){if(o.condNotes&&typeof o.condNotes[n]==="string")notes[n]=o.condNotes[n].slice(0,2000)}o.condNotes=notes;
+  o.ds=Object.assign({s:0,f:0},o.ds||{});
+  const cl=Array.isArray(o.concs)?o.concs:(o.conc?[o.conc]:[]);
+  o.concs=[...new Set(cl.map(s=>String(s).trim()).filter(Boolean))].slice(0,9);
+  o.conc=o.concs[0]||"";
+  o.concMax=clamp(int(o.concMax,1),1,9);
+  o.init=int(o.init);o.initBonus=clamp(int(o.initBonus),-20,30);o.initAdv=o.initAdv===true||o.initAdv==="1";o.initManual=o.initManual===true||o.initManual==="1";o.initPending=o.initPending===true;
+  o.dcs=(Array.isArray(o.dcs)?o.dcs:[]).slice(0,12).map(x=>({id:x.id||uid(),name:String(x.name||"").slice(0,30),val:clamp(int(x.val,10),0,40)}));
+  o.initRoll=Array.isArray(o.initRoll)?o.initRoll.map(n=>clamp(int(n),1,20)).slice(0,2):[];
+  o.hp=clamp(int(o.hp),0,Math.max(1,int(o.maxHp,1)));o.maxHp=Math.max(1,int(o.maxHp,1));
+  o.temp=Math.max(0,int(o.temp));o.exh=clamp(int(o.exh),0,6);
+  return o;
+}
+/* spell points variant (DMG): point pool equals the slot table's cost total */
+const SP_COST=[0,2,3,5,6,7,9,10,11,13];
+function spMax(c){return (c.slots||[]).reduce((s,n,i)=>s+(int(n)||0)*SP_COST[i+1],0)}
+function spTop(c){let t=0;(c.slots||[]).forEach((n,i)=>{if(n>0)t=i+1});return t}
+function usePoints(){return S.meta.spellSystem==="points"}
+/* concentration (standard: one at a time; variant: per-character limit) */
+function multiConc(){return S.meta.multiConc===true}
+function concLimit(c){return multiConc()?c.concMax:1}
+function addConc(c,name){
+  name=String(name||"").trim();if(!name||c.concs.includes(name))return;
+  const ended=[];while(c.concs.length>=concLimit(c))ended.push(c.concs.shift());
+  c.concs.push(name);c.conc=c.concs[0];
+  if(ended.length)toast(c.name+" 开始专注「"+name+"」，"+(concLimit(c)>1?"已达上限 "+concLimit(c)+" 个，":"")+"「"+ended.join("」「")+"」的专注结束。");
+}
+function effAC(c){return c.ac+c.fx.reduce((s,f)=>s+(f.ac||0),0)}
+function clsName(c){const C=getClass(c.cls);return C?C.n:(c.clsLabel||"")}
+
+/* custom classes */
+const CAST_LABEL={none:"非施法者",full:"全施法者",half:"半施法者",third:"三分之一施法者",pact:"契约魔法"};
+const MODE_LABEL={fixed:"固定值",level:"等级 ×",prof:"熟练加值",table:"等级表"};
+const RESET_LABEL={short:"短休",long:"长休",none:"手动"};
+function prof(l){return 2+Math.floor((clamp(l,1,20)-1)/4)}
+function parseTable(s){
+  return String(s||"").split(/[,，;；\s]+/).map(p=>p.split(/[:：=]/)).filter(p=>p.length===2).map(([a,b])=>[int(a,NaN),int(b,NaN)]).filter(([a,b])=>Number.isFinite(a)&&Number.isFinite(b)).sort((x,y)=>x[0]-y[0]);
+}
+function resMax(r,l){
+  if(l<(r.from||1))return null;
+  if(r.mode==="level")return Math.max(1,Math.floor(l*(parseFloat(r.val)||1)));
+  if(r.mode==="prof")return prof(l);
+  if(r.mode==="table"){let v=null;for(const[a,b]of parseTable(r.val))if(a<=l)v=b;return v}
+  return Math.max(0,int(r.val));
+}
+function normalizeClass(c){
+  c=c||{};
+  return {name:String(c.name||"新职业").slice(0,40),hd:[0,6,8,10,12].includes(int(c.hd))?int(c.hd):8,
+    cast:CAST_LABEL[c.cast]?c.cast:"none",note:String(c.note||""),created:c.created||Date.now(),
+    res:(Array.isArray(c.res)?c.res:[]).map(r=>({id:r.id||uid(),name:String(r.name||"资源"),reset:RESET_LABEL[r.reset]?r.reset:"long",
+      mode:MODE_LABEL[r.mode]?r.mode:"fixed",val:r.mode==="table"?String(r.val??""):(r.val??1),from:clamp(int(r.from,1),1,20)}))};
+}
+function getClass(k){
+  if(!k)return null;
+  if(CLASSES[k])return CLASSES[k];
+  if(k.startsWith("x:")){
+    const c=S.classes[k.slice(2)];if(!c)return null;
+    return {n:c.name,hd:c.hd,cast:c.cast,custom:true,
+      res:l=>c.res.map(r=>{const m=resMax(r,l);return m==null||m<=0?null:R(r.name,m,r.reset)}).filter(Boolean)};
+  }
+  return null;
+}
+function classSummary(c){
+  const bits=[c.hd?"生命骰 d"+c.hd:"",CAST_LABEL[c.cast]];
+  if(c.res.length)bits.push(c.res.map(r=>r.name).join("、"));
+  return bits.filter(Boolean).join(" · ");
+}
+
+/* ---------- state & storage ---------- */
+const S={chars:{},classes:{},teams:{},team:null,teamSaved:{},meta:defMeta(),ready:false};
+function defMeta(){return {round:0,turn:null,sortInit:true,spellSystem:"slots",multiConc:false}}
+let db=null,mode="local",readOnly=false,unsubMembers=null;
+const LS_KEY="dnd-party-tracker-v1",TEAM_KEY="dnd-active-team";
+function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+const COND_LIBRARY_KEY="dnd-condition-library-v1";
+function cleanCondLibrary(data){
+  if(!Array.isArray(data))throw Error("状态库应为数组");
+  const seen=new Set();
+  return data.map(x=>{if(!Array.isArray(x)||typeof x[0]!=="string"||typeof x[1]!=="string")throw Error("每个状态必须包含名称和规则摘要");return [x[0].trim().slice(0,80),x[1].trim().slice(0,2000)]}).filter(([n])=>{if(!n||seen.has(n))return false;seen.add(n);return true});
+}
+let condLibrary;
+try{const raw=lsGet(COND_LIBRARY_KEY);condLibrary=raw==null?CONDS.map(x=>x.slice()):cleanCondLibrary(JSON.parse(raw))}catch(e){condLibrary=CONDS.map(x=>x.slice())}
+function saveCondLibrary(next){
+  try{localStorage.setItem(COND_LIBRARY_KEY,JSON.stringify(next));condLibrary=next;return true}catch(e){toast("状态库保存失败，请检查浏览器存储设置。可通过导出备份。");return false}
+}
+function condSummary(c,n){return Object.prototype.hasOwnProperty.call(c.condNotes||{},n)?c.condNotes[n]:(condLibrary.find(x=>x[0]===n)||CONDS.find(x=>x[0]===n)||[])[1]||""}
+function setCond(c,n,summary){if(!c.conds.includes(n))c.conds.push(n);c.condNotes=Object.assign(Object.create(null),c.condNotes||{});c.condNotes[n]=summary}
+function condLibraryModal(doc=document){
+  openModal(`<h2>导入 / 导出状态库</h2><p class="sub">导出后可在其他面板、浏览器或团中导入。导入会替换此浏览器保存的状态库；角色身上已有的状态保留。</p><div class="field"><label for="cl-json">状态库 JSON（名称、规则摘要）</label><textarea id="cl-json" class="json">${esc(JSON.stringify(condLibrary,null,2))}</textarea></div><div class="mfoot"><button class="btn" data-export>下载状态库</button><button class="btn" data-import>导入并替换</button><button class="btn primary" data-x>关闭</button></div>`,root=>{
+    root.querySelector("[data-x]").onclick=modalClose;
+    root.querySelector("[data-export]").onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(condLibrary,null,2)],{type:"application/json"}));const a=doc.createElement("a");a.href=url;a.download="状态库.json";doc.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+    root.querySelector("[data-import]").onclick=()=>{let next;try{next=cleanCondLibrary(JSON.parse(root.querySelector("#cl-json").value))}catch(e){toast("状态库格式无效："+e.message);return}if(saveCondLibrary(next)){render();toast("已保存状态库，共 "+next.length+" 个状态。");modalClose()}};
+  },doc);
+}
+function normalizeTeam(t){t=t||{};return {name:String(t.name||"未命名小队").slice(0,40),created:t.created||Date.now(),meta:Object.assign(defMeta(),t.meta||{})}}
+function teamIds(){return Object.keys(S.teams).sort((a,b)=>(S.teams[a].created||0)-(S.teams[b].created||0))}
+function teamName(tid){return S.teams[tid||S.team]?S.teams[tid||S.team].name:""}
+function normChars(o){const r={};for(const[k,v]of Object.entries(o||{}))r[k]=normalize(v);return r}
+
+function sampleParty(){
+  const mk=(o)=>normalize(Object.assign(blank(),o,{sample:true}));
+  const a=mk({name:"艾拉·风语",cls:"wizard",level:5,hp:27,maxHp:27,ac:12,init:17,slots:slotsFor("full",5),used:[1,1,0],res:[Object.assign(R("奥术回复",1,"long")),Object.assign(R("生命骰 d6",5,"long"),{used:1})],created:1});
+  const b=mk({name:"布伦·石拳",cls:"fighter",level:5,hp:31,maxHp:44,temp:5,ac:18,init:12,res:[Object.assign(R("回气",3,"short"),{used:1}),Object.assign(R("动作如潮",1,"short"),{used:1}),R("生命骰 d10",5,"long")],fx:[{id:uid(),name:"加速术",kind:"buff",rounds:7,ac:2,note:"速度翻倍，额外动作 · 专注"}],created:2});
+  const c=mk({name:"莉丝·晨光",cls:"cleric",level:5,hp:38,maxHp:38,ac:18,init:9,slots:slotsFor("full",5),used:[2,0,1],conc:"祝福",res:[Object.assign(R("引导神力",2,"short"),{used:1}),R("生命骰 d8",5,"long")],fx:[{id:uid(),name:"祝福",kind:"buff",rounds:6,ac:0,note:"攻击与豁免 +1d4 · 专注"}],created:3});
+  const d=mk({name:"卡斯·影契",cls:"warlock",level:5,hp:9,maxHp:38,ac:13,init:15,pact:{lvl:3,max:2,used:1},conc:"加速术",conds:["中毒"],res:[R("生命骰 d8",5,"long")],fx:[{id:uid(),name:"灾祸",kind:"debuff",rounds:4,ac:0,note:"攻击与豁免 −1d4 · 专注"}],created:4});
+  const out={};[a,b,c,d].forEach(x=>{out["c"+uid()]=x});return out;
+}
+
+/* local mode: everything in this browser */
+function loadLocal(){
+  let data=null;
+  try{data=JSON.parse(lsGet(LS_KEY)||"null")}catch(e){}
+  if(data&&data.classes)for(const[k,v]of Object.entries(data.classes))S.classes[k]=normalizeClass(v);
+  if(data&&data.v===2&&data.teams){for(const[k,v]of Object.entries(data.teams))S.teams[k]=Object.assign(normalizeTeam(v),{chars:normChars(v.chars)})}
+  else if(data&&data.chars){S.teams.main=Object.assign(normalizeTeam({name:"我的小队",meta:data.meta}),{chars:normChars(data.chars)})}
+  if(!teamIds().length){
+    const chars=sampleParty(),t=Object.assign(normalizeTeam({name:"示例小队"}),{chars});
+    const ids=Object.keys(chars).sort((a,b)=>chars[b].init-chars[a].init);t.meta.round=2;t.meta.turn=ids[1]||null;S.teams.main=t;
+  }
+  const want=(data&&data.active)||lsGet(TEAM_KEY);
+  activateLocal(S.teams[want]?want:teamIds()[0]);
+  S.ready=true;
+}
+function activateLocal(tid){S.team=tid;S.chars=S.teams[tid].chars;S.meta=S.teams[tid].meta}
+function saveLocal(){lsSet(LS_KEY,JSON.stringify({v:2,teams:S.teams,classes:S.classes,active:S.team}))}
+
+/* shared mode: writes are queued per document path, captured at the moment of change */
+const dirty=new Map(),inflight=new Set();let flushT=null;
+function busy(path){return dirty.has(path)||inflight.has(path)}
+function teamDoc(tid){const t=S.teams[tid];return t?{name:t.name,created:t.created,meta:clone(t.meta)}:null}
+function pathFor(key){
+  if(key==="meta")key="team:"+S.team;
+  if(key.startsWith("team:")){const tid=key.slice(5);return ["teams/"+tid,teamDoc(tid)]}
+  if(key.startsWith("k:")){const cid=key.slice(2),k=S.classes[cid];return ["classes/"+cid,k?clone(k):null]}
+  if(key.startsWith("m:")){const p=key.split(":");return ["teams/"+p[1]+"/members/"+p[2],null]}
+  const c=S.chars[key];return ["teams/"+S.team+"/members/"+key,c?clone(c):null];
+}
+function persist(key){
+  if(mode==="local"){saveLocal();return}
+  const [path,data]=pathFor(key);
+  dirty.set(path,data);
+  const m=path.match(/^teams\/([^/]+)\/members\//);
+  if(m&&data&&!S.teamSaved[m[1]]&&S.teams[m[1]]){S.teamSaved[m[1]]=true;dirty.set("teams/"+m[1],teamDoc(m[1]))}
+  if(/^teams\/[^/]+$/.test(path)&&data)S.teamSaved[path.slice(6)]=true;
+  clearTimeout(flushT);flushT=setTimeout(flush,320);
+}
+function flush(){
+  for(const [path,data] of [...dirty]){
+    if(inflight.has(path))continue;
+    dirty.delete(path);inflight.add(path);
+    (data?db.doc(path).set(data):db.doc(path).delete())
+      .catch(e=>onWriteErr(e,path,data))
+      .finally(()=>{inflight.delete(path);if(dirty.has(path)){clearTimeout(flushT);flushT=setTimeout(flush,200)}});
+  }
+}
+const retried=new Set();
+function onWriteErr(e,path,data){
+  const code=e&&e.code;
+  if(code==="invalid_argument"&&!readOnly){readOnly=true;renderNotices();toast("你在这个页面上只有查看权限，修改不会被保存。");return}
+  if(code==="quota_exceeded"){toast("存储空间已满，请删除一些角色或小队后再试。");return}
+  if((code==="unavailable"||!code)&&!retried.has(path)){retried.add(path);setTimeout(()=>{retried.delete(path);if(!dirty.has(path))dirty.set(path,data);clearTimeout(flushT);flushT=setTimeout(flush,50)},600+Math.random()*900);return}
+  toast("保存失败（"+(code||"未知错误")+"），请稍后重试。");
+}
+
+async function migrateLegacy(){
+  // earlier versions kept one party at party/* and meta/combat; move it into teams/main once
+  try{
+    const ps=await db.collection("party").get();
+    if(ps.empty){S.teams.main=normalizeTeam({name:"我的小队"});return}
+    const ms=await db.doc("meta/combat").get();
+    S.teams.main=normalizeTeam({name:"我的小队",meta:ms.exists?clone(ms.data()):{}});
+    await db.doc("teams/main").set(teamDoc("main"));S.teamSaved.main=true;
+    for(const d of ps.docs)await db.doc("teams/main/members/"+d.id).set(clone(d.data()));
+    for(const d of ps.docs)await db.doc("party/"+d.id).delete();
+    if(ms.exists)await db.doc("meta/combat").delete();
+  }catch(e){if(!S.teams.main)S.teams.main=normalizeTeam({name:"我的小队"})}
+}
+function showLoading(){const g=$("#grid");if(g)g.innerHTML=`<div class="empty"><h2>正在载入「${esc(teamName())}」…</h2><p>稍等片刻，正在读取这个小队的角色。</p></div>`}
+function switchTeam(tid){
+  if(!S.teams[tid])return;
+  lsSet(TEAM_KEY,tid);
+  if(mode==="local"){activateLocal(tid);saveLocal();render();return}
+  if(unsubMembers){unsubMembers();unsubMembers=null}
+  S.team=tid;S.meta=S.teams[tid].meta;S.chars={};S.ready=false;
+  renderTeamSel();showLoading();
+  unsubMembers=db.collection("teams/"+tid+"/members").onSnapshot(snap=>{
+    if(S.team!==tid)return;
+    for(const ch of snap.docChanges()){
+      const id=ch.doc.id;
+      if(busy("teams/"+tid+"/members/"+id))continue;
+      if(ch.type==="removed")delete S.chars[id];
+      else S.chars[id]=normalize(clone(ch.doc.data()));
+    }
+    S.ready=true;render();
+  },()=>{toast("小队数据连接中断，请刷新页面。")});
+}
+
+async function initStore(){
+  try{db=(window.claude&&typeof window.claude.use==="function")?await window.claude.use("db"):null}catch(e){db=null}
+  if(!db){mode="local";loadLocal();render();return}
+  mode="db";
+  db.collection("classes").onSnapshot(snap=>{
+    for(const ch of snap.docChanges()){
+      const id=ch.doc.id;
+      if(busy("classes/"+id))continue;
+      if(ch.type==="removed")delete S.classes[id];
+      else S.classes[id]=normalizeClass(clone(ch.doc.data()));
+    }
+    render();
+  },()=>{});
+  let first=true;
+  db.collection("teams").onSnapshot(async snap=>{
+    for(const ch of snap.docChanges()){
+      const id=ch.doc.id;
+      if(busy("teams/"+id))continue;
+      if(ch.type==="removed"){delete S.teams[id];delete S.teamSaved[id]}
+      else{S.teams[id]=normalizeTeam(clone(ch.doc.data()));S.teamSaved[id]=true}
+    }
+    if(first){
+      first=false;
+      if(!teamIds().length)await migrateLegacy();
+      const want=lsGet(TEAM_KEY);
+      switchTeam(S.teams[want]?want:teamIds()[0]);
+      return;
+    }
+    if(S.team&&!S.teams[S.team]){
+      if(!teamIds().length)S.teams.main=normalizeTeam({name:"我的小队"});
+      toast("「当前小队」已被删除，已切换到其他小队。");
+      switchTeam(teamIds()[0]);return;
+    }
+    if(S.team)S.meta=S.teams[S.team].meta;
+    render();
+  },()=>{toast("小队数据连接中断，请刷新页面。")});
+}
+
+/* team operations */
+function createTeam(name,chars){
+  if(!guard())return;
+  const tid="t"+uid();
+  S.teams[tid]=normalizeTeam({name:name||"新小队",meta:{spellSystem:S.meta.spellSystem,multiConc:S.meta.multiConc,sortInit:S.meta.sortInit}});
+  if(mode==="local")S.teams[tid].chars={};
+  persist("team:"+tid);
+  switchTeam(tid);
+  if(chars&&chars.length){
+    chars.forEach((c,i)=>{const id="c"+uid();const n=normalize(clone(c));delete n.sample;n.created=(c.created||Date.now())+i;S.chars[id]=n;persist(id)});
+    if(mode==="local")render();
+  }
+  return tid;
+}
+function renameTeam(tid,name){
+  if(!guard()||!S.teams[tid])return;
+  name=String(name||"").trim();if(!name)return;
+  S.teams[tid].name=name.slice(0,40);persist("team:"+tid);render();
+}
+async function deleteTeam(tid){
+  if(!guard()||!S.teams[tid])return;
+  if(teamIds().length<2){toast("至少要保留一个小队。");return}
+  const name=S.teams[tid].name;
+  if(tid===S.team)switchTeam(teamIds().find(x=>x!==tid));
+  if(mode==="local"){delete S.teams[tid];saveLocal();render();toast("已删除小队「"+name+"」。");return}
+  let ids=[];
+  try{ids=(await db.collection("teams/"+tid+"/members").get()).docs.map(d=>d.id)}catch(e){}
+  ids.forEach(cid=>persist("m:"+tid+":"+cid));
+  delete S.teams[tid];persist("team:"+tid);delete S.teamSaved[tid];
+  render();toast("已删除小队「"+name+"」。");
+}
+
+/* ---------- mutations ---------- */
+function guard(){if(readOnly){toast("你只能查看这个小队。");return false}return true}
+function mutate(id,fn){if(!guard())return;const c=S.chars[id];if(!c)return;fn(c);S.chars[id]=normalize(c);persist(id);render()}
+function setMeta(patch){if(!guard())return;Object.assign(S.meta,patch);persist("meta");render()}
+function removeChar(id){if(!guard())return;delete S.chars[id];if(S.meta.turn===id)S.meta.turn=null;persist(id);persist("meta");render()}
+
+function sortedIds(){
+  const ids=Object.keys(S.chars);
+  return ids.sort((a,b)=>{const A=S.chars[a],B=S.chars[b];
+    if(S.meta.sortInit!==false&&A.initPending!==B.initPending)return A.initPending?1:-1;
+    if(S.meta.sortInit!==false&&B.init!==A.init)return B.init-A.init;
+    if(S.meta.sortInit!==false&&B.initBonus!==A.initBonus)return B.initBonus-A.initBonus;
+    return (A.created||0)-(B.created||0)||A.name.localeCompare(B.name)});
+}
+
+/* initiative: 1d20 + bonus (advantage rolls two and keeps the higher) */
+function d20(){try{const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%20+1}catch(e){return Math.floor(Math.random()*20)+1}}
+function sgn(n){return (n>=0?"+":"−")+Math.abs(n)}
+function rollInit(c){
+  const d=[d20()];if(c.initAdv)d.push(d20());
+  c.initRoll=d;c.init=Math.max(...d)+c.initBonus;c.initPending=false;
+  return c.name+" "+c.init+"（d20 "+d.join("/")+" "+sgn(c.initBonus)+"）";
+}
+function initDetail(c){return c.initRoll.length?"d20 "+c.initRoll.join("/")+" "+sgn(c.initBonus):""}
+function rollAll(){
+  if(!guard())return;
+  const ids=Object.keys(S.chars);if(!ids.length)return;
+  const manual=[];
+  ids.forEach(id=>{const c=S.chars[id];if(c.initManual){c.initPending=true;manual.push(c.name)}else rollInit(c);persist(id)});
+  render();
+  const rolled=sortedIds().filter(id=>!S.chars[id].initPending);
+  toast((rolled.length?"先攻："+rolled.map(id=>S.chars[id].name+" "+S.chars[id].init).join("，"):"没有需要自动掷骰的角色")+(manual.length?"。待手动填写："+manual.join("、"):""));
+}
+function applyDamage(c,n){
+  let left=n;const absorbed=Math.min(c.temp,left);c.temp-=absorbed;left-=absorbed;
+  const before=c.hp;c.hp=Math.max(0,c.hp-left);
+  const msgs=[];
+  const dc=Math.min(30,Math.max(10,Math.floor(n/2)));
+  if(c.concs.length&&n>0&&c.hp>0)msgs.push(c.name+" 受到 "+n+" 点伤害，需进行专注检定（体质豁免 DC "+dc+"）以维持「"+c.concs.join("」「")+"」"+(c.concs.length>1?"，共 "+c.concs.length+" 个专注":"")+"。");
+  if(before>0&&c.hp===0){
+    msgs.push(c.name+" 倒下了，开始死亡豁免。");
+    if(c.concs.length){msgs.push(c.name+" 失去意识，「"+c.concs.join("」「")+"」的专注结束。");c.concs=[];c.conc=""}
+    if(left-before>=c.maxHp)msgs.push("溢出伤害不低于生命上限：按规则直接死亡。");
+  }
+  else if(before===0&&n>0){c.ds.f=Math.min(3,c.ds.f+1);msgs.push(c.name+" 在濒死时受到伤害，记一次死亡豁免失败。")}
+  return msgs;
+}
+function nextTurn(){
+  if(!guard())return;
+  const ids=sortedIds();if(!ids.length)return;
+  let i=ids.indexOf(S.meta.turn);
+  if(S.meta.round<1||i<0){S.meta.round=Math.max(1,S.meta.round||0);S.meta.turn=ids[0];persist("meta");render();return}
+  if(i+1<ids.length){S.meta.turn=ids[i+1];persist("meta");render();return}
+  // round wraps: tick effects
+  const expired=[];
+  for(const id of ids){
+    const c=S.chars[id];let changed=false;
+    c.fx=c.fx.filter(f=>{if(f.rounds==null)return true;changed=true;f.rounds-=1;if(f.rounds<=0){expired.push(c.name+"的「"+f.name+"」");return false}return true});
+    if(changed)persist(id);
+  }
+  S.meta.round+=1;S.meta.turn=ids[0];persist("meta");render();
+  toast("进入第 "+S.meta.round+" 轮"+(expired.length?"。已结束："+expired.join("、"):""));
+}
+function rest(kind){
+  for(const id of Object.keys(S.chars)){
+    const c=S.chars[id];
+    c.pact.used=0;
+    c.res.forEach(r=>{if(r.reset==="short"||(kind==="long"&&r.reset==="long"))r.used=0});
+    if(kind==="long"){c.hp=c.maxHp;c.temp=0;c.used=pad([]);c.spUsed=0;c.spHigh=[];c.exh=Math.max(0,c.exh-1);c.ds={s:0,f:0}}
+    persist(id);
+  }
+  render();toast(kind==="long"?"长休完成：生命、法术位与资源已恢复，力竭 −1。":"短休完成：契约法术位与短休资源已恢复。");
+}
+
+/* ---------- rendering ---------- */
+function pipRow(max,used,act,extra,cls){
+  if(max>12){
+    return `<span class="counter"><button aria-label="使用一次" data-act="${act}" ${extra} data-d="1">−</button><b>${max-used}/${max}</b><button aria-label="恢复一次" data-act="${act}" ${extra} data-d="-1">＋</button></span>`;
+  }
+  let h=`<span class="pips">`;
+  for(let j=0;j<max;j++){const avail=j<max-used,isDS=act==="ds";h+=`<button class="pip ${cls||""} ${avail?"":"spent"}" aria-label="${isDS?(avail?"撤销一次记录":"记录一次死亡豁免"):avail?"使用":"恢复"}" ${isDS?`aria-pressed="${avail}"`:""} data-act="${act}" ${extra} data-d="${isDS?(avail?-1:1):(avail?1:-1)}"></button>`}
+  return h+`</span>`;
+}
+function spellBlock(c,compact){
+  const hasSlots=c.slots.some(n=>n>0),hasPact=c.pact.max>0;
+  if(!hasSlots&&!hasPact)return "";
+  let h="";
+  if(hasSlots&&usePoints()){
+    const max=spMax(c),left=max-c.spUsed,top=spTop(c);
+    h+=`<div class="sp"><span class="sp-lbl">法术点</span><span class="sp-num">${left}<small> / ${max}</small></span><span class="counter"><button data-act="sp" data-d="1" aria-label="扣 1 点法术点">−</button><button data-act="sp" data-d="-1" aria-label="加 1 点法术点">＋</button></span></div><div class="sp-cast">`;
+    for(let L=1;L<=top;L++){
+      const cost=SP_COST[L],lock=L>=6&&c.spHigh.includes(L);
+      h+=`<button class="spb" data-act="spcast" data-l="${L}" ${left<cost||lock?"disabled":""} aria-label="施放 ${L} 环法术，消耗 ${cost} 点"${L>=6?' title="6 环及以上每次长休各限一次"':""}>${L}环<span>−${cost}</span>${lock?"<em>已用</em>":""}</button>`;
+    }
+    h+=`</div>`;
+  }else if(hasSlots){
+    h+=`<div class="slots">`;
+    c.slots.forEach((m,i)=>{if(m>0)h+=`<div class="slot"><span class="lv">${i+1}环</span>${pipRow(m,c.used[i],"slot",`data-i="${i}"`)}<span class="cnt">${m-c.used[i]}/${m}</span></div>`});
+    h+=`</div>`;
+  }
+  if(hasPact)h+=`<div class="slots"><div class="slot pact"><span class="lv">契约·${c.pact.lvl}环</span>${pipRow(c.pact.max,c.pact.used,"pact","")}<span class="cnt">${c.pact.max-c.pact.used}/${c.pact.max}</span></div></div>`;
+  return h;
+}
+function card(id,c){
+  const turn=S.meta.round>0&&S.meta.turn===id;
+  const pct=c.hp/c.maxHp;
+  const lvlState=c.hp===0?"down":pct<=.25?"crit":pct<=.5?"warn":"";
+  const label=c.hp===0?"濒死":pct<=.25?"重伤":pct<=.5?"负伤":"健康";
+  const ac=effAC(c),acCls=ac>c.ac?"up":ac<c.ac?"dn":"";
+  const total=c.maxHp+c.temp;
+  const sub=[clsName(c)||"未设定职业",c.level?("等级 "+c.level):""].filter(Boolean).join(" · ");
+  let h=`<article class="card ${turn?"turn":""} ${c.hp===0?"down":""}" data-id="${id}">
+  <div class="head">
+    <div class="init"><label class="init-l" for="init-${id}">先攻</label><input id="init-${id}" class="init-v ${c.initPending?"pending":""}" type="number" inputmode="numeric" value="${c.initPending?"":c.init}" placeholder="?" data-fkey="init-${id}" data-act="initset" title="${c.initPending?"等待手动填写先攻":"先攻结果，可直接修改"}"><label class="init-l" for="initb-${id}">加值</label><span class="init-b"><input id="initb-${id}" type="number" inputmode="numeric" value="${c.initBonus}" data-fkey="initb-${id}" data-act="initb" title="先攻加值"><button class="init-d" data-act="rollinit" title="掷先攻：1d20 ${sgn(c.initBonus)}${c.initAdv?"，优势":""}" aria-label="为 ${esc(c.name)} 掷先攻">🎲</button></span></div>
+    <div class="who"><h2>${esc(c.name)}${turn?`<span class="turn-tag">行动中</span>`:""}</h2><p>${esc(sub)}</p></div>
+    <div class="acbox"><div class="shield ${acCls}" title="基础 AC ${c.ac}${ac!==c.ac?"，效果调整 "+(ac-c.ac>0?"+":"")+(ac-c.ac):""}"><b>${ac}</b><i>AC</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
+  </div>
+  <div class="hp">
+    <div class="hp-top"><span class="hp-cur">${c.hp}</span><span class="hp-max">/ ${c.maxHp}</span>${c.temp?`<span class="temp" title="临时生命">+${c.temp} 临时</span>`:""}<span class="status-pill ${lvlState}">${label}</span></div>
+    <div class="meter" aria-hidden="true"><i class="${lvlState==="down"?"crit":lvlState}" style="width:${(c.hp/total*100).toFixed(1)}%"></i><i class="tmp" style="width:${(c.temp/total*100).toFixed(1)}%"></i></div>
+    <div class="hp-ctl"><input id="amt-${id}" type="number" inputmode="numeric" min="0" placeholder="伤害/治疗量" aria-label="伤害或治疗的生命值，留空按 1 点计算" title="填入本次伤害或治疗的生命值；留空按 1 点计算" data-fkey="amt-${id}" data-act="amt">
+      <button class="btn sm dmg" data-act="hp" data-kind="dmg">伤害</button><button class="btn sm heal" data-act="hp" data-kind="heal">治疗</button><button class="btn sm tmpb" data-act="hp" data-kind="temp">临时</button></div>
+  </div>`;
+  if(c.dcs.length)h+=`<section class="sec"><div class="sec-h"><h3>DC</h3></div><div class="dcs">${c.dcs.map(x=>`<span class="dcb">${x.name?`<span>${esc(x.name)}</span>`:""}<i>DC</i><b>${x.val}</b></span>`).join("")}</div></section>`;
+  if(c.hp===0){
+    h+=`<div class="ds"><span>死亡豁免</span><span style="color:var(--good)">成功</span>${pipRow(3,3-c.ds.s,"ds",'data-k="s"',"sq")}<span style="color:var(--crit)">失败</span>${pipRow(3,3-c.ds.f,"ds",'data-k="f"',"sq")}</div>`;
+  }
+  const sb=spellBlock(c,false);
+  if(sb)h+=`<section class="sec"><div class="sec-h"><h3>${usePoints()&&c.slots.some(n=>n>0)?"法术点（变体规则）":"法术位"}</h3></div>${sb}</section>`;
+  if(c.res.length){
+    h+=`<section class="sec"><div class="sec-h"><h3>职业资源</h3></div><div class="res-list">`;
+    c.res.forEach(r=>{h+=`<div class="res"><span class="nm">${esc(r.name)}</span><span class="rs">${r.reset==="short"?"短休":r.reset==="long"?"长休":"手动"}</span>${pipRow(r.max,r.used,"res",`data-r="${r.id}"`)}</div>`});
+    h+=`</div></section>`;
+  }
+  h+=`<section class="sec"><div class="sec-h"><h3>状态</h3><button class="btn sm ghost" data-act="conds">管理</button></div><div class="chips">`;
+  let any=false;
+  if(multiConc()&&(c.concMax>1||c.concs.length>1)){any=true;h+=`<span class="chip conc" title="多重专注：可同时维持的专注数">专注 ${c.concs.length}/${concLimit(c)}</span>`}
+  c.concs.forEach((n,i)=>{any=true;h+=`<span class="chip conc" title="受到伤害时需要专注检定">专注：${esc(n)}<button class="x" data-act="dropconc" data-i="${i}" aria-label="结束专注${esc(n)}">×</button></span>`});
+  c.conds.forEach(n=>{any=true;const d=condSummary(c,n);h+=`<span class="chip cond" title="${esc(d)}">${esc(n)}<button class="x" data-act="uncond" data-n="${esc(n)}" aria-label="移除${esc(n)}">×</button></span>`});
+  if(c.exh>0){any=true;h+=`<span class="chip cond" title="每级：d20 检定 −2，速度 −5 尺；6 级死亡">力竭 ${c.exh}</span>`}
+  if(!any)h+=`<span class="empty-line">无异常状态</span>`;
+  h+=`</div></section>`;
+  h+=`<section class="sec"><div class="sec-h"><h3>增益 / 减益</h3><button class="btn sm ghost" data-act="fx">＋ 效果</button></div><div class="chips">`;
+  if(!c.fx.length)h+=`<span class="empty-line">没有生效中的效果</span>`;
+  c.fx.forEach(f=>{h+=`<span class="chip ${f.kind}" title="${esc(f.note)}"><span class="k">${f.kind==="buff"?"▲":"▼"}</span>${esc(f.name)}${f.ac?` <span class="rd">AC${f.ac>0?"+":""}${f.ac}</span>`:""}<span class="rd">${f.rounds==null?"持续":f.rounds+"轮"}</span><button class="x" data-act="unfx" data-f="${f.id}" aria-label="移除${esc(f.name)}">×</button></span>`});
+  h+=`</div></section></article>`;
+  return h;
+}
+function renderCombat(){
+  const m=S.meta,ids=sortedIds();
+  const cur=m.round>0&&S.chars[m.turn]?S.chars[m.turn].name:null;
+  $("#combat").innerHTML=m.round>0
+    ?`<div class="round"><span>第</span><b>${m.round}</b><span>轮${cur?" · "+esc(cur):""}</span></div><button class="btn primary" data-act="next">下一位 ▸</button><button class="btn ghost" data-act="endcombat">结束战斗</button>`
+    :`<div class="round"><span>战斗外</span></div><button class="btn" data-act="next" ${ids.length?"":"disabled"}>开始战斗</button>`;
+  $("#combat").insertAdjacentHTML("beforeend",`<button class="btn" data-act="rollall" ${ids.length?"":"disabled"} title="为全队掷 1d20 + 先攻加值">🎲 掷先攻</button><button class="btn ghost sm" data-act="sort" aria-pressed="${m.sortInit!==false}">${m.sortInit!==false?"按先攻排序":"按加入顺序"}</button>`);
+}
+function renderNotices(){
+  const n=[];
+  if(readOnly)n.push(`<div class="notice"><strong>只读</strong>你可以查看小队状态，但修改不会保存。</div>`);
+  if(Object.values(S.chars).some(c=>c.sample))n.push(`<div class="notice"><span><strong>这是示例小队</strong>，用来演示面板的用法。</span><button class="btn sm" data-act="clearsample">清空示例</button></div>`);
+  if(mode==="local"&&S.ready)n.push(`<div class="notice">数据只保存在当前浏览器里。换设备前用「导入 / 导出」备份。</div>`);
+  $("#notices").innerHTML=n.join("");
+}
+function renderTeamSel(){
+  const sel=$("#teamSel");if(!sel)return;
+  const ids=teamIds();
+  sel.innerHTML=ids.map(t=>`<option value="${esc(t)}" ${t===S.team?"selected":""}>${esc(S.teams[t].name)}</option>`).join("")+`<option disabled>──────</option><option value="__new">＋ 新建小队…</option><option value="__manage">管理小队…</option>`;
+  sel.value=S.team||"";
+  sel.hidden=!ids.length;
+}
+function render(){
+  renderTeamSel();
+  if(!S.ready)return;
+  const ae=document.activeElement,fk=ae&&ae.dataset?ae.dataset.fkey:null,fv=fk?ae.value:null;
+  const ids=sortedIds();
+  document.body.classList.toggle("mini",view==="mini");
+  $("#pureBtn").textContent=pureModes[view]?"恢复面板":"纯先攻";$("#pureBtn").setAttribute("aria-pressed",String(pureModes[view]));
+  $("#viewBtn").textContent=view==="mini"?"完整视图":"紧凑视图";
+  drawPip();renderDocPip();
+  $("#grid").innerHTML=ids.length?(pureModes[view]?initiativeList(ids):view==="mini"?miniList(ids):ids.map(id=>card(id,S.chars[id])).join("")):
+    `<div class="empty"><h2>小队还没有成员</h2><p>添加角色后，生命、法术位、职业资源和状态会显示在这里，所有打开这个页面的人看到的是同一份数据。</p><div class="group"><button class="btn primary" data-act="add">＋ 添加角色</button><button class="btn" data-act="loadsample">载入示例小队</button></div></div>`;
+  renderCombat();renderNotices();
+  if(fk){const el=document.querySelector(`[data-fkey="${fk}"]`);if(el){if(fv!=null&&!(ae.classList.contains("mi-init")&&ae.readOnly))el.value=fv;el.focus()}}
+}
+
+/* ---------- compact view ---------- */
+let view="full",miniAmt="";
+let pureModes={full:false,mini:false,pip:false};try{const p=JSON.parse(lsGet("dnd-pure-modes")||"{}");for(const k of Object.keys(pureModes))pureModes[k]=p[k]===true}catch(e){}
+function pureToggle(doc){const k=dp&&doc===dp.document?"pip":view;pureModes[k]=!pureModes[k];lsSet("dnd-pure-modes",JSON.stringify(pureModes));render()}
+function miniInit(c,id){return `<span class="init-handle" draggable="true" data-initdrag="${id}" title="拖动调整顺序；双击修改先攻"><input class="mi-init ${c.initPending?"pending":""}" type="number" inputmode="numeric" readonly value="${c.initPending?"":c.init}" placeholder="?" data-act="initset" data-fkey="minit-${id}" aria-label="${esc(c.name)} 的先攻" title="双击修改先攻；Enter 保存，Esc 取消"></span>`}
+function initiativeList(ids){return `<div class="mini initiative-list">${ids.map(id=>{const c=S.chars[id],ac=effAC(c);return `<div class="mrow initiative-row ${S.meta.round>0&&S.meta.turn===id?"turn":""}" data-id="${id}">${miniInit(c,id)}<b class="initiative-name">${esc(c.name)}</b><div class="mi-ac">AC<b class="${ac>c.ac?"up":ac<c.ac?"dn":""}">${ac}</b></div></div>`}).join("")}</div>`}
+function startInitEdit(e){const h=e.target.closest(".init-handle"),t=e.target.closest(".mi-init")||(h&&h.querySelector(".mi-init"));if(!t)return;if(h)h.draggable=false;t.readOnly=false;t.dataset.before=t.value;t.focus();t.select()}
+function finishInitEdit(e){const t=e.target;if(!t.classList||!t.classList.contains("mi-init")||t.readOnly)return;t.readOnly=true;const h=t.closest(".init-handle");if(h)h.draggable=true;onChange({target:t})}
+document.addEventListener("dblclick",startInitEdit);document.addEventListener("focusout",finishInitEdit);
+let initDrag=null;
+function clearInitDrag(doc){doc.querySelectorAll(".init-dragging,.init-drop-before,.init-drop-after").forEach(el=>el.classList.remove("init-dragging","init-drop-before","init-drop-after"))}
+function initDropTarget(e){const row=e.target.closest(".mrow"),doc=e.target.ownerDocument;if(!initDrag||initDrag.team!==S.team||!row||!row.querySelector(".init-handle"))return null;const rows=[...row.parentElement.children].filter(x=>x.matches(".mrow")),after=e.clientY>=row.getBoundingClientRect().top+row.getBoundingClientRect().height/2;const i=rows.indexOf(row);let below=after?rows[i+1]:row;if(below&&below.dataset.id===initDrag.id)below=rows[rows.indexOf(below)+1];return {row,after,below,rows,doc}}
+function bindInitDrag(doc){
+  doc.addEventListener("dragstart",e=>{const h=e.target.closest(".init-handle");if(!h)return;const t=h.querySelector(".mi-init");if(!t.readOnly||readOnly){e.preventDefault();return}initDrag={id:h.dataset.initdrag,team:S.team};h.closest(".mrow").classList.add("init-dragging");if(e.dataTransfer){e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",initDrag.id);e.dataTransfer.setDragImage(h.closest(".mrow"),12,12)}});
+  doc.addEventListener("dragover",e=>{const p=initDropTarget(e);clearInitDrag(doc);if(!p)return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect="move";p.row.classList.add(p.after?"init-drop-after":"init-drop-before")});
+  doc.addEventListener("drop",e=>{const p=initDropTarget(e),drag=initDrag;initDrag=null;clearInitDrag(doc);if(!p||!drag)return;e.preventDefault();if(p.row.dataset.id===drag.id||!guard()||!S.chars[drag.id])return;let value;if(p.below){const below=S.chars[p.below.dataset.id];if(!below)return;value=below.init+1}else{const last=p.rows.filter(r=>r.dataset.id!==drag.id).pop();if(!last)return;value=S.chars[last.dataset.id].init-1}const c=S.chars[drag.id];c.init=value;c.initPending=false;c.initRoll=[];S.chars[drag.id]=normalize(c);persist(drag.id);if(S.meta.sortInit===false){S.meta.sortInit=true;persist("meta")}render()});
+  doc.addEventListener("dragend",()=>{initDrag=null;clearInitDrag(doc)});
+  doc.addEventListener("dragleave",e=>{const r=e.target.closest(".mrow");if(r&&(!e.relatedTarget||!r.contains(e.relatedTarget)))r.classList.remove("init-drop-before","init-drop-after")});
+}
+bindInitDrag(document);
+try{view=location.hash==="#mini"?"mini":(localStorage.getItem("dnd-view")==="mini"?"mini":"full")}catch(e){view=location.hash==="#mini"?"mini":"full"}
+function setView(v){view=v;try{localStorage.setItem("dnd-view",v)}catch(e){}render()}
+window.addEventListener("hashchange",()=>{if(location.hash==="#mini"&&view!=="mini")setView("mini")});
+
+function tagBits(c,withSpells){
+  const t=[];
+  if(withSpells){
+    c.dcs.forEach(x=>t.push(["m",(x.name?x.name+" ":"")+"DC"+x.val]));
+    if(c.slots.some(n=>n>0)){
+      if(usePoints())t.push(["m","法术点 "+(spMax(c)-c.spUsed)+"/"+spMax(c)]);
+      else c.slots.forEach((m,i)=>{if(m)t.push(["m",(i+1)+"环 "+(m-c.used[i])+"/"+m])});
+    }
+    if(c.pact.max)t.push(["m","契约"+c.pact.lvl+"环 "+(c.pact.max-c.pact.used)+"/"+c.pact.max]);
+  }
+  c.concs.forEach(n=>t.push(["k","专注·"+n]));
+  c.conds.forEach(n=>t.push(["c",n]));
+  if(c.exh)t.push(["c","力竭"+c.exh]);
+  c.fx.forEach(f=>t.push([f.kind==="buff"?"b":"d",(f.kind==="buff"?"▲":"▼")+f.name+(f.rounds==null?"":" "+f.rounds)]));
+  return t;
+}
+function hpState(c){const p=c.hp/c.maxHp;return c.hp===0?"down":p<=.25?"crit":p<=.5?"warn":""}
+function miniList(ids,inPip){
+  let h=inPip?`<div class="mini">`:`<div class="mini"><div class="mini-amt"><label for="mini-amt">伤害/治疗量</label><input id="mini-amt" data-fkey="mini-amt" type="number" inputmode="numeric" min="0" value="${esc(miniAmt)}" placeholder="默认 1" title="每次点 − / ＋ 改变的生命值；留空按 1 点计算"><span class="hint">${inPip?"点 − 扣血、＋ 治疗，数值留空时每次 1 点；点圆点消耗或恢复法术位。":"点 − 扣血（先扣临时生命），点 ＋ 治疗；不填时每次 1 点。点名字管理状态。"}</span></div>`;
+  for(const id of ids){
+    const c=S.chars[id],turn=S.meta.round>0&&S.meta.turn===id,st=hpState(c),total=c.maxHp+c.temp;
+    const ac=effAC(c),acc=ac>c.ac?"up":ac<c.ac?"dn":"";
+    const tags=tagBits(c);
+    h+=`<div class="mrow ${turn?"turn":""} ${st==="down"?"down":""}" data-id="${id}">
+      ${miniInit(c,id)}
+      <div class="mi-main"><div class="mi-top">${inPip?`<b>${esc(c.name)}</b>`:`<b data-act="conds" role="button" tabindex="0">${esc(c.name)}</b>`}<span class="mi-hp">${c.hp}/${c.maxHp}${c.temp?` <em>+${c.temp}</em>`:""}</span></div>
+        <div class="meter"><i class="${st==="down"?"crit":st}" style="width:${(c.hp/total*100).toFixed(1)}%"></i><i class="tmp" style="width:${(c.temp/total*100).toFixed(1)}%"></i></div>
+        ${tags.length?`<div class="mi-tags">${tags.map(([k,s])=>`<span class="${k}">${esc(s)}</span>`).join("")}</div>`:""}
+        ${inPip?`<div class="group" style="margin-top:4px"><button class="pbtn" data-act="conds" aria-label="管理${esc(c.name)}的状态和效果">状态 / 效果</button><button class="pbtn" data-act="fx">＋ 效果</button></div>`:""}
+        ${c.dcs.length?`<div class="mi-dc">${c.dcs.map(x=>`<span>${x.name?esc(x.name)+" ":""}DC <b>${x.val}</b></span>`).join("")}</div>`:""}
+        ${(()=>{const sb=spellBlock(c,true);return sb?`<div class="mi-spell">${sb}</div>`:""})()}</div>
+      <div class="mi-ac">AC<b class="${acc}">${ac}</b></div>
+      <div class="mi-btns"><button class="m" data-act="mhp" data-kind="dmg" aria-label="${esc(c.name)} 受到伤害">−</button><button class="p" data-act="mhp" data-kind="heal" aria-label="${esc(c.name)} 回复生命">＋</button></div>
+    </div>`;
+  }
+  return h+`</div>`;
+}
+function prevTurn(){
+  if(!guard())return;
+  const ids=sortedIds();if(!ids.length||S.meta.round<1)return;
+  const i=ids.indexOf(S.meta.turn);
+  if(i>0)S.meta.turn=ids[i-1];
+  else if(S.meta.round>1){S.meta.round-=1;S.meta.turn=ids[ids.length-1]}
+  persist("meta");render();
+}
+
+/* ---------- always-on-top window (video picture-in-picture) ---------- */
+const pip={active:false,canvas:null,ctx:null,video:null,stream:null,timer:null};
+const PC={bg:"#141916",row:"#1C221F",turn:"#2B201D",ink:"#E8EDE7",muted:"#8F9C94",line:"#2E3732",accent:"#E2654F",good:"#5BC46B",warn:"#E2B23F",crit:"#F06A59",arcane:"#8E98F3",buff:"#5BC593",debuff:"#E27BAA"};
+const PF={body:'"IBM Plex Sans","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif',num:'"IBM Plex Mono",ui-monospace,monospace',disp:'"Noto Serif SC","Songti SC","STSong",serif'};
+function fitText(x,s,w){if(x.measureText(s).width<=w)return s;while(s.length>1&&x.measureText(s+"…").width>w)s=s.slice(0,-1);return s+"…"}
+function rrect(x,X,Y,w,h,r){x.beginPath();if(x.roundRect)x.roundRect(X,Y,w,h,r);else x.rect(X,Y,w,h)}
+function drawPip(){
+  if(!pip.active||!pip.ctx)return;
+  const ids=sortedIds(),W=420,head=34,rowH=pureModes.pip?44:72,H=Math.max(110,head+ids.length*rowH+6),sc=2;
+  const cv=pip.canvas,x=pip.ctx;
+  if(cv.width!==W*sc||cv.height!==H*sc){cv.width=W*sc;cv.height=H*sc}
+  x.setTransform(sc,0,0,sc,0,0);x.textBaseline="alphabetic";
+  x.fillStyle=PC.bg;x.fillRect(0,0,W,H);
+  const m=S.meta,cur=m.round>0&&S.chars[m.turn]?S.chars[m.turn]:null;
+  x.font=`600 13px ${PF.body}`;x.fillStyle=PC.muted;x.textAlign="left";
+  const rt=m.round>0?`第 ${m.round} 轮`:"战斗外";x.fillText(rt,12,22);
+  if(cur){const off=12+x.measureText(rt).width+10;x.fillStyle=PC.accent;x.fillText(fitText(x,"▶ "+cur.name,W-off-12),off,22)}
+  if(!ids.length){x.fillStyle=PC.muted;x.font=`13px ${PF.body}`;x.fillText("小队还没有成员",12,64)}
+  ids.forEach((id,i)=>{
+    const c=S.chars[id],y=head+i*rowH,turn=cur&&m.turn===id,st=hpState(c);
+    rrect(x,6,y,W-12,rowH-6,7);x.fillStyle=turn?PC.turn:PC.row;x.fill();
+    if(turn){x.strokeStyle=PC.accent;x.lineWidth=1.5;x.stroke()}
+    x.textAlign="center";x.font=`600 13px ${PF.num}`;x.fillStyle=PC.muted;x.fillText(c.initPending?"?":String(c.init),26,y+20);
+    if(pureModes.pip){x.textAlign="left";x.font=`600 15px ${PF.disp}`;x.fillStyle=PC.ink;x.fillText(fitText(x,c.name,W-122),44,y+23);x.textAlign="right";x.font=`600 14px ${PF.num}`;x.fillText("AC "+effAC(c),W-16,y+23);return}
+    // hp text
+    x.textAlign="right";const hx=W-62;let tx=hx;
+    if(c.temp){x.font=`500 12px ${PF.num}`;x.fillStyle=PC.arcane;const t=" +"+c.temp;x.fillText(t,tx,y+20);tx-=x.measureText(t).width}
+    x.font=`600 14px ${PF.num}`;x.fillStyle=st==="down"||st==="crit"?PC.crit:st==="warn"?PC.warn:PC.ink;const hs=c.hp+"/"+c.maxHp;x.fillText(hs,tx,y+20);tx-=x.measureText(hs).width;
+    // name
+    x.textAlign="left";x.font=`700 15px ${PF.disp}`;x.fillStyle=PC.ink;x.fillText(fitText(x,c.name,tx-44-10),44,y+20);
+    // bar
+    const bx=44,bw=hx-44,total=c.maxHp+c.temp;
+    rrect(x,bx,y+26,bw,5,2.5);x.fillStyle=PC.line;x.fill();
+    const hw=bw*c.hp/total,tw=bw*c.temp/total;
+    if(hw>0){rrect(x,bx,y+26,hw,5,2.5);x.fillStyle=st==="crit"||st==="down"?PC.crit:st==="warn"?PC.warn:PC.good;x.fill()}
+    if(tw>0){x.fillStyle=PC.arcane;x.globalAlpha=.6;x.fillRect(bx+hw,y+26,tw,5);x.globalAlpha=1}
+    // tags
+    x.font=`11.5px ${PF.body}`;const lim=hx;
+    const status=tagBits(c,false),all=tagBits(c,true),spells=all.slice(0,all.length-status.length);
+    [[status.length?status:[["m","无异常状态"]],y+44],[spells,y+60]].forEach(([list,ly])=>{
+      let px=44;
+      for(const[k,s]of list){
+        const col={k:PC.arcane,c:PC.warn,b:PC.buff,d:PC.debuff,m:k==="m"&&list===spells?PC.arcane:PC.muted}[k];
+        const w=x.measureText(s).width;if(px+w>lim){x.fillStyle=PC.muted;x.fillText("…",px,ly);break}
+        x.fillStyle=col;x.fillText(s,px,ly);px+=w+9;
+      }
+    });
+    if(st==="down"){x.fillStyle=PC.crit;x.font=`600 11.5px ${PF.body}`;x.textAlign="right";x.fillText(`濒死 ✓${c.ds.s} ✗${c.ds.f}`,W-14,y+60)}
+    // AC shield
+    const ac=effAC(c),sx=W-34,sy=y+7,sw=30,sh=34;
+    x.beginPath();x.moveTo(sx,sy);x.lineTo(sx+sw/2,sy+sh*.13);x.lineTo(sx+sw/2,sy+sh*.56);x.lineTo(sx,sy+sh);x.lineTo(sx-sw/2,sy+sh*.56);x.lineTo(sx-sw/2,sy+sh*.13);x.closePath();
+    x.fillStyle=ac>c.ac?PC.buff:ac<c.ac?PC.debuff:PC.ink;x.fill();
+    x.textAlign="center";x.fillStyle=PC.bg;x.font=`600 14px ${PF.num}`;x.fillText(String(ac),sx,sy+20);
+  });
+}
+function pipBtnLabel(){const b=document.querySelector('[data-act="pip"]');if(b)b.textContent=pip.active||dp?"关闭悬浮窗":"悬浮窗"}
+function stopPip(){
+  pip.active=false;clearInterval(pip.timer);
+  if(pip.stream)pip.stream.getTracks().forEach(t=>t.stop());
+  if(pip.video)pip.video.remove();
+  pip.video=pip.stream=pip.canvas=pip.ctx=null;pipBtnLabel();
+  try{["nexttrack","previoustrack","play","pause"].forEach(a=>navigator.mediaSession.setActionHandler(a,null))}catch(e){}
+}
+function pipFallback(reason){
+  if(view!=="mini")setView("mini");
+  toast(reason+" 已切换到紧凑视图：把这个页面单独开在一个小窗口里，就能边看地图边操作。");
+}
+/* interactive floating window: Document Picture-in-Picture, only allowed in a top-level page */
+let dp=null,pipArm=null,pipArmT=null;
+function isTopLevel(){try{return window.top===window}catch(e){return false}}
+function canDocPip(){return isTopLevel()&&"documentPictureInPicture" in window}
+function renderDocPip(){
+  if(!dp||dp.closed){dp=null;return}
+  const d=dp.document,root=d.getElementById("pip");if(!root)return;
+  const ae=d.activeElement,fk=ae&&ae.dataset?ae.dataset.fkey:null,fv=fk?ae.value:null;
+  const m=S.meta,cur=m.round>0&&S.chars[m.turn]?S.chars[m.turn].name:null,ids=sortedIds();
+  const rb=k=>`<button class="pbtn ${pipArm===k?"armed":""}" data-act="piprest" data-kind="${k}" title="${k==="long"?"全队长休：生命回满，法术位与资源恢复（点两次确认）":"全队短休：契约法术位与短休资源恢复（点两次确认）"}">${pipArm===k?"确认?":(k==="long"?"长休":"短休")}</button>`;
+  d.title=(teamName()||"小队")+" · 悬浮窗";
+  root.innerHTML=`<div class="pip-bar"><span class="pip-round" title="${esc(teamName())}">${m.round>0?`<b>${m.round}</b>轮${cur?" · "+esc(cur):""}`:"战斗外"}</span>${m.round>0?`<button class="pbtn" data-act="prev" aria-label="上一位" title="上一位">◀</button>`:""}<button class="pbtn" data-act="next" ${ids.length?"":"disabled"} aria-label="${m.round>0?"下一位":"开始战斗"}" title="${m.round>0?"下一位":"开始战斗"}">${m.round>0?"▶":"开战"}</button>${m.round>0?`<button class="pbtn ${pipArm==="end"?"armed":""}" data-act="pipend" title="结束战斗：轮数清零，效果保留（点两次确认）">${pipArm==="end"?"确认?":"结束"}</button>`:""}<input id="mini-amt" class="pip-amt" data-fkey="mini-amt" type="number" inputmode="numeric" min="0" value="${esc(miniAmt)}" placeholder="±HP" aria-label="伤害或治疗的生命值，留空按 1 点计算" title="伤害/治疗量：每次点 − / ＋ 改变的生命值；留空按 1 点计算"><button class="pbtn ${pipArm==="init"?"armed":""}" data-act="pipinit" ${ids.length?"":"disabled"} title="全队掷先攻 1d20 + 加值（点两次确认）" aria-label="全队掷先攻">${pipArm==="init"?"确认?":"🎲"}</button>${rb("short")}${rb("long")}</div>`+`<div class="group" style="margin-bottom:6px"><button class="pbtn" data-act="pure" aria-pressed="${pureModes.pip}">${pureModes.pip?"恢复面板":"纯先攻"}</button><button class="pbtn" data-act="npc">＋ NPC</button><span class="hint">拖动先攻调整顺序 · 双击修改</span></div>`+(ids.length?(pureModes.pip?initiativeList(ids):miniList(ids,true)):`<p class="hint">小队还没有成员。</p>`);
+  root.querySelector(".pip-amt").hidden=pureModes.pip;
+  if(fk){const el=d.querySelector(`[data-fkey="${fk}"]`);if(el){if(fv!=null&&!(ae.classList.contains("mi-init")&&ae.readOnly))el.value=fv;el.focus()}}
+}
+async function openDocPip(){
+  const n=Math.max(1,Object.keys(S.chars).length);
+  const w=await window.documentPictureInPicture.requestWindow({width:440,height:Math.min(720,48+n*96)});
+  document.querySelectorAll('style,link[rel="stylesheet"]').forEach(el=>w.document.head.appendChild(el.cloneNode(true)));
+  const t=w.document.createElement("title");t.textContent="冒险小队 · 悬浮窗";w.document.head.appendChild(t);
+  const th=document.documentElement.getAttribute("data-theme");if(th)w.document.documentElement.setAttribute("data-theme",th);
+  w.document.body.className="mini pipdoc";
+  w.document.body.innerHTML=`<div id="pip"></div><div id="modalRoot"></div><div class="toasts" id="toasts" aria-live="polite"></div>`;
+  w.document.addEventListener("click",onClick);
+  w.document.addEventListener("input",onInput);
+  w.document.addEventListener("change",onChange);
+  bindInitDrag(w.document);
+  w.document.addEventListener("dblclick",startInitEdit);w.document.addEventListener("focusout",finishInitEdit);
+  w.document.addEventListener("keydown",onKey);
+  w.document.addEventListener("keydown",e=>{if(e.key==="Escape"&&modalClose)modalClose()});
+  w.addEventListener("pagehide",()=>{if(w.document.getElementById("modalRoot").hasChildNodes()&&modalClose)modalClose();dp=null;pipBtnLabel()});
+  dp=w;renderDocPip();pipBtnLabel();
+}
+async function togglePip(){
+  if(dp){try{dp.close()}catch(e){}dp=null;pipBtnLabel();return}
+  if(pip.active){try{if(document.pictureInPictureElement)await document.exitPictureInPicture()}catch(e){}stopPip();return}
+  if(canDocPip()){
+    try{await openDocPip();return}catch(e){/* fall through to the view-only window */}
+  }
+  const v=document.createElement("video");
+  if(!document.pictureInPictureEnabled||typeof v.requestPictureInPicture!=="function"||!HTMLCanvasElement.prototype.captureStream){
+    pipFallback("这个浏览器不支持置顶悬浮窗（需要桌面版 Chrome、Edge 或 Safari）。");return;
+  }
+  try{
+    pip.canvas=document.createElement("canvas");pip.ctx=pip.canvas.getContext("2d");pip.active=true;drawPip();
+    pip.stream=pip.canvas.captureStream();
+    v.className="pipvid";v.muted=true;v.playsInline=true;v.srcObject=pip.stream;document.body.appendChild(v);pip.video=v;
+    drawPip();
+    pip.timer=setInterval(drawPip,1000);
+    await v.play();
+    if(v.readyState<1)await new Promise(r=>v.addEventListener("loadedmetadata",r,{once:true}));
+    await v.requestPictureInPicture();
+    v.addEventListener("leavepictureinpicture",stopPip,{once:true});
+    pipBtnLabel();
+    try{
+      navigator.mediaSession.metadata=new MediaMetadata({title:"冒险小队面板",artist:"⏭ 下一位 · ⏮ 上一位"});
+      navigator.mediaSession.setActionHandler("nexttrack",()=>nextTurn());
+      navigator.mediaSession.setActionHandler("previoustrack",()=>prevTurn());
+      navigator.mediaSession.setActionHandler("play",()=>v.play());
+      navigator.mediaSession.setActionHandler("pause",()=>v.play());
+    }catch(e){}
+    toast("已打开只读悬浮窗，⏭ / ⏮ 可切换行动角色。网页嵌在 Claude 里时浏览器不允许悬浮窗内点击编辑；要直接在悬浮窗里改数据，请用离线版文件打开。");
+  }catch(e){
+    stopPip();
+    pipFallback(e&&e.name==="NotAllowedError"||e&&e.name==="SecurityError"?"悬浮窗被浏览器或当前页面环境拦截了。":"悬浮窗没能打开（"+(e&&e.name||"未知原因")+"）。");
+  }
+}
+
+/* ---------- toast & modal ---------- */
+function toast(msg){
+  const docs=[document];if(dp&&!dp.closed)docs.push(dp.document);
+  docs.forEach(d=>{const box=d.getElementById("toasts");if(!box)return;const t=d.createElement("div");t.className="toast";t.textContent=msg;box.appendChild(t);setTimeout(()=>t.remove(),msg.length>40?6500:3500)});
+}
+let modalClose=null;
+function openModal(html,bind,doc=document){
+  if(modalClose)modalClose();
+  const host=doc.getElementById("modalRoot");
+  host.innerHTML=`<div class="scrim" data-scrim><div class="modal" role="dialog" aria-modal="true">${html}</div></div>`;
+  const root=host.querySelector(".modal");
+  modalClose=()=>{host.innerHTML="";modalClose=null};
+  // close only when the press both starts and ends on the backdrop, so drag-selecting text out of the dialog keeps it open
+  const scrim=host.querySelector(".scrim");let downOnScrim=false;
+  scrim.addEventListener("pointerdown",e=>{downOnScrim=e.target===scrim});
+  scrim.addEventListener("click",e=>{if(downOnScrim&&e.target===scrim&&modalClose)modalClose();downOnScrim=false});
+  bind&&bind(root);
+  const f=root.querySelector("input,select,button");f&&f.focus();
+}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&modalClose)modalClose()});
+
+function confirmModal(title,body,okLabel,onOk,danger){
+  openModal(`<h2>${esc(title)}</h2><p class="hint" style="font-size:13.5px">${body}</p><div class="mfoot"><button class="btn ghost" data-x>取消</button><button class="btn ${danger?"danger":"primary"}" data-ok>${esc(okLabel)}</button></div>`,root=>{
+    root.querySelector("[data-x]").onclick=modalClose;
+    root.querySelector("[data-ok]").onclick=()=>{modalClose();onOk()};
+  });
+}
+
+/* quick NPC */
+function npcModal(doc=document){
+  openModal(`<h2>快速加入 NPC</h2><p class="sub">只需名字，其他项目可留空；之后可在角色编辑中补充。</p><form id="npc-form"><div class="fields"><div class="field wide"><label for="npc-name">名字 *</label><input id="npc-name" name="name" required maxlength="80" placeholder="例如 哥布林 1"></div><div class="field"><label for="npc-init">先攻（可选）</label><input id="npc-init" name="init" type="number" min="-20" max="60" placeholder="待填写"></div><div class="field"><label for="npc-hp">生命（可选）</label><input id="npc-hp" name="hp" type="number" min="1" placeholder="默认 10"></div><div class="field"><label for="npc-ac">AC（可选）</label><input id="npc-ac" name="ac" type="number" min="0" placeholder="默认 10"></div><div class="field"><label for="npc-dc">DC（可选）</label><input id="npc-dc" name="dc" type="number" min="0" max="40" placeholder="留空不设置"></div></div><div class="mfoot"><button class="btn ghost" type="button" data-x>取消</button><button class="btn primary" type="submit">加入 NPC</button></div></form>`,root=>{
+    root.querySelector("[data-x]").onclick=modalClose;
+    root.querySelector("form").onsubmit=e=>{e.preventDefault();if(!guard())return;const val=k=>root.querySelector("#npc-"+k).value.trim(),name=val("name");if(!name){root.querySelector("#npc-name").focus();toast("请填写 NPC 名字。");return}const c=normalize(blank());c.name=name;c.clsLabel="NPC";const hp=val("hp"),ac=val("ac"),init=val("init"),dc=val("dc");if(dc)c.dcs.push({id:uid(),name:"",val:clamp(int(dc),0,40)});if(hp)c.hp=c.maxHp=Math.max(1,int(hp));if(ac)c.ac=Math.max(0,int(ac));c.init=init?clamp(int(init),-20,60):0;c.initPending=!init;c.initManual=!init;const id="c"+uid();S.chars[id]=c;persist(id);modalClose();render();toast("已加入「"+name+"」。")};
+  },doc);
+}
+/* edit character */
+function editModal(id,restore){
+  const isNew=!id;
+  if(!isNew&&!S.chars[id])return;
+  const d=normalize(clone(restore||(isNew?blank():S.chars[id])));
+  let delArm=false;
+  const draw=root=>{
+    const customs=Object.entries(S.classes).sort((a,b)=>a[1].created-b[1].created);
+    const clsOpts=`<option value="">不使用模板</option><optgroup label="官方职业">`+Object.entries(CLASSES).map(([k,v])=>`<option value="${k}" ${d.cls===k?"selected":""}>${v.n}</option>`).join("")+`</optgroup>`
+      +`<optgroup label="自定义职业">`+customs.map(([k,v])=>`<option value="x:${k}" ${d.cls==="x:"+k?"selected":""}>${esc(v.name)}</option>`).join("")+`<option value="__new">＋ 新建自定义职业…</option></optgroup>`;
+    root.innerHTML=`<h2>${isNew?"添加角色":"编辑角色"}</h2>
+    <div class="fields">
+      <div class="field wide"><label for="e-name">名字</label><input id="e-name" data-k="name" value="${esc(d.name)}"></div>
+      <div class="field"><label for="e-cls">职业</label><select id="e-cls" data-k="cls">${clsOpts}</select></div>
+      ${d.cls?"":`<div class="field"><label for="e-clsl">职业名称</label><input id="e-clsl" data-k="clsLabel" value="${esc(d.clsLabel||"")}" placeholder="如 战士/法师"></div>`}
+      <div class="field"><label for="e-lv">等级</label><input id="e-lv" type="number" min="1" max="20" data-k="level" data-n value="${d.level}"></div>
+      <div class="field"><label for="e-hp">当前生命</label><input id="e-hp" type="number" min="0" data-k="hp" data-n value="${d.hp}"></div>
+      <div class="field"><label for="e-mhp">生命上限</label><input id="e-mhp" type="number" min="1" data-k="maxHp" data-n value="${d.maxHp}"></div>
+      <div class="field"><label for="e-tmp">临时生命</label><input id="e-tmp" type="number" min="0" data-k="temp" data-n value="${d.temp}"></div>
+      <div class="field"><label for="e-ac">基础 AC</label><input id="e-ac" type="number" data-k="ac" data-n value="${d.ac}"></div>
+      <div class="field"><label for="e-ib">先攻加值</label><input id="e-ib" type="number" data-k="initBonus" data-n value="${d.initBonus||0}"></div>
+      <div class="field"><label for="e-init">先攻结果</label><input id="e-init" type="number" data-k="init" data-n value="${d.init}" title="可手动填写；掷先攻会覆盖"></div>
+      <div class="field"><label for="e-adv">先攻优势</label><select id="e-adv" data-k="initAdv"><option value="" ${d.initAdv?"":"selected"}>无</option><option value="1" ${d.initAdv?"selected":""}>有（掷两次取高）</option></select></div>
+      <div class="field"><label for="e-im">全队掷先攻时</label><select id="e-im" data-k="initManual"><option value="" ${d.initManual?"":"selected"}>自动掷骰</option><option value="1" ${d.initManual?"selected":""}>由玩家自己掷，手动填写</option></select></div>
+      ${multiConc()?`<div class="field"><label for="e-cm">可同时专注</label><input id="e-cm" type="number" min="1" max="9" data-k="concMax" data-n value="${d.concMax||1}"></div>`:""}
+    </div>
+    ${getClass(d.cls)&&getClass(d.cls).custom?`<p class="hint">使用自定义职业「${esc(getClass(d.cls).n)}」。<button class="btn sm ghost" data-editcls>编辑这个职业</button></p>`:""}
+    <div class="sec"><div class="sec-h"><h3>法术位上限（1–9 环）</h3>${getClass(d.cls)?`<button class="btn sm" data-fill>按职业与等级填充</button>`:""}</div>
+      <div class="slotgrid">${d.slots.map((n,i)=>`<div><span>${i+1}</span><input type="number" min="0" max="9" aria-label="${i+1}环法术位" data-slot="${i}" value="${n}"></div>`).join("")}</div>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>契约魔法（邪术师）</h3></div>
+      <div class="fields"><div class="field"><label for="e-pl">环位</label><input id="e-pl" type="number" min="0" max="5" data-pact="lvl" value="${d.pact.lvl}"></div><div class="field"><label for="e-pm">数量</label><input id="e-pm" type="number" min="0" max="4" data-pact="max" value="${d.pact.max}"></div></div>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>职业资源</h3><button class="btn sm" data-addres>＋ 资源</button></div>
+      <div class="reslist">${d.res.length?d.res.map((r,i)=>`<div class="resrow">${moveCtl(i,d.res.length)}<input aria-label="资源名称" data-res="${i}" data-rk="name" value="${esc(r.name)}"><input aria-label="上限" type="number" min="0" data-res="${i}" data-rk="max" value="${r.max}"><select aria-label="恢复方式" data-res="${i}" data-rk="reset"><option value="short" ${r.reset==="short"?"selected":""}>短休</option><option value="long" ${r.reset==="long"?"selected":""}>长休</option><option value="none" ${r.reset==="none"?"selected":""}>手动</option></select><button class="iconbtn" data-delres="${i}" aria-label="删除资源">×</button></div>`).join(""):`<p class="hint">例如：狂暴、引导神力、气、术法点、生命骰，或物品充能。</p>`}</div>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>DC</h3><button class="btn sm" data-adddc>＋ DC</button></div>
+      <div class="reslist">${d.dcs.length?d.dcs.map((x,i)=>`<div class="resrow dcrow">${moveCtl(i,d.dcs.length,"dc")}<input aria-label="备注" data-dci="${i}" data-dk="name" value="${esc(x.name)}" placeholder="职业/法术/天生"><input aria-label="数值" type="number" data-dci="${i}" data-dk="val" value="${x.val}"><button class="iconbtn" data-deldc="${i}" aria-label="删除这一项">×</button></div>`).join(""):`<p class="hint">可以设置多项，用备注区分来源，例如：法术、震慑拳、战技、吐息武器。</p>`}</div>
+      <p class="hint">DC 一般为 8 + 熟练加值 + 相关属性调整值。${d.level?"按 "+d.level+" 级，熟练加值为 +"+prof(d.level)+"。":""}</p>
+    </div>
+    <div class="mfoot">${isNew?"":`<button class="btn danger left" data-del>${delArm?"再点一次确认删除":"删除角色"}</button>`}<button class="btn ghost" data-x>取消</button><button class="btn primary" data-save>${isNew?"添加":"保存"}</button></div>`;
+  };
+  openModal("",root=>{
+    draw(root);
+    bindReorder(root,L=>L==="dc"?d.dcs:d.res,()=>draw(root));
+    root.addEventListener("input",e=>{
+      const t=e.target;
+      if(t.dataset.k){d[t.dataset.k]=t.hasAttribute("data-n")?int(t.value):t.value}
+      else if(t.dataset.slot!=null)d.slots[+t.dataset.slot]=clamp(int(t.value),0,9);
+      else if(t.dataset.pact)d.pact[t.dataset.pact]=Math.max(0,int(t.value));
+      else if(t.dataset.res!=null){const r=d.res[+t.dataset.res];r[t.dataset.rk]=t.dataset.rk==="max"?Math.max(0,int(t.value)):t.value}
+      else if(t.dataset.dci!=null){const x=d.dcs[+t.dataset.dci];const k=t.dataset.dk;x[k]=k==="val"?int(t.value):t.value}
+    });
+    root.addEventListener("change",e=>{
+      if(e.target.dataset.k==="cls"){
+        if(d.cls==="__new"){
+          d.cls="";
+          classEditModal(null,cid=>{d.cls="x:"+cid;fill();editModal(id,d)},()=>editModal(id,d));
+          return;
+        }
+        const fresh=!d.res.length&&!d.slots.some(Boolean)&&!d.pact.max;
+        if(fresh&&getClass(d.cls))fill();
+        draw(root);
+      }
+    });
+    function fill(){
+      const C=getClass(d.cls);if(!C)return;const l=clamp(d.level,1,20);
+      d.slots=slotsFor(C.cast,l);d.used=pad([]);
+      d.pact=C.cast==="pact"?pactFor(l):{lvl:0,max:0,used:0};
+      d.res=C.res(l).concat(C.hd?[R("生命骰 d"+C.hd,l,"long")]:[]);
+    }
+    root.addEventListener("click",e=>{
+      const t=e.target.closest("button");if(!t)return;
+      if(t.hasAttribute("data-x"))modalClose();
+      else if(t.hasAttribute("data-fill")){fill();draw(root);toast("已按"+getClass(d.cls).n+" "+d.level+" 级填充法术位和资源。")}
+      else if(t.hasAttribute("data-editcls")){classEditModal(d.cls.slice(2),()=>editModal(id,d),()=>editModal(id,d))}
+      else if(t.hasAttribute("data-addres")){d.res.push(R("新资源",1,"long"));draw(root);const ins=root.querySelectorAll('[data-rk="name"]');ins[ins.length-1].select()}
+      else if(t.hasAttribute("data-adddc")){d.dcs.push({id:uid(),name:"",val:8+prof(d.level||1)});draw(root);const ins=root.querySelectorAll('[data-dk="name"]');const el=ins[ins.length-1];el.focus();el.select()}
+      else if(t.dataset.deldc!=null){d.dcs.splice(+t.dataset.deldc,1);draw(root)}
+      else if(t.dataset.delres!=null){d.res.splice(+t.dataset.delres,1);draw(root)}
+      else if(t.hasAttribute("data-del")){if(!delArm){delArm=true;draw(root)}else{modalClose();const n=S.chars[id].name;removeChar(id);toast("已删除 "+n)}}
+      else if(t.hasAttribute("data-save")){
+        if(!guard())return;
+        if(!d.name.trim())d.name="无名角色";
+        if(d.cls&&d.cls.startsWith("x:")&&S.classes[d.cls.slice(2)])d.clsLabel=S.classes[d.cls.slice(2)].name;
+        if(!isNew&&S.chars[id]&&int(d.init)!==S.chars[id].init)d.initPending=false;
+        const c=normalize(d);
+        if(isNew){const nid="c"+uid();c.created=Date.now();S.chars[nid]=c;persist(nid)}
+        else{S.chars[id]=c;persist(id)}
+        modalClose();render();
+      }
+    });
+  });
+}
+
+/* reorder resource rows: ▲▼ buttons everywhere, drag handle with a mouse */
+function moveCtl(i,n,list){
+  list=list||"res";
+  return `<span class="mv"><span class="grip" draggable="true" data-grip="${i}" data-list="${list}" title="拖动调整顺序">⠿</span><button type="button" class="mvb" data-mv="${i}" data-list="${list}" data-dir="-1" ${i===0?"disabled":""} aria-label="上移" title="上移">▲</button><button type="button" class="mvb" data-mv="${i}" data-list="${list}" data-dir="1" ${i===n-1?"disabled":""} aria-label="下移" title="下移">▼</button></span>`;
+}
+function moveItem(arr,from,to){if(from===to||from<0||to<0||from>=arr.length||to>=arr.length)return false;const [x]=arr.splice(from,1);arr.splice(to,0,x);return true}
+function bindReorder(root,getArr,redraw){
+  root.addEventListener("click",e=>{
+    const b=e.target.closest("[data-mv]");if(!b||b.disabled)return;
+    const i=int(b.dataset.mv),j=i+int(b.dataset.dir),L=b.dataset.list||"res";
+    if(moveItem(getArr(L),i,j)){redraw();const nb=root.querySelector(`[data-list="${L}"][data-mv="${j}"][data-dir="${b.dataset.dir}"]`)||root.querySelector(`[data-list="${L}"][data-mv="${j}"]`);nb&&!nb.disabled&&nb.focus()}
+  });
+  let from=-1,fromList="res";
+  const rowOf=el=>el&&el.closest?el.closest(".resrow,.crow"):null;
+  const clear=()=>root.querySelectorAll(".drop-over,.dragging").forEach(x=>x.classList.remove("drop-over","dragging"));
+  root.addEventListener("dragstart",e=>{
+    const g=e.target.closest&&e.target.closest("[data-grip]");if(!g)return;
+    from=int(g.dataset.grip);fromList=g.dataset.list||"res";try{e.dataTransfer.setData("text/plain",String(from));e.dataTransfer.effectAllowed="move";const r=rowOf(g);r&&e.dataTransfer.setDragImage(r,12,16)}catch(x){}
+    const r=rowOf(g);r&&r.classList.add("dragging");
+  });
+  root.addEventListener("dragover",e=>{if(from<0)return;const r=rowOf(e.target);const rg=r&&r.querySelector("[data-grip]");if(!rg||(rg.dataset.list||"res")!==fromList)return;e.preventDefault();root.querySelectorAll(".drop-over").forEach(x=>x!==r&&x.classList.remove("drop-over"));r.classList.add("drop-over")});
+  root.addEventListener("drop",e=>{
+    if(from<0)return;const r=rowOf(e.target);if(!r)return;e.preventDefault();
+    const g=r.querySelector("[data-grip]");const to=g&&(g.dataset.list||"res")===fromList?int(g.dataset.grip):-1;
+    const f=from;from=-1;clear();
+    if(moveItem(getArr(fromList),f,to))redraw();
+  });
+  root.addEventListener("dragend",()=>{from=-1;clear()});
+}
+
+/* custom class manager */
+function usersOf(cid){return Object.keys(S.chars).filter(k=>S.chars[k].cls==="x:"+cid)}
+function classesModal(){
+  const list=Object.entries(S.classes).sort((a,b)=>a[1].created-b[1].created);
+  openModal(`<h2>自定义职业</h2><p class="sub">为自制职业、子职业或第三方职业建立模板：设定生命骰、施法方式和随等级变化的职业资源。建好后在角色编辑里选择它，再点「按职业与等级填充」。</p>
+    <div class="clist">${list.length?list.map(([k,c])=>{const n=usersOf(k).length;return `<div class="citem"><div><b>${esc(c.name)}</b><p>${esc(classSummary(c))}${n?" · "+n+" 名角色在用":""}</p></div><button class="btn sm" data-ed="${k}">编辑</button></div>`}).join(""):`<p class="hint">还没有自定义职业。</p>`}</div>
+    <div class="mfoot"><button class="btn ghost" data-x>关闭</button><button class="btn primary" data-new>＋ 新建职业</button></div>`,root=>{
+    root.querySelector("[data-x]").onclick=modalClose;
+    root.querySelector("[data-new]").onclick=()=>{if(guard())classEditModal(null,()=>classesModal(),()=>classesModal())};
+    root.querySelectorAll("[data-ed]").forEach(b=>b.onclick=()=>classEditModal(b.dataset.ed,()=>classesModal(),()=>classesModal()));
+  });
+}
+function syncChars(cid,oldNames){
+  const C=getClass("x:"+cid);if(!C)return 0;
+  const ids=usersOf(cid);
+  for(const id of ids){
+    const c=S.chars[id],l=clamp(c.level,1,20);
+    const fresh=C.res(l).concat(C.hd?[R("生命骰 d"+C.hd,l,"long")]:[]);
+    const freshNames=new Set(fresh.map(r=>r.name));
+    fresh.forEach(r=>{const o=c.res.find(x=>x.name===r.name);if(o){r.id=o.id;r.used=Math.min(o.used,r.max)}});
+    const extras=c.res.filter(r=>!freshNames.has(r.name)&&!oldNames.has(r.name)&&!/^生命骰 d\d+$/.test(r.name));
+    c.res=fresh.concat(extras);
+    const ns=slotsFor(C.cast,l);c.used=c.used.map((u,i)=>Math.min(u,ns[i]));c.slots=ns;
+    if(C.cast==="pact"){const p=pactFor(l);p.used=Math.min(c.pact.used,p.max);c.pact=p}else c.pact={lvl:0,max:0,used:0};
+    c.clsLabel=C.n;
+    S.chars[id]=normalize(c);persist(id);
+  }
+  return ids.length;
+}
+function classEditModal(cid,onSave,onCancel){
+  const isNew=!cid;
+  if(!isNew&&!S.classes[cid]){toast("这个职业已被删除。");onCancel&&onCancel();return}
+  const d=clone(isNew?normalizeClass({name:"",hd:8,cast:"none",res:[]}):S.classes[cid]);
+  const oldNames=new Set(isNew?[]:d.res.map(r=>r.name));
+  const users=isNew?[]:usersOf(cid);
+  let pl=5,delArm=false,sync=users.length>0;
+  const previewHTML=()=>{
+    const C={hd:d.hd,cast:d.cast};
+    const sl=slotsFor(d.cast,pl).map((n,i)=>n?`${i+1}环×${n}`:"").filter(Boolean);
+    const items=[];
+    if(sl.length)items.push(`<li>法术位 <span>${sl.join(" ")}</span></li>`);
+    if(d.cast==="pact"){const p=pactFor(pl);items.push(`<li>契约法术位 <span>${p.lvl}环×${p.max}</span></li>`)}
+    d.res.forEach(r=>{const m=resMax(r,pl);if(m!=null&&m>0)items.push(`<li>${esc(r.name)} <span>${m} 次 · ${RESET_LABEL[r.reset]}</span></li>`)});
+    if(C.hd)items.push(`<li>生命骰 d${C.hd} <span>${pl} 颗 · 长休</span></li>`);
+    return items.length?`<ul>${items.join("")}</ul>`:`<p class="hint">这个等级没有可追踪的资源。</p>`;
+  };
+  const valInput=(r,i)=>{
+    if(r.mode==="prof")return `<input aria-label="数值" disabled value="自动">`;
+    if(r.mode==="table")return `<input aria-label="等级表" data-r="${i}" data-rk="val" value="${esc(r.val)}" placeholder="1:2, 6:3, 12:4">`;
+    return `<input aria-label="数值" type="number" ${r.mode==="level"?'step="0.5" min="0.5"':'min="0"'} data-r="${i}" data-rk="val" value="${esc(r.val)}">`;
+  };
+  const draw=root=>{
+    root.innerHTML=`<h2>${isNew?"新建自定义职业":"编辑自定义职业"}</h2>
+    <div class="fields">
+      <div class="field wide"><label for="k-name">职业名称</label><input id="k-name" data-k="name" value="${esc(d.name)}" placeholder="如 血猎手、符文骑士"></div>
+      <div class="field"><label for="k-hd">生命骰</label><select id="k-hd" data-k="hd">${[0,6,8,10,12].map(n=>`<option value="${n}" ${d.hd===n?"selected":""}>${n?"d"+n:"不追踪"}</option>`).join("")}</select></div>
+      <div class="field" style="grid-column:span 2"><label for="k-cast">施法方式</label><select id="k-cast" data-k="cast">${Object.entries(CAST_LABEL).map(([k,v])=>`<option value="${k}" ${d.cast===k?"selected":""}>${v}${k==="full"?"（法师式）":k==="half"?"（圣武士式，1 级起）":k==="third"?"（奥法骑士式，3 级起）":k==="pact"?"（邪术师式，短休恢复）":""}</option>`).join("")}</select></div>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>职业资源</h3><button class="btn sm" data-addres>＋ 资源</button></div>
+      <div class="reslist">${d.res.map((r,i)=>`<div class="crow">${moveCtl(i,d.res.length)}
+        <div class="field c-name"><label>名称</label><input data-r="${i}" data-rk="name" value="${esc(r.name)}"></div>
+        <div class="field"><label>恢复</label><select data-r="${i}" data-rk="reset">${Object.entries(RESET_LABEL).map(([k,v])=>`<option value="${k}" ${r.reset===k?"selected":""}>${v}</option>`).join("")}</select></div>
+        <div class="field"><label>次数计算</label><select data-r="${i}" data-rk="mode">${Object.entries(MODE_LABEL).map(([k,v])=>`<option value="${k}" ${r.mode===k?"selected":""}>${v}</option>`).join("")}</select></div>
+        <div class="field"><label>${r.mode==="table"?"等级:次数":r.mode==="level"?"系数":"数值"}</label>${valInput(r,i)}</div>
+        <div class="field c-from"><label>起始等级</label><input type="number" min="1" max="20" data-r="${i}" data-rk="from" value="${r.from}"></div>
+        <button class="iconbtn" data-delres="${i}" aria-label="删除资源">×</button>
+      </div>`).join("")||`<p class="hint">还没有资源。比如「血之诅咒 · 熟练加值 · 长休」，或「符文充能 · 等级表 3:2, 7:3, 15:4 · 短休」。</p>`}</div>
+      <p class="hint">固定值：每级相同。等级 ×：等级乘以系数，0.5 即半级向下取整。熟练加值：随等级 +2 到 +6。等级表：写成「等级:次数」，从该等级起生效。起始等级之前该资源不出现。</p>
+    </div>
+    <div class="preview"><div class="row"><b>预览</b><input type="range" min="1" max="20" value="${pl}" data-pl aria-label="预览等级"><span class="num">${pl} 级</span></div><div data-pv>${previewHTML()}</div></div>
+    ${users.length?`<label class="check"><input type="checkbox" data-sync ${sync?"checked":""}>保存后同步更新使用此职业的 ${users.length} 名角色（保留已用次数）</label>`:""}
+    <div class="mfoot">${isNew?"":`<button class="btn danger left" data-del>${delArm?"再点一次确认删除":"删除职业"}</button>`}<button class="btn ghost" data-x>取消</button><button class="btn primary" data-save>保存职业</button></div>`;
+  };
+  const refreshPreview=root=>{const pv=root.querySelector("[data-pv]");if(pv)pv.innerHTML=previewHTML()};
+  openModal("",root=>{
+    draw(root);
+    bindReorder(root,()=>d.res,()=>draw(root));
+    root.addEventListener("input",e=>{
+      const t=e.target;
+      if(t.dataset.k){d[t.dataset.k]=t.dataset.k==="hd"?int(t.value):t.value}
+      else if(t.dataset.r!=null){const r=d.res[+t.dataset.r];const k=t.dataset.rk;r[k]=k==="from"?clamp(int(t.value,1),1,20):t.value}
+      else if(t.hasAttribute("data-pl")){pl=int(t.value,5);t.nextElementSibling.textContent=pl+" 级"}
+      refreshPreview(root);
+    });
+    root.addEventListener("change",e=>{
+      const t=e.target;
+      if(t.hasAttribute("data-sync")){sync=t.checked;return}
+      if(t.dataset.rk==="mode"){const r=d.res[+t.dataset.r];r.val=r.mode==="table"?"1:2":r.mode==="level"?1:r.mode==="fixed"?1:"";draw(root)}
+      if(t.dataset.k==="cast"||t.dataset.k==="hd")refreshPreview(root);
+    });
+    root.addEventListener("click",e=>{
+      const t=e.target.closest("button");if(!t)return;
+      if(t.hasAttribute("data-x")){modalClose();onCancel&&onCancel()}
+      else if(t.hasAttribute("data-addres")){d.res.push({id:uid(),name:"新资源",reset:"long",mode:"fixed",val:1,from:1});draw(root);const ins=root.querySelectorAll('[data-rk="name"]');ins[ins.length-1].select()}
+      else if(t.dataset.delres!=null){d.res.splice(+t.dataset.delres,1);draw(root)}
+      else if(t.hasAttribute("data-del")){
+        if(!delArm){delArm=true;draw(root);return}
+        if(!guard())return;
+        const name=S.classes[cid]?S.classes[cid].name:d.name;
+        usersOf(cid).forEach(id=>{const c=S.chars[id];c.clsLabel=name;c.cls="";persist(id)});
+        delete S.classes[cid];persist("k:"+cid);modalClose();render();toast("已删除职业「"+name+"」，使用它的角色保留现有资源。");onCancel&&onCancel();
+      }
+      else if(t.hasAttribute("data-save")){
+        if(!d.name.trim()){root.querySelector("#k-name").focus();toast("先给职业起个名字。");return}
+        const bad=d.res.find(r=>r.mode==="table"&&!parseTable(r.val).length);
+        if(bad){toast("「"+bad.name+"」的等级表格式不对，示例：1:2, 6:3, 12:4");return}
+        if(!guard())return;
+        const id=cid||uid();
+        const prev=S.classes[id];
+        S.classes[id]=normalizeClass(Object.assign(d,{created:prev?prev.created:Date.now()}));
+        persist("k:"+id);
+        let n=0;if(!isNew&&sync)n=syncChars(id,oldNames);
+        modalClose();render();toast("已保存职业「"+S.classes[id].name+"」"+(n?"，并更新了 "+n+" 名角色。":"。"));
+        onSave&&onSave(id);
+      }
+    });
+  });
+}
+
+/* saved parties */
+function teamsModal(focusNew){
+  let renaming=null,delArm=null,newName="";
+  const fmt=t=>{try{return new Date(t).toLocaleDateString("zh-CN")}catch(e){return ""}};
+  const draw=root=>{
+    const ids=teamIds();
+    root.innerHTML=`<h2>小队</h2><p class="sub">每个小队有自己的角色、回合进度和规则设置（法术点、多重专注）。自定义职业所有小队共用。切换只影响你自己的视图，队友各自选择要看的小队。</p>
+    <div class="tlist">${ids.map(t=>{const T=S.teams[t],cur=t===S.team;
+      return `<div class="trow ${cur?"cur":""}">${renaming===t
+        ?`<input id="t-ren" value="${esc(T.name)}" aria-label="小队名称"><span class="group"><button class="btn sm primary" data-rensave="${esc(t)}">保存</button><button class="btn sm ghost" data-rencancel>取消</button></span>`
+        :`<div><b>${esc(T.name)}</b><p>${cur?"当前小队 · ":""}${T.meta.round>0?"战斗中，第 "+T.meta.round+" 轮":"战斗外"}${T.meta.spellSystem==="points"?" · 法术点":""}${T.meta.multiConc?" · 多重专注":""} · 建于 ${fmt(T.created)}</p></div>
+          <span class="group">${cur?"":`<button class="btn sm primary" data-sw="${esc(t)}">切换</button>`}<button class="btn sm" data-ren="${esc(t)}">重命名</button><button class="btn sm ghost danger" data-del="${esc(t)}" ${ids.length<2?"disabled":""}>${delArm===t?"确认删除":"删除"}</button></span>`}</div>`}).join("")}</div>
+    <div class="sec"><div class="sec-h"><h3>新建小队</h3></div>
+      <div class="newteam"><input id="t-new" value="${esc(newName)}" placeholder="如 周五团·深水城" aria-label="新小队名称"><button class="btn primary" data-new>新建空小队</button><button class="btn" data-copy>复制当前小队</button></div>
+      <p class="hint">复制会带上当前小队的全部角色（含当前生命、资源与状态）和规则设置，回合进度从头开始。</p>
+    </div>
+    <div class="mfoot"><button class="btn ghost" data-x>关闭</button></div>`;
+  };
+  openModal("",root=>{
+    draw(root);
+    if(focusNew){const el=root.querySelector("#t-new");el&&el.focus()}
+    root.addEventListener("input",e=>{if(e.target.id==="t-new")newName=e.target.value});
+    root.addEventListener("keydown",e=>{
+      if(e.key!=="Enter")return;
+      if(e.target.id==="t-new"){e.preventDefault();root.querySelector("[data-new]").click()}
+      if(e.target.id==="t-ren"){e.preventDefault();root.querySelector("[data-rensave]").click()}
+    });
+    root.addEventListener("click",async e=>{
+      const t=e.target.closest("button");if(!t)return;
+      if(t.hasAttribute("data-x")){modalClose();return}
+      if(t.dataset.sw){switchTeam(t.dataset.sw);modalClose();toast("已切换到「"+teamName()+"」。");return}
+      if(t.dataset.ren){renaming=t.dataset.ren;delArm=null;draw(root);const el=root.querySelector("#t-ren");el.focus();el.select();return}
+      if(t.hasAttribute("data-rencancel")){renaming=null;draw(root);return}
+      if(t.dataset.rensave){renameTeam(t.dataset.rensave,root.querySelector("#t-ren").value);renaming=null;draw(root);return}
+      if(t.dataset.del){if(delArm!==t.dataset.del){delArm=t.dataset.del;draw(root);return}delArm=null;await deleteTeam(t.dataset.del);draw(root);return}
+      if(t.hasAttribute("data-new")||t.hasAttribute("data-copy")){
+        if(!guard())return;
+        const copy=t.hasAttribute("data-copy");
+        const name=newName.trim()||(copy?teamName()+" 副本":"新小队");
+        const chars=copy?Object.values(S.chars).map(c=>clone(c)):null;
+        const meta=copy?clone(S.meta):null;
+        const tid=createTeam(name,chars);
+        if(meta&&tid){Object.assign(S.teams[tid].meta,{spellSystem:meta.spellSystem,multiConc:meta.multiConc,sortInit:meta.sortInit});persist("team:"+tid)}
+        modalClose();toast("已新建并切换到「"+name+"」。");
+      }
+    });
+  });
+}
+
+/* settings */
+function settingsModal(){
+  const draw=root=>{
+    const pts=usePoints();
+    root.innerHTML=`<h2>设置</h2><p class="sub">这些规则只对当前小队「${esc(teamName())}」生效，查看这个小队的所有人看到的都一样。其他小队可以各自设置。</p>
+    <div class="sec"><div class="sec-h"><h3>施法资源</h3></div>
+      <span class="seg wide"><button class="b" aria-pressed="${!pts}" data-sys="slots">法术位（标准规则）</button><button class="b" aria-pressed="${pts}" data-sys="points">法术点（变体规则）</button></span>
+      <p class="hint">${pts
+        ?"使用城主指南的法术点变体：每名施法者的法术点上限等于其法术位表换算后的总点数（1–9 环依次消耗 2、3、5、6、7、9、10、11、13 点），最高可施放的环阶取决于原本拥有的最高环位。6 环及以上的法术每次长休各只能施放一次。长休恢复全部法术点。邪术师的契约法术位不受影响。"
+        :"每个环阶单独追踪剩余法术位。切换到法术点变体后，角色的法术位上限会自动换算成法术点，不需要重新设置。"}</p>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>专注</h3></div>
+      <span class="seg wide"><button class="b" aria-pressed="${!multiConc()}" data-mc="0">标准（同时 1 个）</button><button class="b" aria-pressed="${multiConc()}" data-mc="1">多重专注（变体）</button></span>
+      <p class="hint">${multiConc()
+        ?"已开启：在角色编辑或状态面板里为每个角色设定可同时维持的专注数（1–9）。专注数达到上限后再开始新的专注，最早的那个会结束。受到伤害时会列出所有需要维持的专注；生命降到 0 时全部专注结束。"
+        :"开启后，可以为每个角色单独设定同时维持几个专注，适合特殊职业能力、魔法物品或自制规则。关闭时已有的专注会保留，之后开始新的专注会按标准规则只保留 1 个。"}</p>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>悬浮窗</h3></div>
+      <p class="hint">${canDocPip()?"当前页面支持可编辑的置顶悬浮窗。":"这个页面嵌在 Claude 的框架里，浏览器只允许只读的置顶悬浮窗。需要在悬浮窗里直接编辑时，请使用离线版文件（在 Chrome 或 Edge 里直接打开），或把紧凑视图开在一个小窗口里配合系统的置顶功能使用。"}</p>
+    </div>
+    <div class="mfoot"><button class="btn primary" data-x>完成</button></div>`;
+  };
+  openModal("",root=>{
+    draw(root);
+    root.addEventListener("click",e=>{
+      const t=e.target.closest("button");if(!t)return;
+      if(t.hasAttribute("data-x"))modalClose();
+      else if(t.dataset.mc){const on=t.dataset.mc==="1";if(on!==multiConc()){setMeta({multiConc:on});toast(on?"已开启多重专注变体。":"已恢复标准专注规则。")}draw(root)}
+      else if(t.dataset.sys){const want=t.dataset.sys;if((want==="points")!==usePoints()){setMeta({spellSystem:want});toast(want==="points"?"已切换到法术点变体规则。":"已切换回标准法术位。")}draw(root)}
+    });
+  });
+}
+
+/* conditions modal */
+function condModal(id,doc=document){
+  let pending="",customPending="",summaryPending="",deletePending=null,managing=false,menuName=null,editorOpen=false;
+  const draw=root=>{
+    const c=S.chars[id];if(!c){modalClose();return}
+    const lim=concLimit(c),multi=multiConc();
+    root.innerHTML=`<h2>${esc(c.name)} 的状态</h2><p class="sub">点选状态为当前角色添加 / 移除。状态库供本浏览器所有小队和角色共用；删除资料不会移除角色已有的状态。</p>
+    <div class="sec-h"><h3>状态库</h3><div class="group cond-tools"><button class="btn sm ghost" data-editor aria-expanded="${editorOpen}">${editorOpen?"收起表单":"＋ 新增"}</button><button class="btn sm ghost ${managing?"active":""}" data-managelib aria-pressed="${managing}">${managing?"完成管理":"管理"}</button>${managing?`<button class="btn sm ghost" data-libraryio>导入 / 导出</button>`:""}</div></div>
+    <div class="condgrid">${condLibrary.length?condLibrary.map(([n,d])=>`<div class="condentry ${managing?"managing":""} ${menuName===n?"menu-open":""}"><button class="cbtn" aria-pressed="${c.conds.includes(n)}" data-cond="${esc(n)}"><b>${esc(n)}</b><small>${esc(d)||"暂无规则摘要"}</small></button>${managing?`<button class="cond-more" data-condmenu="${esc(n)}" aria-label="管理${esc(n)}" aria-expanded="${menuName===n}">⋯</button>${menuName===n?`<div class="cond-menu" role="group" aria-label="${esc(n)}的管理操作"><button data-editcond="${esc(n)}">编辑资料</button><button class="danger" data-deletecond="${esc(n)}">${deletePending===n?"确认删除":"删除状态"}</button></div>`:""}`:""}</div>`).join(""):`<span class="empty-line">状态库为空，点击「＋ 新增」添加状态。</span>`}</div>
+    ${editorOpen?`<div class="sec"><div class="cond-editor-toggle"><h3>新增 / 编辑状态资料</h3><button class="btn sm ghost" data-editor>收起</button></div>
+      <div class="fields"><div class="field wide"><label for="m-custom">状态名</label><input id="m-custom" maxlength="80" value="${esc(customPending)}" placeholder="例如 受伤、流血"></div><div class="field wide"><label for="m-summary">规则摘要</label><textarea id="m-summary" maxlength="2000" rows="3" placeholder="描述此状态的规则效果">${esc(summaryPending)}</textarea></div></div>
+      <div class="group" style="margin-top:8px"><button class="btn sm" data-savecustom>保存到状态库</button><button class="btn sm" data-addcustom>保存并添加给角色</button></div><p class="hint">同名保存会更新资料；角色已应用的规则摘要保持原样。可将状态库单独导出供其他团使用。</p>
+    </div>
+    `:""}
+    <div class="sec"><div class="sec-h"><h3>角色当前状态</h3></div><div class="chips">${c.conds.length?c.conds.map(n=>`<span class="chip cond" title="${esc(condSummary(c,n))}">${esc(n)}${condLibrary.some(x=>x[0]===n)?"":`<button class="btn sm ghost" data-editcond="${esc(n)}" title="补充摘要并保存到状态库">存入库</button>`}<button class="x" data-custom-remove="${esc(n)}" aria-label="从角色移除${esc(n)}">×</button></span>`).join(""):`<span class="empty-line">无异常状态</span>`}</div></div>
+    <div class="sec"><div class="sec-h"><h3>增益 / 减益</h3><button class="btn sm" data-addfx>＋ 效果</button></div><div class="chips">${c.fx.length?c.fx.map(f=>`<span class="chip ${f.kind}">${esc(f.name)}${f.rounds==null?"":" · "+f.rounds+"轮"}<button class="x" data-removefx="${esc(f.id)}" aria-label="移除${esc(f.name)}">×</button></span>`).join(""):`<span class="empty-line">没有增益或减益</span>`}</div></div>
+    <div class="fields">
+      <div class="field"><label>力竭等级（0–6）</label><span class="counter"><button data-exh="-1" aria-label="减少力竭">−</button><b>${c.exh}</b><button data-exh="1" aria-label="增加力竭">＋</button></span></div>
+      ${multi?`<div class="field"><label>可同时专注</label><span class="counter"><button data-cm="-1" aria-label="减少专注上限">−</button><b>${c.concMax} 个</b><button data-cm="1" aria-label="增加专注上限">＋</button></span></div>`:""}
+    </div>
+    <div class="sec"><div class="sec-h"><h3>专注 ${c.concs.length}/${lim}</h3></div>
+      <div class="chips">${c.concs.length?c.concs.map((n,i)=>`<span class="chip conc">${esc(n)}<button class="x" data-dc="${i}" aria-label="结束专注${esc(n)}">×</button></span>`).join(""):`<span class="empty-line">没有正在维持的专注</span>`}</div>
+      <div class="concadd"><input id="m-conc" value="${esc(pending)}" placeholder="法术名，如 祝福" aria-label="开始专注的法术"><button class="btn sm" data-addconc>开始专注</button></div>
+      <p class="hint">${multi?`多重专注已开启：${esc(c.name)} 最多同时维持 ${lim} 个专注，再开始新的专注时最早的那个结束。`:"标准规则：开始新的专注会结束原来的专注。"}</p>
+    </div>
+    <div class="mfoot"><button class="btn primary" data-x>完成</button></div>`;
+  };
+  const addCustom=(root,apply)=>{const n=root.querySelector("#m-custom").value.trim(),summary=root.querySelector("#m-summary").value.trim();if(!n||!summary){toast("请填写状态名和规则摘要。");root.querySelector(!n?"#m-custom":"#m-summary").focus();return}if(apply&&!guard())return;const next=condLibrary.map(x=>x.slice()),i=next.findIndex(x=>x[0]===n);if(i<0)next.push([n,summary]);else next[i]=[n,summary];if(!saveCondLibrary(next))return;if(apply)mutate(id,c=>setCond(c,n,summary));else render();customPending="";summaryPending="";editorOpen=false;draw(root);root.querySelector("[data-editor]").focus();toast(apply?"状态已保存并添加给角色。":"状态已保存，所有小队和角色均可选用。")};
+  const addPending=root=>{const v=root.querySelector("#m-conc").value.trim();pending="";if(v)mutate(id,c=>addConc(c,v))};
+  openModal("",root=>{
+    draw(root);
+    root.addEventListener("input",e=>{if(e.target.id==="m-conc")pending=e.target.value;if(e.target.id==="m-custom")customPending=e.target.value;if(e.target.id==="m-summary")summaryPending=e.target.value});
+    root.addEventListener("keydown",e=>{if(e.key==="Escape"&&menuName!=null){e.preventDefault();e.stopPropagation();menuName=null;deletePending=null;draw(root);const b=root.querySelector("[data-managelib]");b&&b.focus();return}if(e.target.id==="m-custom"&&e.key==="Enter"){e.preventDefault();addCustom(root,false);return}if(e.target.id==="m-conc"&&e.key==="Enter"){e.preventDefault();addPending(root);draw(root);root.querySelector("#m-conc").focus()}});
+    root.addEventListener("click",e=>{
+      const t=e.target.closest("button");if(!t){if(menuName!=null&&!e.target.closest(".cond-menu")){menuName=null;deletePending=null;draw(root)}return}
+      if(t.hasAttribute("data-managelib")){managing=!managing;menuName=null;deletePending=null;draw(root);root.querySelector("[data-managelib]").focus();return}
+      if(t.hasAttribute("data-condmenu")){const n=t.dataset.condmenu;menuName=menuName===n?null:n;deletePending=null;draw(root);const b=root.querySelector(menuName!=null?"[data-editcond]":"[data-managelib]");b&&b.focus();return}
+      if(t.hasAttribute("data-editor")){editorOpen=!editorOpen;menuName=null;deletePending=null;draw(root);root.querySelector(editorOpen?"#m-custom":"[data-editor]").focus();return}
+      if(!t.hasAttribute("data-deletecond")&&!t.hasAttribute("data-editcond")){menuName=null;deletePending=null}
+      if(t.hasAttribute("data-x")){addPending(root);modalClose();return}
+      if(t.hasAttribute("data-libraryio")){condLibraryModal(doc);return}
+      if(t.hasAttribute("data-addcustom")){addCustom(root,true);return}
+      if(t.hasAttribute("data-savecustom")){addCustom(root,false);return}
+      if(t.dataset.editcond!=null){const entry=condLibrary.find(x=>x[0]===t.dataset.editcond)||(c.conds.includes(t.dataset.editcond)?[t.dataset.editcond,condSummary(c,t.dataset.editcond)]:null);if(entry){customPending=entry[0];summaryPending=entry[1]}deletePending=null;menuName=null;editorOpen=true;draw(root);root.querySelector("#m-custom").focus();return}
+      if(t.dataset.deletecond!=null){const n=t.dataset.deletecond;if(deletePending!==n){deletePending=n;draw(root);return}if(saveCondLibrary(condLibrary.filter(x=>x[0]!==n))){deletePending=null;menuName=null;render();draw(root);toast("已从状态库删除「"+n+"」。角色已有状态保留。")}return}
+      deletePending=null;
+      if(t.hasAttribute("data-addfx")){fxModal(id,doc);return}
+      if(t.dataset.customRemove!=null)mutate(id,c=>{c.conds=c.conds.filter(n=>n!==t.dataset.customRemove)});
+      if(t.dataset.removefx!=null)mutate(id,c=>{c.fx=c.fx.filter(f=>f.id!==t.dataset.removefx)});
+      if(t.hasAttribute("data-addconc")){addPending(root);draw(root);root.querySelector("#m-conc").focus();return}
+      if(t.dataset.dc!=null){mutate(id,c=>{c.concs.splice(int(t.dataset.dc),1)})}
+      if(t.dataset.cm){mutate(id,c=>{c.concMax=clamp(c.concMax+int(t.dataset.cm),1,9);if(c.concs.length>c.concMax){const gone=c.concs.splice(0,c.concs.length-c.concMax);toast("专注上限降低，「"+gone.join("」「")+"」的专注结束。")}})}
+      if(t.dataset.cond){const n=t.dataset.cond;mutate(id,c=>{if(c.conds.includes(n))c.conds=c.conds.filter(x=>x!==n);else setCond(c,n,(condLibrary.find(x=>x[0]===n)||[])[1]||"")})}
+      if(t.dataset.exh){mutate(id,c=>{c.exh=clamp(c.exh+int(t.dataset.exh),0,6)})}
+      draw(root);
+    });
+  },doc);
+}
+
+/* effect modal */
+function fxModal(id,doc=document){
+  const f={name:"",kind:"buff",rounds:10,ac:0,note:""};
+  const targets=new Set([id]);
+  const ids=sortedIds();
+  const draw=root=>{
+    root.innerHTML=`<h2>添加增益 / 减益</h2><p class="sub">点常用法术快速填入，或自己写。每到新一轮，持续轮数自动 −1，归零时移除。</p>
+    <div class="presets">${FX_PRESETS.map((p,i)=>`<button class="chip ${p.kind}" data-pre="${i}"><span class="k">${p.kind==="buff"?"▲":"▼"}</span>${p.name}</button>`).join("")}</div>
+    <div class="fields">
+      <div class="field wide"><label for="f-name">名称</label><input id="f-name" data-f="name" value="${esc(f.name)}" placeholder="如 祝福、虚弱射线"></div>
+      <div class="field"><label>类型</label><span class="seg"><button class="b" aria-pressed="${f.kind==="buff"}" data-kind="buff">增益</button><button class="d" aria-pressed="${f.kind==="debuff"}" data-kind="debuff">减益</button></span></div>
+      <div class="field"><label for="f-r">持续轮数</label><input id="f-r" type="number" min="0" data-f="rounds" value="${f.rounds??""}" placeholder="留空 = 持续"></div>
+      <div class="field"><label for="f-ac">AC 调整</label><input id="f-ac" type="number" data-f="ac" value="${f.ac}"></div>
+      <div class="field wide"><label for="f-note">备注</label><input id="f-note" data-f="note" value="${esc(f.note)}" placeholder="效果说明，悬停可见"></div>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>作用于</h3></div><div class="targets">${ids.map(i=>`<label><input type="checkbox" data-t="${i}" ${targets.has(i)?"checked":""}>${esc(S.chars[i].name)}</label>`).join("")}</div></div>
+    <div class="mfoot"><button class="btn ghost" data-x>取消</button><button class="btn primary" data-add>添加</button></div>`;
+  };
+  openModal("",root=>{
+    draw(root);
+    root.addEventListener("input",e=>{const k=e.target.dataset.f;if(k)f[k]=k==="rounds"?(e.target.value===""?null:Math.max(0,int(e.target.value))):k==="ac"?int(e.target.value):e.target.value});
+    root.addEventListener("change",e=>{const t=e.target.dataset.t;if(t){e.target.checked?targets.add(t):targets.delete(t)}});
+    root.addEventListener("click",e=>{
+      const t=e.target.closest("button");if(!t)return;
+      if(t.hasAttribute("data-x"))modalClose();
+      else if(t.dataset.pre!=null){Object.assign(f,FX_PRESETS[+t.dataset.pre]);draw(root)}
+      else if(t.dataset.kind){f.kind=t.dataset.kind;draw(root)}
+      else if(t.hasAttribute("data-add")){
+        if(!f.name.trim()){root.querySelector("#f-name").focus();toast("先给效果起个名字。");return}
+        if(!targets.size){toast("至少选择一个角色。");return}
+        if(!guard())return;
+        targets.forEach(tid=>{const c=S.chars[tid];if(!c)return;c.fx.push(Object.assign({id:uid()},clone(f)));S.chars[tid]=normalize(c);persist(tid)});
+        modalClose();render();
+      }
+    });
+  },doc);
+}
+
+/* import / export */
+function ioModal(){
+  const data=JSON.stringify({version:3,name:teamName(),rules:{spellSystem:S.meta.spellSystem,multiConc:S.meta.multiConc},classes:S.classes,conditionLibrary:condLibrary,chars:Object.values(S.chars).map(c=>{const o=clone(c);delete o.sample;return o})},null,1);
+  openModal(`<h2>导入 / 导出</h2><p class="sub">下面是小队「${esc(teamName())}」的备份，复制保存即可。把备份粘贴回来后，可以替换当前小队，也可以导入成一个新的小队。备份里的自定义职业会按名称编号合并进来；备份包含状态库时会替换本浏览器的状态库。</p>
+    <div class="field"><label for="io-t">小队数据（JSON）</label><textarea id="io-t" class="json">${esc(data)}</textarea></div>
+    <div class="mfoot"><button class="btn left" data-copy>复制</button><button class="btn ghost" data-x>关闭</button><button class="btn" data-impnew>导入为新小队</button><button class="btn primary" data-imp>替换当前小队</button></div>`,root=>{
+    const ta=root.querySelector("#io-t");
+    root.querySelector("[data-x]").onclick=modalClose;
+    root.querySelector("[data-copy]").onclick=()=>{
+      const done=()=>toast("已复制到剪贴板。");
+      try{navigator.clipboard.writeText(ta.value).then(done,()=>{ta.select();toast("请按 Ctrl/⌘ + C 复制已选中的内容。")})}catch(e){ta.select();toast("请按 Ctrl/⌘ + C 复制已选中的内容。")}
+    };
+    const parse=()=>{
+      let parsed;try{parsed=JSON.parse(ta.value)}catch(e){toast("内容不是有效的 JSON，请检查是否完整粘贴。");return null}
+      const list=Array.isArray(parsed)?parsed:Array.isArray(parsed.chars)?parsed.chars:Object.values(parsed.chars||{});
+      if(!list.length){toast("没有找到角色数据。");return null}
+      if(!guard())return null;
+      if(parsed.classes&&typeof parsed.classes==="object"&&!Array.isArray(parsed.classes)){
+        for(const[k,v]of Object.entries(parsed.classes)){if(/^[A-Za-z0-9_-]{1,60}$/.test(k)){S.classes[k]=normalizeClass(v);persist("k:"+k)}}
+      }
+      return {parsed,list};
+    };
+    const applyRules=(p)=>{if(p.conditionLibrary!=null){try{saveCondLibrary(cleanCondLibrary(p.conditionLibrary))}catch(e){toast("备份中的状态库格式无效，保留当前状态库。")}}const r=p.rules||{};if(r.spellSystem)S.meta.spellSystem=r.spellSystem==="points"?"points":"slots";if(typeof r.multiConc==="boolean")S.meta.multiConc=r.multiConc};
+    root.querySelector("[data-imp]").onclick=()=>{
+      const r=parse();if(!r)return;
+      for(const k of Object.keys(S.chars)){delete S.chars[k];persist(k)}
+      r.list.forEach((c,i)=>{const id="c"+uid();const n=normalize(c);n.created=n.created||Date.now()+i;S.chars[id]=n;persist(id)});
+      applyRules(r.parsed);S.meta.turn=null;S.meta.round=0;persist("meta");
+      modalClose();render();toast("已导入 "+r.list.length+" 名角色，替换了「"+teamName()+"」。");
+    };
+    root.querySelector("[data-impnew]").onclick=()=>{
+      const r=parse();if(!r)return;
+      const name=String(r.parsed.name||"导入的小队").slice(0,40);
+      const tid=createTeam(name,r.list);
+      if(tid){applyRules(r.parsed);persist("meta")}
+      modalClose();render();toast("已导入为新小队「"+name+"」，共 "+r.list.length+" 名角色。");
+    };
+  });
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click",onClick);
+function onClick(e){
+  const t=e.target.closest("[data-act]");if(!t||t.tagName==="INPUT")return;
+  const act=t.dataset.act,cardEl=t.closest("[data-id]"),id=cardEl&&cardEl.dataset.id;
+  switch(act){
+    case "add":return guard()&&editModal(null);
+    case "pure":return pureToggle(t.ownerDocument);
+    case "npc":return guard()&&npcModal(t.ownerDocument);
+    case "edit":return editModal(id);
+    case "conds":return condModal(id,t.ownerDocument);
+    case "fx":return fxModal(id,t.ownerDocument);
+    case "io":return ioModal();
+    case "classes":return classesModal();
+    case "pip":return togglePip();
+    case "view":return setView(view==="mini"?"full":"mini");
+    case "mhp":{
+      const raw=String(miniAmt||"").trim();
+      const n=raw===""?1:Math.abs(int(raw,NaN));
+      if(!Number.isFinite(n)||!n){toast("请输入大于 0 的数值，留空则按 1 计算。");return}
+      let msgs=[];
+      mutate(id,c=>{if(t.dataset.kind==="dmg")msgs=applyDamage(c,n);else{if(c.hp===0)c.ds={s:0,f:0};c.hp=Math.min(c.maxHp,c.hp+n)}});
+      msgs.forEach(toast);return;
+    }
+    case "next":return nextTurn();
+    case "sort":return setMeta({sortInit:S.meta.sortInit===false});
+    case "endcombat":return confirmModal("结束战斗","轮数清零，行动指示移除。角色身上的效果保持不变，可以手动移除。","结束战斗",()=>setMeta({round:0,turn:null}));
+    case "rest":{
+      if(!guard())return;
+      const long=t.dataset.kind==="long";
+      return confirmModal(long?"全队长休":"全队短休",long?"全员生命回满、临时生命清零、所有法术位与资源恢复、力竭降低 1 级、死亡豁免重置。":"恢复契约法术位和标为「短休」的资源。生命骰治疗请用每张卡上的「治疗」录入。",long?"开始长休":"开始短休",()=>rest(long?"long":"short"));
+    }
+    case "loadsample":{if(!guard())return;const s=sampleParty();for(const[k,v]of Object.entries(s)){S.chars[k]=v;persist(k)}render();return}
+    case "clearsample":return confirmModal("清空示例角色","会删除所有标记为示例的角色，你添加的角色不受影响。","清空示例",()=>{for(const[k,v]of Object.entries(S.chars))if(v.sample){delete S.chars[k];persist(k)}if(!S.chars[S.meta.turn])S.meta.turn=null,S.meta.round=0,persist("meta");render()},true);
+    case "hp":{
+      const inp=cardEl.querySelector('[data-act="amt"]');const raw=String(inp.value||"").trim();
+      const n=raw===""?1:Math.abs(int(raw,NaN));
+      if(!Number.isFinite(n)||n===0){inp.focus();toast("请输入大于 0 的数值，留空则按 1 计算。");return}
+      let msgs=[];
+      mutate(id,c=>{
+        if(t.dataset.kind==="dmg")msgs=applyDamage(c,n);
+        else if(t.dataset.kind==="heal"){if(c.hp===0)c.ds={s:0,f:0};c.hp=Math.min(c.maxHp,c.hp+n)}
+        else c.temp=Math.max(c.temp,n);
+      });
+      const el=document.querySelector(`#amt-${id}`);if(el)el.value="";
+      msgs.forEach(toast);return;
+    }
+    case "slot":return mutate(id,c=>{const i=+t.dataset.i;c.used[i]=clamp(c.used[i]+int(t.dataset.d),0,c.slots[i])});
+    case "pact":return mutate(id,c=>{c.pact.used=clamp(c.pact.used+int(t.dataset.d),0,c.pact.max)});
+    case "res":return mutate(id,c=>{const r=c.res.find(x=>x.id===t.dataset.r);if(r)r.used=clamp(r.used+int(t.dataset.d),0,r.max)});
+    case "ds":return mutate(id,c=>{const k=t.dataset.k;c.ds[k]=clamp(c.ds[k]+int(t.dataset.d),0,3);if(c.ds.s===3)toast(c.name+" 获得 3 次成功，伤势稳定。");if(c.ds.f===3)toast(c.name+" 累计 3 次失败，角色死亡。")});
+    case "dropconc":return mutate(id,c=>{c.concs.splice(int(t.dataset.i),1);c.conc=c.concs[0]||""});
+    case "uncond":return mutate(id,c=>{c.conds=c.conds.filter(x=>x!==t.dataset.n)});
+    case "unfx":return mutate(id,c=>{c.fx=c.fx.filter(x=>x.id!==t.dataset.f)});
+    case "prev":return prevTurn();
+    case "rollall":return rollAll();
+    case "rollinit":{let msg="";mutate(id,c=>{msg=rollInit(c)});if(msg)toast("先攻："+msg);return}
+    case "pipinit":{
+      clearTimeout(pipArmT);
+      if(pipArm!=="init"){pipArm="init";pipArmT=setTimeout(()=>{pipArm=null;renderDocPip()},4000);renderDocPip();return}
+      pipArm=null;return rollAll();
+    }
+    case "pipend":{
+      clearTimeout(pipArmT);
+      if(pipArm!=="end"){pipArm="end";pipArmT=setTimeout(()=>{pipArm=null;renderDocPip()},4000);renderDocPip();return}
+      pipArm=null;if(!guard()){renderDocPip();return}
+      setMeta({round:0,turn:null});toast("战斗结束，轮数已清零。");return;
+    }
+    case "piprest":{
+      const k=t.dataset.kind==="long"?"long":"short";
+      clearTimeout(pipArmT);
+      if(pipArm!==k){pipArm=k;pipArmT=setTimeout(()=>{pipArm=null;renderDocPip()},4000);renderDocPip();return}
+      pipArm=null;if(!guard()){renderDocPip();return}
+      return rest(k);
+    }
+    case "settings":return settingsModal();
+    case "sp":return mutate(id,c=>{c.spUsed=clamp(c.spUsed+int(t.dataset.d),0,spMax(c))});
+    case "spcast":{
+      const L=int(t.dataset.l),cost=SP_COST[L];
+      return mutate(id,c=>{
+        const left=spMax(c)-c.spUsed;
+        if(left<cost){toast("法术点不足：施放 "+L+" 环需要 "+cost+" 点，剩余 "+left+" 点。");return}
+        if(L>=6&&c.spHigh.includes(L)){toast(L+" 环法术本次长休前已经用过。");return}
+        c.spUsed+=cost;if(L>=6)c.spHigh.push(L);
+      });
+    }
+  }
+}
+document.addEventListener("change",onChange);
+function onChange(e){
+  const t=e.target;
+  if(t.id==="teamSel"){
+    const v=t.value;t.value=S.team||"";
+    if(v==="__manage")teamsModal(false);
+    else if(v==="__new")teamsModal(true);
+    else if(v&&v!==S.team){switchTeam(v);toast("已切换到「"+teamName()+"」。")}
+    return;
+  }
+  if(t.dataset.act==="initset"){
+    const id=t.closest("[data-id]").dataset.id,raw=String(t.value).trim();
+    if(raw===""||!S.chars[id])return;
+    const v=clamp(int(raw),-20,60);
+    if(t.classList.contains("mi-init")){t.readOnly=true;const h=t.closest(".init-handle");if(h)h.draggable=true}
+    mutate(id,c=>{c.init=v;c.initPending=false;c.initRoll=[]});return;
+  }
+  if(t.dataset.act!=="initb")return;
+  const id=t.closest("[data-id]").dataset.id;const v=clamp(int(t.value),-20,30);
+  if(S.chars[id]&&S.chars[id].initBonus!==v)mutate(id,c=>{c.initBonus=v});
+}
+function onInput(e){if(e.target.id==="mini-amt")miniAmt=e.target.value}
+document.addEventListener("input",onInput);
+document.addEventListener("keydown",onKey);
+function onKey(e){
+  const t=e.target;
+  if(t.classList&&t.classList.contains("mi-init")){
+    if(e.key==="Enter"){e.preventDefault();if(t.readOnly)startInitEdit({target:t});else{finishInitEdit({target:t});t.blur()}return}
+    if(e.key==="Escape"&&!t.readOnly){e.preventDefault();t.value=t.dataset.before||"";t.readOnly=true;const h=t.closest(".init-handle");if(h)h.draggable=true;t.blur();return}
+  }
+  if((e.key==="Enter"||e.key===" ")&&t.getAttribute&&t.getAttribute("role")==="button"){e.preventDefault();t.click();return}
+  if(e.key!=="Enter"||!t.dataset||t.dataset.act!=="amt")return;
+  e.preventDefault();t.closest(".card").querySelector('[data-kind="dmg"]').click();
+}
+
+initStore();
+})();
+</script>
+
+</body>
+</html>

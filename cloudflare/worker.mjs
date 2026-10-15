@@ -2,6 +2,8 @@ import { DurableObject } from "cloudflare:workers";
 import diff from "deep-diff";
 import get from "lodash.get";
 
+import { PARTY_TTL_MS, PartyError, PartyStore } from "./party.mjs";
+
 const iceServers = [
   { urls: "stun:stun.miwifi.com:3478" },
   { urls: "stun:stun.hitv.com:3478" },
@@ -34,7 +36,12 @@ export default {
       );
     if (url.pathname === "/iceservers") return json({ iceServers }, 200, cors);
     const room = url.searchParams.get("room");
-    if (url.pathname !== "/ws" || !room || !/^[a-zA-Z0-9_-]{1,128}$/.test(room))
+    // /party/ws: the party status panel's shared data for this room
+    if (
+      !["/ws", "/party/ws"].includes(url.pathname) ||
+      !room ||
+      !/^[a-zA-Z0-9_-]{1,128}$/.test(room)
+    )
       return new Response("Not found", { status: 404 });
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
       return new Response("WebSocket required", { status: 426 });
@@ -52,6 +59,7 @@ export class Room extends DurableObject {
     );
     // Serialize password creation and all subsequent writes, including across awaits.
     this.queue = Promise.resolve();
+    this.partyStore = new PartyStore(ctx.storage.sql);
   }
   read(key) {
     const rows = [
@@ -98,6 +106,10 @@ export class Room extends DurableObject {
       return new Response("Room full", { status: 429 });
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
+    if (new URL(request.url).pathname === "/party/ws") {
+      server.serializeAttachment({ party: true, authed: false });
+      return new Response(null, { status: 101, webSocket: client });
+    }
     server.serializeAttachment({
       id: crypto.randomUUID(),
       room: new URL(request.url).searchParams.get("room"),
@@ -107,6 +119,12 @@ export class Room extends DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
   webSocketMessage(ws, message) {
+    if (ws.deserializeAttachment()?.party) {
+      this.queue = this.queue
+        .then(() => this.handleParty(ws, message))
+        .catch(() => this.sendParty(ws, { t: "error", code: "invalid_argument" }));
+      return this.queue;
+    }
     this.queue = this.queue
       .then(() => this.handle(ws, message))
       .catch(() => this.send(ws, "protocol_error", "Invalid message"));
@@ -136,27 +154,7 @@ export class Room extends DurableObject {
       }
       let auth = this.read("auth");
       const salt = auth?.salt || crypto.randomUUID();
-      const key = await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(password),
-        "PBKDF2",
-        false,
-        ["deriveBits"],
-      );
-      const hash = Array.from(
-        new Uint8Array(
-          await crypto.subtle.deriveBits(
-            {
-              name: "PBKDF2",
-              salt: new TextEncoder().encode(salt),
-              iterations: 10000,
-              hash: "SHA-256",
-            },
-            key,
-            256,
-          ),
-        ),
-      ).join(",");
+      const hash = await this.hashPassword(password, salt);
       if (auth && hash !== auth.hash) {
         this.send(ws, "auth_error");
         ws.close(1008, "Wrong password");
@@ -272,5 +270,106 @@ export class Room extends DurableObject {
     try {
       ws.close(1011, "Connection error");
     } catch {}
+  }
+  async hashPassword(password, salt) {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(password),
+      "PBKDF2",
+      false,
+      ["deriveBits"],
+    );
+    return Array.from(
+      new Uint8Array(
+        await crypto.subtle.deriveBits(
+          {
+            name: "PBKDF2",
+            salt: new TextEncoder().encode(salt),
+            iterations: 10000,
+            hash: "SHA-256",
+          },
+          key,
+          256,
+        ),
+      ),
+    ).join(",");
+  }
+
+  /* ---------- party status panel ---------- */
+
+  sendParty(ws, message) {
+    try {
+      ws.send(JSON.stringify(message));
+    } catch {}
+  }
+  broadcastParty(message) {
+    for (const ws of this.ctx.getWebSockets()) {
+      const a = ws.deserializeAttachment();
+      if (a?.party && a.authed) this.sendParty(ws, message);
+    }
+  }
+  /** Data expires 90 days after the panel was last used in this room */
+  partyTtl() {
+    // PARTY_TTL_MS is only set when testing locally
+    return Number(this.env.PARTY_TTL_MS) || PARTY_TTL_MS;
+  }
+  async touchParty() {
+    const now = Date.now();
+    this.write("party_used", now);
+    await this.ctx.storage.setAlarm(now + this.partyTtl());
+  }
+  async alarm() {
+    const used = this.read("party_used");
+    if (used === null) return;
+    if (Date.now() - used < this.partyTtl()) {
+      await this.ctx.storage.setAlarm(used + this.partyTtl());
+      return;
+    }
+    this.partyStore.clear();
+    this.ctx.storage.sql.exec("DELETE FROM room_state WHERE key = ?", "party_used");
+    this.broadcastParty({ t: "reset" });
+  }
+  async handleParty(ws, message) {
+    if (typeof message !== "string" || message.length > 256 * 1024) {
+      ws.close(1009, "Message too large");
+      return;
+    }
+    const msg = JSON.parse(message);
+    const a = ws.deserializeAttachment();
+    if (msg.op === "auth") {
+      // Same password as the game; the room must have been joined at least once
+      const auth = this.read("auth");
+      const password = typeof msg.password === "string" ? msg.password.slice(0, 256) : "";
+      if (!auth || (await this.hashPassword(password, auth.salt)) !== auth.hash) {
+        this.sendParty(ws, { t: "error", code: "permission_denied" });
+        ws.close(1008, "Wrong password");
+        return;
+      }
+      a.authed = true;
+      ws.serializeAttachment(a);
+      await this.touchParty();
+      this.sendParty(ws, { t: "ready", docs: this.partyStore.all() });
+      return;
+    }
+    if (!a.authed) return;
+    const ack = (error) => this.sendParty(ws, { t: "ack", id: msg.id, ...(error ? { code: error } : {}) });
+    try {
+      if (msg.op === "set") {
+        const data = this.partyStore.set(msg.path, msg.data);
+        this.broadcastParty({ t: "change", path: msg.path, data });
+      } else if (msg.op === "delete") {
+        this.partyStore.delete(msg.path);
+        this.broadcastParty({ t: "change", path: msg.path, data: null });
+      } else if (msg.op === "clear") {
+        this.partyStore.clear();
+        this.broadcastParty({ t: "reset" });
+      } else {
+        throw new PartyError("invalid_argument", "unknown op");
+      }
+      await this.touchParty();
+      ack();
+    } catch (e) {
+      ack(e instanceof PartyError ? e.code : "unavailable");
+    }
   }
 }

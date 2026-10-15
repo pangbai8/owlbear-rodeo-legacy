@@ -50,6 +50,25 @@ next to the custom domain.
 `/health`, and `/iceservers` to the Worker. `wrangler.jsonc` is the backend-only
 local configuration (`npm run dev`).
 
+## Party status panel
+
+The game page has a "小队状态" window (shield button in the sidebar) with the
+GM party status panel from `public/party-panel/`. Everyone who joined the
+room with its password shares one copy of the panel's data, live, through
+`/party/ws` on this Worker (stored in the room's Durable Object, table
+`party_docs`; limits: 64 KB per document, 1000 documents / 2 MB per room).
+
+- Data is deleted 90 days after the panel was last opened or changed in that
+  room (Durable Object alarm). Maps and the room itself are not affected.
+- The window's title bar has "清空本房间的小队数据" to wipe it by hand.
+- To update the panel to a new version:
+  `node scripts/update-party-panel.mjs "GM用小队状态面板 vNN.html"` (copies it
+  and loads `db-shim.js`, which stands in for the panel's `window.claude`
+  shared store).
+- Tests: `test/party.test.mjs` (with `npm run dev`); for the expiry test run
+  `npx wrangler dev --port 8787 --var PARTY_TTL_MS:3000` and set
+  `PARTY_SHORT_TTL=1`.
+
 ## Optional Cloudflare TURN
 
 Default STUN: `stun.miwifi.com:3478`, `stun.hitv.com:3478`.
