@@ -1,5 +1,6 @@
 import io, { Socket } from "socket.io-client";
 import msgParser from "socket.io-msgpack-parser";
+import CloudflareSocket from "./CloudflareSocket";
 import { EventEmitter } from "events";
 
 import Connection, { DataProgressEvent } from "./Connection";
@@ -32,7 +33,7 @@ class Session extends EventEmitter {
   /**
    * The socket io connection
    */
-  socket?: Socket;
+  socket?: Socket | CloudflareSocket;
 
   /**
    * A mapping of socket ids to session peers
@@ -70,19 +71,25 @@ class Session extends EventEmitter {
         this.emit("status", "offline");
         return;
       }
-      this.socket = io(process.env.REACT_APP_BROKER_URL!, {
-        withCredentials: true,
-        parser: msgParser,
-        transports: ["websocket"],
-      });
+      this.socket =
+        process.env.REACT_APP_BROKER_TRANSPORT === "cloudflare"
+          ? new CloudflareSocket(process.env.REACT_APP_BROKER_URL!)
+          : io(process.env.REACT_APP_BROKER_URL!, {
+              withCredentials: true,
+              parser: msgParser,
+              transports: ["websocket"],
+            });
       const response = await fetch(
-        `${process.env.REACT_APP_BROKER_URL}/iceservers`
+        `${process.env.REACT_APP_BROKER_URL}/iceservers`,
       );
       if (!response.ok) {
         throw Error("Unable to fetch ICE servers");
       }
       const data = await response.json();
       this._iceServers = data.iceServers;
+      this.socket.on("ice_servers", (servers: RTCIceServer[]) => {
+        this._iceServers = servers;
+      });
 
       this.socket.on("player_joined", this._handlePlayerJoined.bind(this));
       this.socket.on("player_left", this._handlePlayerLeft.bind(this));
@@ -121,13 +128,13 @@ class Session extends EventEmitter {
       this.peers[sessionId].connection.once("connect", () => {
         this.peers[sessionId].connection.sendObject(
           { id: eventId, data },
-          chunkId
+          chunkId,
         );
       });
     } else {
       this.peers[sessionId].connection.sendObject(
         { id: eventId, data },
-        chunkId
+        chunkId,
       );
     }
   }
@@ -142,7 +149,7 @@ class Session extends EventEmitter {
   startStreamTo(
     sessionId: string,
     track: MediaStreamTrack,
-    stream: MediaStream
+    stream: MediaStream,
   ) {
     if (!(sessionId in this.peers)) {
       if (!this._addPeer(sessionId, true)) {
@@ -183,7 +190,7 @@ class Session extends EventEmitter {
       console.error(
         "Unable to join game: invalid game ID or password",
         gameId,
-        password
+        password,
       );
       return;
     }
@@ -194,7 +201,7 @@ class Session extends EventEmitter {
       "join_game",
       gameId,
       password,
-      process.env.REACT_APP_VERSION
+      process.env.REACT_APP_VERSION,
     );
     this.emit("status", "joining");
   }
@@ -399,7 +406,7 @@ export type PeerDataProgressEvent = {
   reply: PeerReply;
 };
 export type PeerDataProgressEventHandler = (
-  event: PeerDataProgressEvent
+  event: PeerDataProgressEvent,
 ) => void;
 
 export type PeerTrackAddedEvent = {
@@ -415,7 +422,7 @@ export type PeerTrackRemovedEvent = {
   stream: MediaStream;
 };
 export type PeerTrackRemovedEventHandler = (
-  event: PeerTrackRemovedEvent
+  event: PeerTrackRemovedEvent,
 ) => void;
 
 export type PeerDisconnectEvent = { peer: SessionPeer };

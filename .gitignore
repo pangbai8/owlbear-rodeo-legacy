@@ -24,3 +24,8 @@ yarn-error.log*
 
 # typescript
 tsconfig.tsbuildinfo
+
+/cloudflare/node_modules/
+/cloudflare/.wrangler/
+/cloudflare/.dev.vars
+/cloudflare/test-results/
