@@ -1,0 +1,15 @@
+{
+  "name": "discord-bridge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8791",
+    "deploy": "wrangler deploy --config wrangler.deploy.jsonc",
+    "test": "node --test test/*.test.mjs",
+    "register": "node scripts/register-commands.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.0",
+    "ws": "^8.22.0"
+  }
+}

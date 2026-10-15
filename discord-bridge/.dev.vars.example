@@ -1,0 +1,13 @@
+# Copy to .dev.vars for `npm run dev`. Never commit the real file.
+DISCORD_BOT_TOKEN=
+DISCORD_CLIENT_SECRET=
+# Any long random string, e.g. node -e "console.log(crypto.randomUUID()+crypto.randomUUID())"
+SESSION_SECRET=
+# Local overrides of the wrangler.jsonc vars
+DISCORD_CLIENT_ID=
+# Only used by `npm run register` to remove old server-only commands
+GUILD_ID=
+# Optional allow-list (comma-separated); empty lists every channel the bot can use
+CHANNEL_IDS=
+# Developer Portal -> General Information -> Public Key (only for the /interactions endpoint)
+DISCORD_PUBLIC_KEY=

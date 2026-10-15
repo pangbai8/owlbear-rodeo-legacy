@@ -1,0 +1,188 @@
+// Discord chat bridge for the Owlbear map page. Serves a small chat page,
+// signs players in with Discord OAuth, and forwards API / WebSocket calls to
+// the Hub Durable Object. Must be served on the same site as the VTT
+// (e.g. discord.pangbai.de next to vtt.pangbai.de) so the session cookie
+// still reaches the page when it is embedded in an iframe.
+import { API, discordRequest, readConfig } from "./discord.mjs";
+import { verifyInteraction } from "./interactions.mjs";
+import {
+  SESSION_COOKIE,
+  SESSION_TTL_SECONDS,
+  STATE_COOKIE,
+  parseCookies,
+  randomToken,
+  serializeCookie,
+  signSession,
+  verifySession,
+} from "./session.mjs";
+
+export { Hub } from "./hub.mjs";
+
+// Without .html: the assets layer would redirect there anyway
+const DONE_PAGE = "/auth-done";
+
+export function contentSecurityPolicy(frameAncestors) {
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob: https://*.discordapp.com https://*.discordapp.net",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    `frame-ancestors ${["'self'", ...frameAncestors].join(" ")}`,
+  ].join("; ");
+}
+
+function withSecurityHeaders(response, config) {
+  const headers = new Headers(response.headers);
+  headers.set("Content-Security-Policy", contentSecurityPolicy(config.frameAncestors));
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Referrer-Policy", "same-origin");
+  // Revalidate every time, so players get a new version right after a deploy
+  headers.set("Cache-Control", "no-cache");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function hubOf(env) {
+  return env.HUB.get(env.HUB.idFromName("hub"));
+}
+
+function redirect(location, cookies = []) {
+  const headers = new Headers({ Location: location, "Cache-Control": "no-store" });
+  for (const cookie of cookies) headers.append("Set-Cookie", cookie);
+  return new Response(null, { status: 302, headers });
+}
+
+function redirectUri(url) {
+  return `${url.origin}/auth/callback`;
+}
+
+function login(url, config) {
+  const state = randomToken();
+  const authorize = new URL("https://discord.com/oauth2/authorize");
+  authorize.search = new URLSearchParams({
+    client_id: config.clientId,
+    response_type: "code",
+    redirect_uri: redirectUri(url),
+    scope: "identify",
+    state,
+    prompt: "none",
+  }).toString();
+  return redirect(authorize.toString(), [serializeCookie(STATE_COOKIE, state, { maxAge: 600, path: "/auth" })]);
+}
+
+async function callback(request, url, env, config) {
+  const done = (error) => redirect(`${DONE_PAGE}${error ? `?error=${error}` : ""}`, [
+    serializeCookie(STATE_COOKIE, "", { maxAge: 0, path: "/auth" }),
+  ]);
+  const state = url.searchParams.get("state");
+  const expected = parseCookies(request.headers.get("Cookie"))[STATE_COOKIE];
+  if (url.searchParams.get("error")) return done("denied");
+  if (!state || !expected || state !== expected) return done("state");
+  const code = url.searchParams.get("code");
+  if (!code) return done("state");
+
+  let user;
+  try {
+    const tokenResponse = await fetch(`${API}/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        client_secret: env.DISCORD_CLIENT_SECRET,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri(url),
+      }),
+    });
+    if (!tokenResponse.ok) return done("token");
+    const token = await tokenResponse.json();
+    user = await discordRequest(env, "/users/@me", { auth: `Bearer ${token.access_token}` });
+  } catch (e) {
+    console.error("oauth failed", e);
+    return done("token");
+  }
+
+  // Must see at least one configured channel in Discord (any of the servers)
+  try {
+    const check = await hubOf(env)
+      .fetch("https://hub/internal/access", { method: "POST", body: JSON.stringify({ userId: user.id }) })
+      .then((r) => r.json());
+    if (!check.ok) return done(check.reason || "no_channels");
+  } catch (e) {
+    console.error("access check failed", e);
+    return done("server");
+  }
+
+  const session = await signSession({ uid: user.id, exp: Date.now() + SESSION_TTL_SECONDS * 1000 }, env.SESSION_SECRET);
+  const response = done(null);
+  response.headers.append("Set-Cookie", serializeCookie(SESSION_COOKIE, session, { maxAge: SESSION_TTL_SECONDS }));
+  return response;
+}
+
+/** Browsers send Origin on WebSocket and non-GET requests; only accept our own page */
+function sameOrigin(request, url) {
+  const origin = request.headers.get("Origin");
+  return origin === url.origin;
+}
+
+export default {
+  async fetch(request, env) {
+    const response = await handle(request, env);
+    // Drain bodies of rejected requests: replying before a body is read resets the connection
+    if (request.body && !request.bodyUsed) await request.arrayBuffer().catch(() => {});
+    return response;
+  },
+};
+
+async function handle(request, env) {
+  const url = new URL(request.url);
+  const config = readConfig(env);
+
+  if (url.pathname === "/health") return Response.json({ ok: true });
+  const hub = () => hubOf(env);
+
+  // Discord -> Interactions Endpoint URL (context-menu commands)
+  if (url.pathname === "/interactions" && request.method === "POST") {
+    const body = await request.text();
+    const valid = await verifyInteraction(
+      body,
+      request.headers.get("X-Signature-Ed25519"),
+      request.headers.get("X-Signature-Timestamp"),
+      env.DISCORD_PUBLIC_KEY,
+    );
+    if (!valid) return new Response("invalid request signature", { status: 401 });
+    const interaction = JSON.parse(body);
+    if (interaction.type === 1) return Response.json({ type: 1 });
+    return hub().fetch("https://hub/internal/interaction", { method: "POST", body });
+  }
+
+  // Uploaded character avatars are public: Discord fetches them for webhook messages
+  const avatar = url.pathname.match(/^\/avatars\/([0-9a-f]{32})$/);
+  if (avatar && request.method === "GET") return hub().fetch(`https://hub/internal/avatars/${avatar[1]}`);
+
+  if (url.pathname === "/auth/login") return login(url, config);
+  if (url.pathname === "/auth/callback") return callback(request, url, env, config);
+  if (url.pathname === "/auth/logout") {
+    if (request.method !== "POST" || !sameOrigin(request, url)) return new Response("Method not allowed", { status: 405 });
+    return new Response(null, {
+      status: 204,
+      headers: { "Set-Cookie": serializeCookie(SESSION_COOKIE, "", { maxAge: 0 }) },
+    });
+  }
+
+  if (url.pathname === "/ws" || url.pathname.startsWith("/api/")) {
+    if ((url.pathname === "/ws" || request.method !== "GET") && !sameOrigin(request, url))
+      return Response.json({ error: "bad_origin" }, { status: 403 });
+    const session = await verifySession(parseCookies(request.headers.get("Cookie"))[SESSION_COOKIE], env.SESSION_SECRET);
+    if (!session) return Response.json({ error: "unauthorized", message: "未登录" }, { status: 401 });
+    const forwarded = new Request(request);
+    forwarded.headers.set("X-Bridge-User", session.uid);
+    forwarded.headers.set("X-Bridge-Origin", url.origin);
+    return hub().fetch(forwarded);
+  }
+
+  return withSecurityHeaders(await env.ASSETS.fetch(request), config);
+}

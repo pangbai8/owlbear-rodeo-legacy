@@ -1,0 +1,13 @@
+// Local development config (`npm run dev`). Deploys use wrangler.deploy.jsonc.
+{
+  "name": "discord-bridge",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+  "durable_objects": {
+    "bindings": [{ "name": "HUB", "class_name": "Hub" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
+  // Put DISCORD_CLIENT_ID, GUILD_ID, CHANNEL_IDS and the secrets in .dev.vars
+  "vars": { "FRAME_ANCESTORS": "http://localhost:3000" },
+}

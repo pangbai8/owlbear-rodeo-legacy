@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useState } from "react";
 
-export type FloatingWindowName = "chat" | "sheets";
+export type FloatingWindowName = "chat" | "discordChat" | "sheets";
 
 type FloatingWindowContextValue = {
   open: Partial<Record<FloatingWindowName, boolean>>;

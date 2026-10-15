@@ -1,0 +1,30 @@
+{
+  "name": "discord-bridge",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  // Must be the same site as the VTT (vtt.pangbai.de) so the login cookie
+  // reaches the page inside the Owlbear iframe.
+  "routes": [{ "pattern": "discord.pangbai.de", "custom_domain": true }],
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+  "durable_objects": {
+    "bindings": [{ "name": "HUB", "class_name": "Hub" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
+  "vars": {
+    // Not secret.
+    "DISCORD_CLIENT_ID": "1560258744237957150",
+    // General Information -> Public Key (verifies POST /interactions)
+    "DISCORD_PUBLIC_KEY": "3c1be30a358fb64dec48c5e354d013807a29866403848de77045081a4e0a3d8f",
+    // Empty: every text channel of every server the bot is in, for whoever can see
+    // it in Discord. Or a comma-separated allow-list of channel ids.
+    "CHANNEL_IDS": "",
+    // Optional extra gate on top of Discord channel permissions: only members
+    // with one of these role ids (from any of the servers) may use the chat
+    "ALLOWED_ROLE_IDS": "",
+    // Pages allowed to embed the chat in an iframe
+    "FRAME_ANCESTORS": "https://vtt.pangbai.de",
+  },
+  // Secrets: npx wrangler secret put DISCORD_BOT_TOKEN --config wrangler.deploy.jsonc
+  // (also DISCORD_CLIENT_SECRET and SESSION_SECRET)
+}
