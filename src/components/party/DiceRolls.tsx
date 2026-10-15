@@ -12,7 +12,7 @@ import D100Icon from "../../icons/D100Icon";
 
 import DiceRoll from "./DiceRoll";
 
-import { getDiceRollTotal } from "../../helpers/dice";
+import { getDiceRollTotal } from "../../helpers/diceRolls";
 import { DiceRoll as DiceRollType, DiceType } from "../../types/Dice";
 
 const diceIcons: { type: DiceType; Icon: React.ElementType }[] = [
