@@ -17,7 +17,7 @@ index 0ac57d9..876e968 100644
 +  return new URLSearchParams(window.location.search).get('chrome') === 'minimal';
 +}
 diff --git a/lib/onlyoffice-editor.ts b/lib/onlyoffice-editor.ts
-index 17892ca..8e96bd0 100644
+index 17892ca..a0b494a 100644
 --- a/lib/onlyoffice-editor.ts
 +++ b/lib/onlyoffice-editor.ts
 @@ -1,4 +1,4 @@
@@ -26,25 +26,17 @@ index 17892ca..8e96bd0 100644
  import 'ranui/message';
  import { waitForAppWorkerControl } from './offline-worker-control';
  import { getOnlyOfficeLang, t } from '@ranuts/shared/i18n';
-@@ -168,6 +168,17 @@ function createPersonalEditorInstance(config: {
+@@ -168,6 +168,9 @@ function createPersonalEditorInstance(config: {
    }
  
    const normalizedType = fileType.toLowerCase();
-+  if (DOCUMENT_TYPE_MAP[normalizedType] === 'cell') {
-+    // The spreadsheet app reads its formula bar visibility from this key when
-+    // it starts (View > Formula Bar writes it; same origin as this page). In
-+    // embed mode the host decides: hidden with chrome=minimal, shown otherwise.
-+    try {
-+      if (isMinimalChrome()) localStorage.setItem('sse-hidden-formula', '1');
-+      else if (isEmbedMode()) localStorage.setItem('sse-hidden-formula', '0');
-+    } catch {
-+      // Storage unavailable: the formula bar keeps its default
-+    }
++  if (DOCUMENT_TYPE_MAP[normalizedType] === 'cell' && isEmbedMode()) {
++    applyFormulaBarForChrome(isMinimalChrome());
 +  }
    // A worker changing hands mid-load can kill the frame's own document
    // request and leave the reader on a blank page; watch for that silence.
    watchEditorFrame();
-@@ -227,6 +238,22 @@ function createPersonalEditorInstance(config: {
+@@ -227,6 +230,22 @@ function createPersonalEditorInstance(config: {
          hideRightMenu: true,
          uiTheme: resolveUiTheme(),
          ...(isCompactViewport() ? compactViewportCustomization() : {}),
@@ -67,3 +59,40 @@ index 17892ca..8e96bd0 100644
          features: {
            featuresTips: false,
            // Spellcheck is fully disabled (mode:false turns it off, not just
+@@ -440,6 +459,36 @@ export function createEditorInstance(config: {
+   });
+ }
+ 
++// The spreadsheet app reads its formula bar visibility from this key when it
++// starts; View > Formula Bar writes it (same origin as this page).
++const FORMULA_BAR_KEY = 'sse-hidden-formula';
++// The user's own setting, parked while chrome=minimal forces the bar hidden.
++const FORMULA_BAR_PARKED_KEY = 'embed-minimal-chrome:sse-hidden-formula';
++const UNSET = '';
++
++/**
++ * Hide the formula bar for chrome=minimal without losing the user's choice:
++ * the first minimal boot parks the current value, later minimal boots leave
++ * it parked, and the next full boot puts it back.
++ */
++function applyFormulaBarForChrome(minimal: boolean): void {
++  try {
++    const parked = localStorage.getItem(FORMULA_BAR_PARKED_KEY);
++    if (minimal) {
++      if (parked === null) {
++        localStorage.setItem(FORMULA_BAR_PARKED_KEY, localStorage.getItem(FORMULA_BAR_KEY) ?? UNSET);
++      }
++      localStorage.setItem(FORMULA_BAR_KEY, '1');
++    } else if (parked !== null) {
++      if (parked === UNSET) localStorage.removeItem(FORMULA_BAR_KEY);
++      else localStorage.setItem(FORMULA_BAR_KEY, parked);
++      localStorage.removeItem(FORMULA_BAR_PARKED_KEY);
++    }
++  } catch {
++    // Storage unavailable: the formula bar keeps its default
++  }
++}
++
+ export async function loadEditorApi(): Promise<void> {
+   if (!window.DocsAPI && /^\/editor(?:\.html)?\/?$/.test(location.pathname)) await waitForAppWorkerControl();
+   return new Promise((resolve, reject) => {

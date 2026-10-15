@@ -11,7 +11,8 @@ browser (IndexedDB) and passes the bytes to the editor with `postMessage`.
 
 - `patches/minimal-chrome.patch` adds `chrome=minimal` to the editor URL: the
   editor starts without toolbar, header and side menus, and spreadsheets
-  without the formula bar (they keep the status bar with the sheet tabs). Owlbear's "Hide Tools" uses it; layout is
+  without the formula bar (they keep the status bar with the sheet tabs). The
+  user's own formula bar setting is parked meanwhile and restored in full mode. Owlbear's "Hide Tools" uses it; layout is
   fixed at boot, so toggling reloads the editor.
 - `.xlsm` opens fine but is saved as `.xlsx`: VBA macros are not run or kept.
 - The x2t module is pre-compressed Brotli; `worker.mjs` serves it with
