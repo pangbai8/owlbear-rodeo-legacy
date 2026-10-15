@@ -17,6 +17,11 @@ export type SheetMeta = {
   ext: string;
   size: number;
   updatedAt: number;
+  /**
+   * PDFs only: open in form filling mode (true) or in the editable mode that
+   * takes annotations and text edits (false). Unset until first opened.
+   */
+  pdfFillForms?: boolean;
 };
 
 let dbPromise: Promise<IDBDatabase> | undefined;
@@ -81,12 +86,32 @@ export async function putSheet(
     ext: meta.ext,
     size: data.byteLength,
     updatedAt: Date.now(),
+    ...(meta.pdfFillForms === undefined
+      ? {}
+      : { pdfFillForms: meta.pdfFillForms }),
   };
   await run([META_STORE, FILE_STORE], "readwrite", (tx) => {
     tx.objectStore(META_STORE).put(sheet);
     tx.objectStore(FILE_STORE).put(data, sheet.id);
   });
   return sheet;
+}
+
+/** Update metadata without touching the stored file */
+export async function updateSheetMeta(sheet: SheetMeta): Promise<void> {
+  await run([META_STORE], "readwrite", (tx) => {
+    tx.objectStore(META_STORE).put(sheet);
+  });
+}
+
+/**
+ * Whether a PDF looks like it has form fields. Printed or exported sheets
+ * usually have none and are better annotated. Fields declared only inside
+ * compressed object streams are missed; the sheet window can switch modes.
+ */
+export function pdfHasFormFields(data: ArrayBuffer): boolean {
+  const text = new TextDecoder("latin1").decode(data);
+  return /\/AcroForm\b/.test(text) && /\/Widget\b|\/FT\s*\//.test(text);
 }
 
 export async function deleteSheet(id: string): Promise<void> {
@@ -108,7 +133,8 @@ export function splitFileName(fileName: string): [string, string] {
 const spreadsheetExts = ["xlsx", "xlsm", "xls", "ods"];
 const textExts = ["docx", "doc", "odt", "rtf", "txt"];
 
-const importExts = [...spreadsheetExts, "csv", ...textExts];
+// PDFs keep their format: form fields are filled and saved back as PDF
+const importExts = [...spreadsheetExts, "csv", ...textExts, "pdf"];
 
 export const importAccept = importExts.map((ext) => `.${ext}`).join(",");
 
@@ -129,6 +155,7 @@ const sheetMimeTypes = [
   "application/vnd.oasis.opendocument.text",
   "application/rtf",
   "text/rtf",
+  "application/pdf",
 ];
 
 /**

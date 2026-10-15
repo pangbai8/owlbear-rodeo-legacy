@@ -14,7 +14,9 @@ import {
   importSheetFiles,
   isSheetFile,
   listSheets,
+  pdfHasFormFields,
   putSheet,
+  updateSheetMeta,
 } from "../helpers/characterSheets";
 
 /** Static OnlyOffice-in-the-browser editor (ranuts/document) */
@@ -50,7 +52,7 @@ function loadCurrentId() {
 }
 
 /**
- * Character sheets (Excel / Word files) kept in this browser and edited in an
+ * Character sheets (Excel / Word / PDF files) kept in this browser and edited in an
  * embedded editor. Edits are saved back to IndexedDB shortly after they stop.
  */
 function SheetWindow() {
@@ -68,6 +70,11 @@ function SheetWindow() {
   const dirtyRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const saveWaitersRef = useRef<SaveWaiter[]>([]);
+  // Each waiter returns true once it saw the state it waits for
+  const readonlyWaitersRef = useRef<((readonly: boolean) => boolean)[]>([]);
+  // Saves run one at a time; a PDF save toggles the editor's read-only state
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const pdfSavingRef = useRef(false);
 
   const refreshSheets = useCallback(async () => {
     const list = await listSheets();
@@ -84,20 +91,55 @@ function SheetWindow() {
     target.postMessage({ id, type, payload }, new URL(sheetEditorUrl).origin);
   }, []);
 
+  const setEditorReadonly = useCallback(
+    (readonly: boolean) =>
+      new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 5000);
+        readonlyWaitersRef.current.push((changed) => {
+          if (changed !== readonly) {
+            return false;
+          }
+          clearTimeout(timeout);
+          resolve();
+          return true;
+        });
+        send("document:set-readonly", { readonly });
+      }),
+    [send]
+  );
+
   const requestSave = useCallback((): Promise<void> => {
     clearSaveTimer(saveTimerRef);
-    const opened = openedRef.current;
-    if (!opened) {
-      return Promise.resolve();
+    async function save() {
+      const opened = openedRef.current;
+      if (!opened) {
+        return;
+      }
+      setStatus("Saving…");
+      // PDF form filling happens read-only, but the editor only saves when editable
+      const isPdf = !!opened.pdfFillForms;
+      if (isPdf) {
+        pdfSavingRef.current = true;
+        await setEditorReadonly(false);
+      }
+      try {
+        await new Promise<void>((resolve, reject) => {
+          saveWaitersRef.current.push({ resolve, reject });
+          send("document:save", {
+            targetExt: editorSaveExt(opened.ext).toUpperCase(),
+          });
+        });
+      } finally {
+        if (isPdf) {
+          await setEditorReadonly(true);
+          pdfSavingRef.current = false;
+        }
+      }
     }
-    setStatus("Saving…");
-    return new Promise((resolve, reject) => {
-      saveWaitersRef.current.push({ resolve, reject });
-      send("document:save", {
-        targetExt: editorSaveExt(opened.ext).toUpperCase(),
-      });
-    });
-  }, [send]);
+    const result = saveChainRef.current.then(save, save);
+    saveChainRef.current = result.catch(() => {});
+    return result;
+  }, [send, setEditorReadonly]);
 
   const scheduleSave = useCallback(() => {
     clearSaveTimer(saveTimerRef);
@@ -120,21 +162,28 @@ function SheetWindow() {
           localStorage.removeItem(CURRENT_SHEET_STORAGE_KEY);
         }
       } catch {}
-      const meta = (await listSheets()).find((sheet) => sheet.id === id);
+      let meta = (await listSheets()).find((sheet) => sheet.id === id);
       const data = meta && (await getSheetFile(meta.id));
       if (!meta || !data) {
         openedRef.current = null;
         return;
+      }
+      if (meta.ext === "pdf" && meta.pdfFillForms === undefined) {
+        meta = { ...meta, pdfFillForms: pdfHasFormFields(data) };
+        await updateSheetMeta(meta);
+        await refreshSheets();
       }
       openedRef.current = meta;
       setStatus("Opening…");
       send("document:open-buffer", {
         fileName: `${meta.name}.${editorOpenExt(meta.ext)}`,
         buffer: data,
-        readonly: false,
+        // The PDF editor treats an editable PDF as a form design, where clicking
+        // a field selects it; read-only is the mode that fills fields in
+        readonly: !!meta.pdfFillForms,
       });
     },
-    [requestSave, send]
+    [requestSave, send, refreshSheets]
   );
 
   useEffect(() => {
@@ -155,7 +204,16 @@ function SheetWindow() {
         setIsReady(true);
       } else if (type === "document:opened") {
         setStatus("");
+      } else if (type === "document:readonly-changed") {
+        const readonly = !!payload?.readonly;
+        readonlyWaitersRef.current = readonlyWaitersRef.current.filter(
+          (waiter) => !waiter(readonly)
+        );
       } else if (type === "document:dirty-changed") {
+        if (pdfSavingRef.current) {
+          // Leaving read-only clears the flag before the save has run
+          return;
+        }
         dirtyRef.current = !!payload?.dirty;
         setIsDirty(dirtyRef.current);
         if (dirtyRef.current) {
@@ -172,6 +230,7 @@ function SheetWindow() {
                 id: opened.id,
                 name: opened.name,
                 ext: editorSaveExt(opened.ext),
+                pdfFillForms: opened.pdfFillForms,
               },
               data
             );
@@ -299,6 +358,22 @@ function SheetWindow() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  /** Switch a PDF between filling its form fields and annotating / editing it */
+  async function handleTogglePdfMode() {
+    const opened = openedRef.current;
+    if (!opened || opened.ext !== "pdf") {
+      return;
+    }
+    if (dirtyRef.current) {
+      await requestSave();
+    }
+    const fillForms = !opened.pdfFillForms;
+    openedRef.current = { ...opened, pdfFillForms: fillForms };
+    await updateSheetMeta(openedRef.current);
+    await refreshSheets();
+    await setEditorReadonly(fillForms);
+  }
+
   async function handleDelete() {
     const opened = sheets.find((sheet) => sheet.id === currentId);
     if (
@@ -326,13 +401,14 @@ function SheetWindow() {
     setIsDropTarget(false);
     const files = Array.from(event.dataTransfer.files).filter(isSheetFile);
     if (files.length === 0) {
-      setStatus("Drop an Excel or Word file");
+      setStatus("Drop an Excel, Word or PDF file");
       return;
     }
     await importSheetFiles(files);
   }
 
-  const hasSheet = !!sheets.find((sheet) => sheet.id === currentId);
+  const currentSheet = sheets.find((sheet) => sheet.id === currentId);
+  const hasSheet = !!currentSheet;
 
   return (
     <>
@@ -363,6 +439,21 @@ function SheetWindow() {
         >
           Import
         </Button>
+        {currentSheet?.ext === "pdf" && (
+          <Button
+            variant="secondary"
+            py={1}
+            onClick={handleTogglePdfMode}
+            disabled={!isReady}
+            title={
+              currentSheet.pdfFillForms
+                ? "Switch to annotating and editing the PDF"
+                : "Switch to filling in the PDF's form fields"
+            }
+          >
+            {currentSheet.pdfFillForms ? "Annotate" : "Fill Forms"}
+          </Button>
+        )}
         <Button
           variant="secondary"
           py={1}
@@ -412,8 +503,8 @@ function SheetWindow() {
             p={3}
           >
             <Text>
-              Import or drop an Excel or Word character sheet. It stays in this
-              browser only.
+              Import or drop an Excel, Word or PDF character sheet. It stays in
+              this browser only.
             </Text>
           </Flex>
         )}

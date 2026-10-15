@@ -179,7 +179,7 @@ function GlobalImageDrop({
     setDroppingType("tokens");
   }
 
-  /** Open dropped Word / Excel files in the character sheet window */
+  /** Open dropped Word / Excel / PDF files in the character sheet window */
   function handleOtherFiles(files: File[]) {
     const sheetFiles = files.filter(isSheetFile);
     if (sheetFiles.length > 0) {
