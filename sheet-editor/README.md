@@ -10,8 +10,8 @@ Sheet files never reach a server: Owlbear keeps them in the player's own
 browser (IndexedDB) and passes the bytes to the editor with `postMessage`.
 
 - `patches/minimal-chrome.patch` adds `chrome=minimal` to the editor URL: the
-  editor starts without toolbar, header and side menus (spreadsheets keep the
-  status bar with the sheet tabs). Owlbear's "Hide Tools" uses it; layout is
+  editor starts without toolbar, header and side menus, and spreadsheets
+  without the formula bar (they keep the status bar with the sheet tabs). Owlbear's "Hide Tools" uses it; layout is
   fixed at boot, so toggling reloads the editor.
 - `.xlsm` opens fine but is saved as `.xlsx`: VBA macros are not run or kept.
 - The x2t module is pre-compressed Brotli; `worker.mjs` serves it with
