@@ -117,6 +117,93 @@ await mock("DELETE", `/_test/messages/${discordMessage.id}`);
 await waitFor((e) => e.type === "delete" && e.ids.includes(discordMessage.id), "discord delete");
 console.log("ok  Discord delete pushed live");
 
+// Characters (Tupperbox-style brackets)
+const imported = await call("POST", "/api/characters/import", {
+  tuppers: [{ name: "诺宁姆", nick: null, tag: "AC15 DC14 被察14", avatar_url: "https://cdn.tupperbox.app/pfp/1/a.webp", brackets: ["n:", ""], show_brackets: false }],
+});
+assert.equal(imported.status, 200);
+assert.equal(imported.data.added + imported.data.updated, 1);
+const norm = imported.data.characters.find((c) => c.name === "诺宁姆");
+const proxied = await call("POST", `/api/channels/${CHANNEL}/messages`, { content: "n：我拔出了剑" });
+assert.equal(proxied.status, 200);
+assert.equal(proxied.data.message.author.name, "诺宁姆 AC15 DC14 被察14");
+assert.equal(proxied.data.message.content, "我拔出了剑");
+assert.equal(proxied.data.message.ownerId, "111");
+const picked = await call("POST", `/api/channels/${CHANNEL}/messages`, { content: "没有括号，用下拉框选的", characterId: norm.id });
+assert.equal(picked.data.message.author.name, "诺宁姆 AC15 DC14 被察14");
+const plain = await call("POST", `/api/channels/${CHANNEL}/messages`, { content: "我自己说话" });
+assert.equal(plain.data.message.author.name, "GM 胖白");
+assert.equal((await call("POST", `/api/channels/${CHANNEL}/messages`, { content: "n:" })).status, 400);
+console.log("ok  brackets and picker send as the character (full-width colon too)");
+
+const created2 = await call("POST", "/api/characters", { name: "梅尔特", tag: "18/13/15", brackets: ["[", "]"] });
+assert.equal(created2.status, 200);
+assert.equal((await call("POST", "/api/characters", { name: "" })).status, 400);
+const renamed = await call("PUT", `/api/characters/${created2.data.character.id}`, { ...created2.data.character, nick: "梅尔特·梅尔汀" });
+assert.equal(renamed.data.character.nick, "梅尔特·梅尔汀");
+const bracketed = await call("POST", `/api/channels/${CHANNEL}/messages`, { content: "[挥剑]" });
+assert.equal(bracketed.data.message.author.name, "梅尔特·梅尔汀 18/13/15");
+const outsiderChars = await fetch(`${BRIDGE}/api/characters`, { headers: { Cookie: outsider } });
+assert.equal(outsiderChars.status, 403);
+console.log("ok  character create / update / validation");
+
+const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
+const upload2 = await fetch(`${BRIDGE}/api/avatars`, { method: "POST", headers: { ...headers, "Content-Type": "image/png" }, body: png });
+const avatar = await upload2.json();
+assert.equal(upload2.status, 200);
+assert.match(avatar.url, /\/avatars\/[0-9a-f]{32}$/);
+const publicAvatar = await fetch(avatar.url);
+assert.equal(publicAvatar.status, 200);
+assert.equal(publicAvatar.headers.get("Content-Type"), "image/png");
+assert.equal((await publicAvatar.arrayBuffer()).byteLength, png.length);
+assert.equal((await fetch(`${BRIDGE}/api/avatars`, { method: "POST", headers: { ...headers, "Content-Type": "text/html" }, body: "<b>" })).status, 400);
+await call("PUT", `/api/characters/${created2.data.character.id}`, { ...renamed.data.character, avatarUrl: avatar.url });
+await call("DELETE", `/api/characters/${created2.data.character.id}`);
+assert.equal((await fetch(avatar.url)).status, 404); // unused uploads are cleaned up
+console.log("ok  avatar upload, public avatar url, cleanup on delete");
+
+// Context-menu commands delivered over the Gateway
+async function interact(payload) {
+  const sentInteraction = await mock("POST", "/_test/interactions", payload);
+  for (let i = 0; i < 50; i++) {
+    const response = await fetch(`${MOCK}/_test/interactions/${sentInteraction.id}`);
+    if (response.ok) return response.json();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("no interaction callback");
+}
+const target = proxied.data.message;
+const modal = await interact({
+  type: 2,
+  member: { user: { id: "111" } },
+  data: { type: 3, name: "编辑（Owlbear）", target_id: target.id, resolved: { messages: { [target.id]: { id: target.id, channel_id: CHANNEL, content: target.content } } } },
+});
+assert.equal(modal.type, 9);
+assert.equal(modal.data.components[0].components[0].value, "我拔出了剑");
+const done = await interact({
+  type: 5,
+  member: { user: { id: "111" } },
+  data: { custom_id: modal.data.custom_id, components: [{ type: 1, components: [{ type: 4, custom_id: "content", value: "我收起了剑" }] }] },
+});
+assert.equal(done.data.content, "已修改。");
+await waitFor((e) => e.type === "upsert" && e.message.id === target.id && e.message.content === "我收起了剑", "context-menu edit");
+const refused = await interact({
+  type: 2,
+  member: { user: { id: "222" } },
+  data: { type: 3, name: "删除（Owlbear）", target_id: target.id, resolved: { messages: {} } },
+});
+assert.match(refused.data.content, /自己/);
+const removedByMenu = await interact({
+  type: 2,
+  member: { user: { id: "111" } },
+  data: { type: 3, name: "删除（Owlbear）", target_id: target.id, resolved: { messages: {} } },
+});
+assert.equal(removedByMenu.data.content, "已删除。");
+await waitFor((e) => e.type === "delete" && e.ids.includes(target.id), "context-menu delete");
+console.log("ok  right-click edit (modal) and delete, owner only");
+
+for (const m of [picked, plain, bracketed]) await call("DELETE", `/api/channels/${CHANNEL}/messages/${m.data.message.id}`);
+
 ws.close();
 console.log("all good");
 process.exit(0);

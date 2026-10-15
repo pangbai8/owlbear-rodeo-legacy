@@ -7,6 +7,8 @@
 //   POST /_test/messages        {"content": "...", "author": "bob"}
 //   POST /_test/messages/:id    {"content": "..."}   (edit)
 //   DELETE /_test/messages/:id
+//   POST /_test/interactions    (an interaction delivered over the Gateway)
+//   GET /_test/interactions/:id (the bridge's callback response)
 import http from "node:http";
 import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
@@ -22,6 +24,7 @@ let nextId = 5000n;
 const newId = () => String(nextId++);
 const messages = new Map();
 const sockets = new Set();
+const callbacks = new Map(); // interaction id -> response the bridge sent
 
 function dispatch(t, d) {
   for (const ws of sockets) ws.send(JSON.stringify({ op: 0, s: ws.seq++, t, d }));
@@ -127,7 +130,21 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    if (req.method === "POST" && (match = path.match(/^\/interactions\/(\d+)\/([^/]+)\/callback$/))) {
+      callbacks.set(match[1], await readBody(req));
+      return send(res, 204);
+    }
+
     // ---- test controls: activity from regular Discord users ----
+    if (req.method === "POST" && path === "/_test/interactions") {
+      const body = await readBody(req);
+      const interaction = { id: newId(), token: "interaction-token", channel_id: CHANNEL, ...body };
+      dispatch("INTERACTION_CREATE", interaction);
+      return send(res, 200, interaction);
+    }
+    if (req.method === "GET" && (match = path.match(/^\/_test\/interactions\/(\d+)$/))) {
+      return callbacks.has(match[1]) ? send(res, 200, callbacks.get(match[1])) : send(res, 404, {});
+    }
     if (req.method === "POST" && path === "/_test/messages") {
       const body = await readBody(req);
       const message = addMessage({ author: OTHER, member: { nick: body.nick ?? null }, content: body.content || "" });

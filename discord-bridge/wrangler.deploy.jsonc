@@ -13,9 +13,11 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
   "vars": {
     // Fill these in (they are not secret). CHANNEL_IDS: comma-separated.
-    "DISCORD_CLIENT_ID": "",
-    "GUILD_ID": "",
-    "CHANNEL_IDS": "",
+    "DISCORD_CLIENT_ID": "1560258744237957150",
+    // General Information -> Public Key (verifies POST /interactions)
+    "DISCORD_PUBLIC_KEY": "3c1be30a358fb64dec48c5e354d013807a29866403848de77045081a4e0a3d8f",
+    "GUILD_ID": "1419021079430823949",
+    "CHANNEL_IDS": "1447262254625194176",
     // Optional: only members with one of these role ids may use the chat
     "ALLOWED_ROLE_IDS": "",
     // Pages allowed to embed the chat in an iframe

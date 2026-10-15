@@ -14,6 +14,8 @@ import {
   webhookUsername,
 } from "./discord.mjs";
 import { GatewayClient } from "./gateway.mjs";
+import { handleInteraction } from "./interactions.mjs";
+import { MAX_CHARACTERS, characterDisplayName, fromTupperboxExport, matchProxy, normalizeCharacter } from "../public/proxy.js";
 
 const MEMBER_TTL = 5 * 60 * 1000;
 const NAMES_TTL = 10 * 60 * 1000;
@@ -22,6 +24,9 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_CONTENT = 2000;
 const WEBHOOK_NAME = "Owlbear Bridge";
 const UNKNOWN_WEBHOOK = 10015;
+const MAX_AVATAR_BYTES = 1024 * 1024;
+const MAX_AVATARS_PER_USER = 200;
+const AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 function json(data, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -41,6 +46,14 @@ export class Hub extends DurableObject {
     );
     this.sql.exec(
       "CREATE TABLE IF NOT EXISTS sent (message_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, user_id TEXT NOT NULL, created_at INTEGER NOT NULL)",
+    );
+    this.sql.exec(
+      "CREATE TABLE IF NOT EXISTS characters (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, data TEXT NOT NULL, created_at INTEGER NOT NULL)",
+    );
+    this.sql.exec("CREATE INDEX IF NOT EXISTS characters_user ON characters (user_id)");
+    // Uploaded character avatars, served publicly at /avatars/<id> so Discord can fetch them
+    this.sql.exec(
+      "CREATE TABLE IF NOT EXISTS avatars (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, content_type TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL)",
     );
     /** @type {Map<WebSocket, {userId: string, channelId: string}>} */
     this.clients = new Map();
@@ -157,6 +170,14 @@ export class Hub extends DurableObject {
   }
 
   async onDispatch(type, data) {
+    // Without an Interactions Endpoint URL, Discord delivers context-menu clicks here
+    if (type === "INTERACTION_CREATE") {
+      const response = await this.interaction(data);
+      await discordRequest(this.env, `/interactions/${data.id}/${data.token}/callback`, { method: "POST", json: response, auth: null }).catch(
+        (e) => console.error("interaction callback failed", e),
+      );
+      return;
+    }
     if (!data || !this.config.channelIds.includes(data.channel_id)) return;
     try {
       if (type === "MESSAGE_CREATE" || type === "MESSAGE_UPDATE") {
@@ -196,6 +217,11 @@ export class Hub extends DurableObject {
 
   async route(request) {
     const url = new URL(request.url);
+    // Only the Worker can reach these (it never forwards /internal from browsers)
+    if (url.pathname === "/internal/interaction" && request.method === "POST") return json(await this.interaction(await request.json()));
+    const avatarMatch = url.pathname.match(/^\/internal\/avatars\/([0-9a-f]{32})$/);
+    if (avatarMatch) return this.avatar(avatarMatch[1]);
+
     const userId = request.headers.get("X-Bridge-User");
     if (!userId) return error(401, "unauthorized", "未登录");
     try {
@@ -206,6 +232,8 @@ export class Hub extends DurableObject {
 
       if (url.pathname === "/ws") return this.openSocket(request, url, userId);
       if (url.pathname === "/api/me" && request.method === "GET") return this.me(member);
+      if (url.pathname.startsWith("/api/characters") || url.pathname === "/api/avatars")
+        return this.characterRoute(request, url, userId);
 
       const match = url.pathname.match(/^\/api\/channels\/(\d+)\/messages(?:\/(\d+))?$/);
       if (!match) return error(404, "not_found", "Not found");
@@ -279,25 +307,30 @@ export class Hub extends DurableObject {
     if (type.startsWith("multipart/form-data")) {
       const form = await request.formData();
       const files = form.getAll("files").filter((f) => typeof f === "object" && f.size > 0);
-      return { content: String(form.get("content") || ""), files };
+      return { content: String(form.get("content") || ""), characterId: String(form.get("characterId") || ""), files };
     }
     const body = await request.json().catch(() => ({}));
-    return { content: String(body.content || ""), files: [] };
+    return { content: String(body.content || ""), characterId: String(body.characterId || ""), files: [] };
   }
 
   async send(channelId, request, member) {
-    const { content, files } = await this.readMessageInput(request);
-    const text = content.trim();
-    if (!text && !files.length) return error(400, "empty", "消息是空的");
+    const input = await this.readMessageInput(request);
+    const { files } = input;
+    // Brackets (e.g. "n: hello") pick a character, like Tupperbox; otherwise the chosen one, if any
+    const profile = this.profileOf(member);
+    const characters = this.listCharacters(profile.id);
+    const proxied = matchProxy(input.content.trim(), characters);
+    const character = proxied?.character || characters.find((c) => c.id === input.characterId) || null;
+    const text = (proxied ? proxied.content : input.content).trim();
+    if (!text && !files.length) return error(400, "empty", proxied ? "括号里没有内容" : "消息是空的");
     if (Array.from(text).length > MAX_CONTENT) return error(400, "too_long", `消息不能超过 ${MAX_CONTENT} 字`);
     if (files.length > 10) return error(400, "too_many_files", "一次最多 10 个文件");
     if (files.reduce((sum, f) => sum + f.size, 0) > MAX_UPLOAD_BYTES) return error(413, "too_large", "文件总大小不能超过 10MB");
 
-    const profile = this.profileOf(member);
     const payload = {
       content: text,
-      username: webhookUsername(profile.name),
-      avatar_url: profile.avatar,
+      username: webhookUsername(character ? characterDisplayName(character) : profile.name),
+      avatar_url: character?.avatarUrl || profile.avatar,
       allowed_mentions: { parse: ["users", "roles"] },
     };
     const message = await this.withWebhook(channelId, ({ id, token }) => {
@@ -334,6 +367,10 @@ export class Hub extends DurableObject {
     const text = String(content || "").trim();
     if (!text) return error(400, "empty", "消息不能为空，想删掉请用删除");
     if (Array.from(text).length > MAX_CONTENT) return error(400, "too_long", `消息不能超过 ${MAX_CONTENT} 字`);
+    return json({ message: await this.editMessage(channelId, messageId, text) });
+  }
+
+  async editMessage(channelId, messageId, text) {
     const { id, token } = await this.getWebhook(channelId);
     const message = await discordRequest(this.env, `/webhooks/${id}/${token}/messages/${messageId}`, {
       method: "PATCH",
@@ -342,12 +379,17 @@ export class Hub extends DurableObject {
     });
     const result = this.clientMessage(message);
     this.broadcast(channelId, { type: "upsert", message: result });
-    return json({ message: result });
+    return result;
   }
 
   async remove(channelId, messageId, userId) {
     const denied = this.checkOwner(messageId, userId);
     if (denied) return denied;
+    await this.deleteMessage(channelId, messageId);
+    return json({ ok: true });
+  }
+
+  async deleteMessage(channelId, messageId) {
     try {
       const { id, token } = await this.getWebhook(channelId);
       await discordRequest(this.env, `/webhooks/${id}/${token}/messages/${messageId}`, { method: "DELETE", auth: null });
@@ -357,6 +399,142 @@ export class Hub extends DurableObject {
     }
     this.sql.exec("DELETE FROM sent WHERE message_id = ?", messageId);
     this.broadcast(channelId, { type: "delete", ids: [messageId] });
-    return json({ ok: true });
+  }
+
+  // ---- context-menu commands -----------------------------------------------
+
+  interaction(data) {
+    return handleInteraction(data, {
+      ownerOf: this.ownerOf,
+      edit: (channelId, messageId, text) => this.editMessage(channelId, messageId, text),
+      remove: (channelId, messageId) => this.deleteMessage(channelId, messageId),
+    });
+  }
+
+  // ---- characters ----------------------------------------------------------
+
+  listCharacters(userId) {
+    return this.sql
+      .exec("SELECT id, data FROM characters WHERE user_id = ? ORDER BY created_at, id", userId)
+      .toArray()
+      .map((row) => ({ id: row.id, ...JSON.parse(row.data) }));
+  }
+
+  saveCharacter(userId, id, character, createdAt = Date.now()) {
+    const { id: _ignored, ...data } = character;
+    this.sql.exec(
+      "INSERT OR REPLACE INTO characters (id, user_id, data, created_at) VALUES (?, ?, ?, ?)",
+      id,
+      userId,
+      JSON.stringify(data),
+      createdAt,
+    );
+    return { id, ...data };
+  }
+
+  /** Removes uploaded avatars that no character of this user points at any more */
+  pruneAvatars(userId) {
+    const used = new Set(this.listCharacters(userId).map((c) => c.avatarUrl.match(/\/avatars\/([0-9a-f]{32})/)?.[1]));
+    for (const row of this.sql.exec("SELECT id FROM avatars WHERE user_id = ?", userId).toArray()) {
+      if (!used.has(row.id)) this.sql.exec("DELETE FROM avatars WHERE id = ?", row.id);
+    }
+  }
+
+  async characterRoute(request, url, userId) {
+    const parts = url.pathname.split("/").filter(Boolean); // api, characters, [id | "import"]
+    const method = request.method;
+    const readJson = () => request.json().catch(() => null);
+    const tryNormalize = (input) => {
+      try {
+        return { character: normalizeCharacter(input || {}) };
+      } catch (e) {
+        return { response: error(400, "invalid_character", e.message) };
+      }
+    };
+    const newId = () => crypto.randomUUID().replace(/-/g, "");
+
+    if (url.pathname === "/api/avatars" && method === "POST") return this.uploadAvatar(request, userId);
+    if (parts.length === 2 && method === "GET") return json({ characters: this.listCharacters(userId) });
+
+    if (parts.length === 2 && method === "POST") {
+      const { character, response } = tryNormalize(await readJson());
+      if (response) return response;
+      if (this.listCharacters(userId).length >= MAX_CHARACTERS) return error(400, "too_many", `最多 ${MAX_CHARACTERS} 个角色`);
+      return json({ character: this.saveCharacter(userId, newId(), character) });
+    }
+
+    if (parts.length === 3 && parts[2] === "import" && method === "POST") {
+      let imported;
+      try {
+        imported = fromTupperboxExport(await readJson());
+      } catch (e) {
+        return error(400, "invalid_import", e.message);
+      }
+      // A character with the same name is replaced, like Tupperbox's own import
+      const existing = this.listCharacters(userId);
+      let added = 0;
+      let updated = 0;
+      for (const character of imported) {
+        const match = existing.find((c) => c.name === character.name);
+        if (match) {
+          this.saveCharacter(userId, match.id, character);
+          updated++;
+        } else if (existing.length + added < MAX_CHARACTERS) {
+          this.saveCharacter(userId, newId(), character, Date.now() + added);
+          added++;
+        }
+      }
+      this.pruneAvatars(userId);
+      return json({ added, updated, skipped: imported.length - added - updated, characters: this.listCharacters(userId) });
+    }
+
+    if (parts.length === 3) {
+      const id = parts[2];
+      const row = this.sql.exec("SELECT created_at FROM characters WHERE id = ? AND user_id = ?", id, userId).toArray()[0];
+      if (!row) return error(404, "unknown_character", "找不到这个角色");
+      if (method === "PUT") {
+        const { character, response } = tryNormalize(await readJson());
+        if (response) return response;
+        const saved = this.saveCharacter(userId, id, character, row.created_at);
+        this.pruneAvatars(userId);
+        return json({ character: saved });
+      }
+      if (method === "DELETE") {
+        this.sql.exec("DELETE FROM characters WHERE id = ? AND user_id = ?", id, userId);
+        this.pruneAvatars(userId);
+        return json({ ok: true });
+      }
+    }
+    return error(404, "not_found", "Not found");
+  }
+
+  async uploadAvatar(request, userId) {
+    const type = (request.headers.get("Content-Type") || "").split(";")[0].trim();
+    if (!AVATAR_TYPES.includes(type)) return error(400, "bad_type", "头像只支持 PNG、JPEG、WebP、GIF");
+    const data = await request.arrayBuffer();
+    if (!data.byteLength) return error(400, "empty", "图片是空的");
+    if (data.byteLength > MAX_AVATAR_BYTES) return error(413, "too_large", "头像不能超过 1MB");
+    const count = this.sql.exec("SELECT COUNT(*) AS n FROM avatars WHERE user_id = ?", userId).toArray()[0].n;
+    if (count >= MAX_AVATARS_PER_USER) this.pruneAvatars(userId);
+    const id = crypto.randomUUID().replace(/-/g, "");
+    this.sql.exec(
+      "INSERT INTO avatars (id, user_id, content_type, data, created_at) VALUES (?, ?, ?, ?, ?)",
+      id,
+      userId,
+      type,
+      data,
+      Date.now(),
+    );
+    return json({ url: `${request.headers.get("X-Bridge-Origin") || ""}/avatars/${id}` });
+  }
+
+  avatar(id) {
+    const row = this.sql.exec("SELECT content_type, data FROM avatars WHERE id = ?", id).toArray()[0];
+    if (!row) return new Response("Not found", { status: 404 });
+    // Ids are never reused, so the image can be cached forever
+    return new Response(row.data, {
+      headers: { "Content-Type": row.content_type, "Cache-Control": "public, max-age=31536000, immutable" },
+    });
   }
 }
+

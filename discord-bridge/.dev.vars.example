@@ -7,3 +7,5 @@ SESSION_SECRET=
 DISCORD_CLIENT_ID=
 GUILD_ID=
 CHANNEL_IDS=
+# Developer Portal -> General Information -> Public Key (only for the /interactions endpoint)
+DISCORD_PUBLIC_KEY=

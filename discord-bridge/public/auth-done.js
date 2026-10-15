@@ -21,5 +21,8 @@ try {
 try {
   window.opener?.postMessage(message, location.origin);
 } catch {}
-// Only closes windows opened by script, i.e. the login popup
-if (!error) setTimeout(() => window.close(), 600);
+// A popup closes itself; when the login ran in this tab instead (or close() is ignored), go back to the chat
+if (!error) {
+  setTimeout(() => window.close(), 600);
+  setTimeout(() => location.replace("/"), 900);
+}

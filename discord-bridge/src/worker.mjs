@@ -4,6 +4,7 @@
 // (e.g. discord.pangbai.de next to vtt.pangbai.de) so the session cookie
 // still reaches the page when it is embedded in an iframe.
 import { API, DiscordError, discordRequest, memberAllowed, readConfig } from "./discord.mjs";
+import { verifyInteraction } from "./interactions.mjs";
 import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
@@ -17,14 +18,15 @@ import {
 
 export { Hub } from "./hub.mjs";
 
-const DONE_PAGE = "/auth-done.html";
+// Without .html: the assets layer would redirect there anyway
+const DONE_PAGE = "/auth-done";
 
 export function contentSecurityPolicy(frameAncestors) {
   return [
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self'",
-    "img-src 'self' data: blob: https://*.discordapp.com https://*.discordapp.net",
+    "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https://*.discordapp.com https://*.discordapp.net",
     "connect-src 'self'",
     "base-uri 'none'",
@@ -135,6 +137,27 @@ async function handle(request, env) {
   const config = readConfig(env);
 
   if (url.pathname === "/health") return Response.json({ ok: true });
+  const hub = () => env.HUB.get(env.HUB.idFromName("hub"));
+
+  // Discord -> Interactions Endpoint URL (context-menu commands)
+  if (url.pathname === "/interactions" && request.method === "POST") {
+    const body = await request.text();
+    const valid = await verifyInteraction(
+      body,
+      request.headers.get("X-Signature-Ed25519"),
+      request.headers.get("X-Signature-Timestamp"),
+      env.DISCORD_PUBLIC_KEY,
+    );
+    if (!valid) return new Response("invalid request signature", { status: 401 });
+    const interaction = JSON.parse(body);
+    if (interaction.type === 1) return Response.json({ type: 1 });
+    return hub().fetch("https://hub/internal/interaction", { method: "POST", body });
+  }
+
+  // Uploaded character avatars are public: Discord fetches them for webhook messages
+  const avatar = url.pathname.match(/^\/avatars\/([0-9a-f]{32})$/);
+  if (avatar && request.method === "GET") return hub().fetch(`https://hub/internal/avatars/${avatar[1]}`);
+
   if (url.pathname === "/auth/login") return login(url, config);
   if (url.pathname === "/auth/callback") return callback(request, url, env, config);
   if (url.pathname === "/auth/logout") {
@@ -152,7 +175,8 @@ async function handle(request, env) {
     if (!session) return Response.json({ error: "unauthorized", message: "未登录" }, { status: 401 });
     const forwarded = new Request(request);
     forwarded.headers.set("X-Bridge-User", session.uid);
-    return env.HUB.get(env.HUB.idFromName("hub")).fetch(forwarded);
+    forwarded.headers.set("X-Bridge-Origin", url.origin);
+    return hub().fetch(forwarded);
   }
 
   return withSecurityHeaders(await env.ASSETS.fetch(request), config);

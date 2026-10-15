@@ -27,6 +27,7 @@
           <span id="channel-name"></span>
           <span id="status" class="status" title=""></span>
           <span class="spacer"></span>
+          <button id="characters-button" type="button" class="ghost" title="管理角色（像 Tupperbox 一样用括号代发）">角色</button>
           <img id="me-avatar" class="avatar small" alt="" />
           <button id="logout-button" type="button" class="ghost" title="退出登录">退出</button>
         </header>
@@ -37,6 +38,11 @@
         <div id="jump" hidden><button type="button" id="jump-button">有新消息 ↓</button></div>
         <form id="composer">
           <div id="pending-files"></div>
+          <div class="identity-row">
+            <img id="identity-avatar" class="avatar small" alt="" />
+            <select id="identity-select" aria-label="发言身份"></select>
+            <span id="proxy-hint" class="hint"></span>
+          </div>
           <div class="composer-row">
             <label class="attach" title="上传文件">
               ＋<input id="file-input" type="file" multiple hidden />
@@ -46,6 +52,60 @@
           </div>
           <p id="composer-error" class="error" hidden></p>
         </form>
+
+        <section id="characters" class="panel" hidden>
+          <header class="panel-head">
+            <h2>角色</h2>
+            <span class="spacer"></span>
+            <button id="characters-close" type="button" class="ghost" title="关闭">×</button>
+          </header>
+          <div class="panel-body">
+            <p id="character-status" class="hint" hidden></p>
+            <div id="character-actions" class="panel-actions">
+              <button id="character-new" type="button" class="primary">新建角色</button>
+              <label class="button-like" title="Tupperbox 里用 tul!export 导出的 .json 文件">
+                导入 Tupperbox<input id="character-import-file" type="file" accept=".json,application/json" hidden />
+              </label>
+            </div>
+            <ul id="character-list"></ul>
+
+            <form id="character-form" hidden>
+              <div class="character-header">
+                <label class="avatar-upload" title="上传头像">
+                  <img id="character-avatar-preview" class="avatar large" alt="" />
+                  <span>更换</span>
+                  <input id="character-avatar-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+                </label>
+                <h3 id="character-heading"></h3>
+              </div>
+
+              <label class="field">名字<input id="character-name" maxlength="80" required placeholder="诺宁姆" /></label>
+              <div class="field">
+                <span>显示名 <small class="hint">（留空用名字；标签会跟在后面）</small></span>
+                <div class="pair">
+                  <input id="character-nick" maxlength="80" placeholder="显示名" aria-label="显示名" />
+                  <input id="character-tag" maxlength="80" placeholder="标签，如 AC15 DC14 被察14" aria-label="标签" />
+                </div>
+              </div>
+              <label class="field">头像链接 <small class="hint">（也可以点上面的头像上传）</small>
+                <input id="character-avatar-url" type="url" placeholder="https://…" />
+              </label>
+              <div class="field">
+                <span>括号 <small class="hint">（像 Tupperbox：前缀 text 后缀，例如 n:text）</small></span>
+                <div id="bracket-rows"></div>
+                <button id="character-add-bracket" type="button" class="ghost small">+ 添加一组括号</button>
+              </div>
+              <label class="check"><input id="character-show-brackets" type="checkbox" /> 发送时保留括号</label>
+              <p id="character-preview" class="hint"></p>
+              <div class="panel-actions">
+                <button type="submit" class="primary">保存</button>
+                <button id="character-cancel" type="button">取消</button>
+                <span class="spacer"></span>
+                <button id="character-delete" type="button" class="danger">删除角色</button>
+              </div>
+            </form>
+          </div>
+        </section>
       </section>
     </div>
   </body>

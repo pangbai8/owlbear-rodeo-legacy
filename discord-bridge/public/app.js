@@ -1,8 +1,11 @@
+import { createCharacterPanel } from "./characters.js";
 import { renderMarkdown } from "./markdown.js";
+import { characterDisplayName, matchProxy } from "./proxy.js";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const GROUP_WINDOW_MS = 7 * 60 * 1000;
 const CHANNEL_KEY = "discord-bridge.channel";
+const IDENTITY_KEY = "discord-bridge.identity";
 
 const $ = (id) => document.getElementById(id);
 const scroller = $("scroller");
@@ -25,7 +28,11 @@ const state = {
   stick: true,
   sending: false,
   gateway: "connecting",
+  characters: [],
+  identity: "", // "" = yourself, otherwise a character id
 };
+
+let characterPanel = null;
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -180,6 +187,11 @@ function initChat(me) {
   const select = $("channel-select");
   select.replaceChildren(...me.channels.map((c) => el("option", { value: c.id, text: `# ${c.name}` })));
   select.hidden = me.channels.length < 2;
+
+  state.identity = safeStorage("get", IDENTITY_KEY) || "";
+  characterPanel ??= createCharacterPanel({ api, getMe: () => state.me, onChange: setCharacters });
+  renderIdentity();
+  characterPanel.load().catch((error) => showComposerError(`加载角色失败：${error.message}`));
 
   const wanted = new URLSearchParams(location.search).get("channel") || safeStorage("get", CHANNEL_KEY);
   const channel = me.channels.find((c) => c.id === wanted) || me.channels[0];
@@ -643,6 +655,46 @@ function openLightbox(src) {
   document.body.append(box);
 }
 
+// ---- identity (characters) ---------------------------------------------------
+
+function setCharacters(characters) {
+  state.characters = characters;
+  if (state.identity && !characters.some((c) => c.id === state.identity)) state.identity = "";
+  renderIdentity();
+}
+
+function renderIdentity() {
+  const select = $("identity-select");
+  const options = [el("option", { value: "", text: `${state.me?.name || "我"}（自己）` })];
+  for (const c of state.characters) options.push(el("option", { value: c.id, text: characterDisplayName(c) }));
+  select.replaceChildren(...options);
+  select.value = state.identity;
+  updateIdentityHint();
+}
+
+/** Who the message in the input will be sent as: brackets win over the picker */
+function currentIdentity() {
+  const proxied = matchProxy(input.value.trim(), state.characters);
+  if (proxied) return { character: proxied.character, viaBrackets: true };
+  return { character: state.characters.find((c) => c.id === state.identity) || null, viaBrackets: false };
+}
+
+function updateIdentityHint() {
+  const { character, viaBrackets } = currentIdentity();
+  $("identity-avatar").src = character?.avatarUrl || state.me?.avatar || "";
+  const hint = $("proxy-hint");
+  hint.textContent = viaBrackets ? `括号 → 以「${characterDisplayName(character)}」发送` : "";
+  hint.classList.toggle("active", viaBrackets);
+}
+
+$("identity-select").addEventListener("change", (event) => {
+  state.identity = event.target.value;
+  safeStorage("set", IDENTITY_KEY, state.identity);
+  updateIdentityHint();
+  input.focus();
+});
+$("characters-button").addEventListener("click", () => characterPanel?.open());
+
 // ---- composer --------------------------------------------------------------
 
 function showComposerError(message) {
@@ -687,9 +739,10 @@ async function send() {
   if (files.length) {
     body = new FormData();
     body.set("content", content);
+    body.set("characterId", state.identity);
     for (const file of files) body.append("files", file, file.name);
   } else {
-    body = JSON.stringify({ content });
+    body = JSON.stringify({ content, characterId: state.identity });
     headers = { "Content-Type": "application/json" };
   }
 
@@ -698,6 +751,7 @@ async function send() {
   try {
     const data = await api(`/api/channels/${state.channelId}/messages`, { method: "POST", headers, body });
     input.value = "";
+    updateIdentityHint();
     state.files = [];
     renderFiles();
     autosize();
@@ -717,7 +771,10 @@ $("composer").addEventListener("submit", (event) => {
   send();
 });
 
-input.addEventListener("input", autosize);
+input.addEventListener("input", () => {
+  autosize();
+  updateIdentityHint();
+});
 input.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
