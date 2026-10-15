@@ -13,7 +13,9 @@ export default {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin");
     const allowed = (env.ALLOWED_ORIGINS || "").split(",");
-    if (origin && !allowed.includes(origin))
+    // Same-origin requests (frontend served by this Worker on any bound
+    // hostname, e.g. a custom domain) are always allowed.
+    if (origin && origin !== url.origin && !allowed.includes(origin))
       return new Response("Origin denied", { status: 403 });
     const cors = origin
       ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" }

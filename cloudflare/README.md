@@ -1,6 +1,7 @@
 # Cloudflare trial
 
-Trial URL: https://owlbear-legacy-trial.findstars-worker.workers.dev
+Production URL: https://vtt.pangbai.de (Workers Custom Domain)
+Fallback URL: https://owlbear-legacy-trial.findstars-worker.workers.dev
 
 The React frontend is served as Worker static assets. Each game uses a separate
 SQLite-backed Durable Object and native WebSocket signalling with hibernation.
@@ -16,7 +17,7 @@ Wrangler uses a separate modern Node runtime (Node 22 here).
 ```powershell
 # In repository root, using Node 16 / Yarn 1
 yarn install --frozen-lockfile --ignore-engines
-$env:REACT_APP_BROKER_URL='https://YOUR-WORKER.workers.dev'
+$env:REACT_APP_BROKER_URL='https://vtt.pangbai.de'   # or your workers.dev URL
 $env:REACT_APP_BROKER_TRANSPORT='cloudflare'
 $env:GENERATE_SOURCEMAP='false'
 yarn build
@@ -28,9 +29,21 @@ npx wrangler login
 npm run deploy
 ```
 
-Before using a different account/domain, edit `name` and `ALLOWED_ORIGINS` in
-`wrangler.deploy.jsonc`. Include the exact frontend origin; wildcard CORS is not
-enabled. The deployment config serves `/game/*` as SPA routes and sends `/ws`,
+Before using a different account/domain, edit `name`, `routes` and
+`ALLOWED_ORIGINS` in `wrangler.deploy.jsonc`. Requests whose `Origin` equals the
+Worker's own hostname are always accepted, so the frontend works on both the
+custom domain and workers.dev; other frontends need their exact origin listed
+(no wildcard CORS). `workers_dev: true` keeps the workers.dev fallback enabled
+next to the custom domain.
+
+### Custom domain checklist (vtt.pangbai.de)
+
+1. `pangbai.de` zone shows **Active** in Cloudflare (nameservers switched at Spaceship).
+2. DNSSEC: the DS record from Cloudflare is published at Spaceship and Cloudflare
+   shows DNSSEC **Success** (until then validating resolvers may return SERVFAIL).
+3. Workers → owlbear-legacy-trial → Domains: `vtt.pangbai.de` certificate **Active**.
+4. `curl https://vtt.pangbai.de/health` returns `{"ok":true,...}`.
+5. Run the protocol and browser tests with `TEST_BROKER=https://vtt.pangbai.de`. The deployment config serves `/game/*` as SPA routes and sends `/ws`,
 `/health`, and `/iceservers` to the Worker. `wrangler.jsonc` is the backend-only
 local configuration (`npm run dev`).
 

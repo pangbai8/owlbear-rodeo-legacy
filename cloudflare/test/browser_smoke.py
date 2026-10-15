@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
-BASE = os.environ.get("TEST_BROKER", "https://owlbear-legacy-trial.findstars-worker.workers.dev")
+BASE = os.environ.get("TEST_BROKER", "https://vtt.pangbai.de")
 RESULTS = Path(__file__).resolve().parents[1] / "test-results"
 RESULTS.mkdir(exist_ok=True)
 

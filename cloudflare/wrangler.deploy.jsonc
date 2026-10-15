@@ -2,6 +2,10 @@
   "name": "owlbear-legacy-trial",
   "main": "worker.mjs",
   "compatibility_date": "2026-10-01",
+  // Keep the workers.dev URL working alongside the custom domain
+  // (setting routes would otherwise disable it by default).
+  "workers_dev": true,
+  "routes": [{ "pattern": "vtt.pangbai.de", "custom_domain": true }],
   "assets": {
     "directory": "../build",
     "not_found_handling": "single-page-application",
@@ -12,6 +16,6 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   "vars": {
-    "ALLOWED_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000,https://owlbear-legacy-trial.findstars-worker.workers.dev",
+    "ALLOWED_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000,https://owlbear-legacy-trial.findstars-worker.workers.dev,https://vtt.pangbai.de",
   },
 }
