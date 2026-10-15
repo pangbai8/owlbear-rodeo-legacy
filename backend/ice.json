@@ -1,3 +1,10 @@
 {
-  "iceServers": [{ "urls": "stun:stun.telbo.com:3478" }]
+  "iceServers": [
+    {
+      "urls": "stun:stun.miwifi.com:3478"
+    },
+    {
+      "urls": "stun:stun.hitv.com:3478"
+    }
+  ]
 }
