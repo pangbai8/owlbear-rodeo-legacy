@@ -2,10 +2,18 @@ import { useState } from "react";
 import { useToasts } from "react-toast-notifications";
 
 import Vector2 from "../helpers/Vector2";
+import {
+  isMonsterDrag,
+  loadMonster,
+  monsterTokenFile,
+  parseMonsterDrag,
+} from "../helpers/fiveETools";
 
 export type ImageDropEvent = {
   files: File[];
   dropPosition: Vector2;
+  /** A monster from the quick search: always a token, never a map */
+  asToken?: boolean;
 };
 
 export type OtherFilesDropOptions = {
@@ -24,11 +32,13 @@ function useImageDrop(
 
   const [dragging, setDragging] = useState(false);
   const [draggingOther, setDraggingOther] = useState(false);
+  const [draggingMonster, setDraggingMonster] = useState(false);
   function onDragEnter(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
     setDragging(true);
     setDraggingOther(!!isOtherDrag?.(event.dataTransfer));
+    setDraggingMonster(isMonsterDrag(event.dataTransfer));
   }
 
   function onDragLeave(event: React.DragEvent<HTMLDivElement>) {
@@ -48,6 +58,21 @@ function useImageDrop(
   async function onDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
+    const dropPosition = new Vector2(event.clientX, event.clientY);
+
+    // A monster dragged from the quick search: token art sized by creature size
+    const monster = parseMonsterDrag(event.dataTransfer);
+    if (monster) {
+      setDragging(false);
+      try {
+        const file = await monsterTokenFile(await loadMonster(monster));
+        onImageDrop({ files: [file], dropPosition, asToken: true });
+      } catch (e) {
+        addToast(`无法添加怪物：${e instanceof Error ? e.message : e}`);
+      }
+      return;
+    }
+
     let imageFiles = [];
 
     // Check if the dropped image is from a URL
@@ -102,7 +127,6 @@ function useImageDrop(
     for (let file of otherFiles) {
       addToast(`Unsupported file type for ${file.name}`);
     }
-    const dropPosition = new Vector2(event.clientX, event.clientY);
     // Nothing to do when only other files were dropped
     if (imageFiles.length > 0 || !onOtherFiles) {
       onImageDrop({ files: imageFiles, dropPosition });
@@ -113,7 +137,13 @@ function useImageDrop(
   const containerListeners = { onDragEnter };
   const overlayListeners = { onDragLeave, onDragOver, onDrop };
 
-  return { dragging, draggingOther, containerListeners, overlayListeners };
+  return {
+    dragging,
+    draggingOther,
+    draggingMonster,
+    containerListeners,
+    overlayListeners,
+  };
 }
 
 export default useImageDrop;

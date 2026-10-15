@@ -247,6 +247,177 @@
     request({ op: "clear" }).catch(function () {});
   });
 
+  /* ---------- monsters dragged from the VTT's 5e quick search ---------- */
+
+  var MONSTER_TYPE = "application/x-owlbear-monster";
+  var TEAM_KEY = "dnd-active-team"; // the panel's own "current team" key
+  var monsterRequests = new Map();
+  var nextMonsterRequest = 1;
+
+  function isMonsterDrag(event) {
+    var types = event.dataTransfer && event.dataTransfer.types;
+    return !!types && Array.prototype.indexOf.call(types, MONSTER_TYPE) >= 0;
+  }
+
+  function notice(text, isError) {
+    var el = document.getElementById("party-shim-notice");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "party-shim-notice";
+      el.style.cssText =
+        "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;padding:8px 14px;border-radius:8px;color:#fff;font:14px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4)";
+      document.body.appendChild(el);
+    }
+    el.style.background = isError ? "#7a2730" : "#2f6b45";
+    el.textContent = text;
+    el.hidden = false;
+    clearTimeout(notice.timer);
+    notice.timer = setTimeout(function () {
+      el.hidden = true;
+    }, 3000);
+  }
+
+  function dropHint(show) {
+    var el = document.getElementById("party-shim-drop");
+    if (!el && show) {
+      el = document.createElement("div");
+      el.id = "party-shim-drop";
+      el.textContent = "放下即可加入当前小队（作为 NPC）";
+      el.style.cssText =
+        "position:fixed;inset:6px;z-index:99998;display:flex;align-items:center;justify-content:center;border:2px dashed #c9b6ff;border-radius:12px;background:rgba(20,18,30,.75);color:#e9e2ff;font:16px system-ui,sans-serif;pointer-events:none";
+      document.body.appendChild(el);
+    }
+    if (el) el.hidden = !show;
+  }
+
+  /** The VTT page looks the monster up (one shared loader) and answers */
+  function askVtt(ref) {
+    var target = window.parent !== window ? window.parent : window.opener;
+    if (!target) return Promise.reject(new Error("请在 VTT 里打开小队面板"));
+    var id = nextMonsterRequest++;
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () {
+        monsterRequests.delete(id);
+        reject(new Error("读取怪物数据超时"));
+      }, 20000);
+      monsterRequests.set(id, function (data) {
+        clearTimeout(timer);
+        data.error ? reject(new Error(data.error)) : resolve(data.stats);
+      });
+      target.postMessage({ type: "party-panel-monster", id: id, ref: ref }, location.origin);
+    });
+  }
+
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (event.origin !== location.origin || !data || data.type !== "party-panel-monster-result") return;
+    var done = monsterRequests.get(data.id);
+    if (done) {
+      monsterRequests.delete(data.id);
+      done(data);
+    }
+  });
+
+  /** The team the panel shows: its saved choice if it exists here, else the oldest */
+  function currentTeam() {
+    var saved = null;
+    try {
+      saved = localStorage.getItem(TEAM_KEY);
+    } catch (e) {}
+    if (saved && docs.has("teams/" + saved)) return saved;
+    var teams = [];
+    docs.forEach(function (data, path) {
+      var m = path.match(/^teams\/([^/]+)$/);
+      if (m) teams.push({ id: m[1], created: (data && data.created) || 0 });
+    });
+    teams.sort(function (a, b) {
+      return a.created - b.created;
+    });
+    return teams.length ? teams[0].id : saved || "main";
+  }
+
+  function uniqueName(team, name) {
+    var taken = new Set();
+    docs.forEach(function (data, path) {
+      if (path.indexOf("teams/" + team + "/members/") === 0 && data) taken.add(data.name);
+    });
+    if (!taken.has(name)) return name;
+    for (var n = 2; ; n++) if (!taken.has(name + " " + n)) return name + " " + n;
+  }
+
+  function addMonster(stats) {
+    var team = currentTeam();
+    var writes = [];
+    if (!docs.has("teams/" + team)) {
+      writes.push(
+        db.doc("teams/" + team).set({
+          name: "我的小队",
+          created: Date.now(),
+          meta: { round: 0, turn: null, sortInit: true, spellSystem: "slots", multiConc: false },
+        })
+      );
+    }
+    var name = uniqueName(team, stats.name);
+    var hp = stats.hp && stats.hp > 0 ? stats.hp : 10;
+    // Same shape as the panel's "+ NPC"; the panel fills in the rest
+    var npc = {
+      name: name,
+      clsLabel: "NPC",
+      cls: "",
+      level: 1,
+      hp: hp,
+      maxHp: hp,
+      temp: 0,
+      ac: stats.ac != null ? stats.ac : 10,
+      init: 0,
+      initBonus: stats.initBonus || 0,
+      initPending: true,
+      initManual: false,
+      created: Date.now(),
+    };
+    var id = "c" + Math.random().toString(36).slice(2, 10);
+    writes.push(db.doc("teams/" + team + "/members/" + id).set(npc));
+    return Promise.all(writes).then(function () {
+      return name;
+    });
+  }
+
+  document.addEventListener("dragenter", function (event) {
+    if (!isMonsterDrag(event)) return;
+    event.preventDefault();
+    dropHint(true);
+  });
+  document.addEventListener("dragover", function (event) {
+    if (!isMonsterDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    dropHint(true);
+  });
+  document.addEventListener("dragleave", function (event) {
+    if (!event.relatedTarget) dropHint(false);
+  });
+  document.addEventListener("drop", function (event) {
+    if (!isMonsterDrag(event)) return;
+    event.preventDefault();
+    dropHint(false);
+    var ref;
+    try {
+      ref = JSON.parse(event.dataTransfer.getData(MONSTER_TYPE));
+    } catch (e) {
+      return;
+    }
+    if (fatal) return notice("无法连接房间的小队数据", true);
+    notice("正在读取「" + ref.name + "」…");
+    askVtt(ref)
+      .then(addMonster)
+      .then(function (name) {
+        notice("已把「" + name + "」加入小队");
+      })
+      .catch(function (error) {
+        notice("添加失败：" + (error && error.message ? error.message : error), true);
+      });
+  });
+
   window.claude = Object.assign(window.claude || {}, {
     use: function (name) {
       if (name !== "db") return Promise.reject(new Error("unsupported: " + name));
