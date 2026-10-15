@@ -1,0 +1,51 @@
+diff --git a/lib/embed-mode.ts b/lib/embed-mode.ts
+index 0ac57d9..876e968 100644
+--- a/lib/embed-mode.ts
++++ b/lib/embed-mode.ts
+@@ -25,3 +25,13 @@ export function isEmbedMode(): boolean {
+     return value === '' || value === '1' || value === 'true';
+   });
+ }
++
++/**
++ * `chrome=minimal` on the editor URL: start without toolbar, side menus and
++ * header so a host page can show just the document. The vendor applies layout
++ * customization once at boot, so a host toggles it by reloading the editor.
++ */
++export function isMinimalChrome(): boolean {
++  if (typeof window === 'undefined') return false;
++  return new URLSearchParams(window.location.search).get('chrome') === 'minimal';
++}
+diff --git a/lib/onlyoffice-editor.ts b/lib/onlyoffice-editor.ts
+index 17892ca..11162db 100644
+--- a/lib/onlyoffice-editor.ts
++++ b/lib/onlyoffice-editor.ts
+@@ -1,4 +1,4 @@
+-import { isEmbedMode } from './embed-mode';
++import { isEmbedMode, isMinimalChrome } from './embed-mode';
+ import 'ranui/message';
+ import { waitForAppWorkerControl } from './offline-worker-control';
+ import { getOnlyOfficeLang, t } from '@ranuts/shared/i18n';
+@@ -227,6 +227,22 @@ function createPersonalEditorInstance(config: {
+         hideRightMenu: true,
+         uiTheme: resolveUiTheme(),
+         ...(isCompactViewport() ? compactViewportCustomization() : {}),
++        ...(isMinimalChrome()
++          ? {
++              compactHeader: true,
++              toolbarNoTabs: true,
++              toolbarHideFileName: true,
++              hideRulers: true,
++              layout: {
++                toolbar: false,
++                leftMenu: false,
++                rightMenu: false,
++                // Spreadsheets keep the status bar: it holds the sheet tabs
++                statusBar: DOCUMENT_TYPE_MAP[normalizedType] === 'cell',
++                header: { editMode: false, save: false, user: false, users: false },
++              },
++            }
++          : {}),
+         features: {
+           featuresTips: false,
+           // Spellcheck is fully disabled (mode:false turns it off, not just

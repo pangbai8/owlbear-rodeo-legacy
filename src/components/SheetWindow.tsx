@@ -23,6 +23,7 @@ import {
 export const sheetEditorUrl = process.env.REACT_APP_SHEET_EDITOR_URL || "";
 
 const AUTOSAVE_DELAY = 3000;
+const HIDE_TOOLS_STORAGE_KEY = "characterSheets.hideTools";
 
 type SaveWaiter = { resolve: () => void; reject: (error: Error) => void };
 
@@ -35,12 +36,24 @@ function clearSaveTimer(
   }
 }
 
-function editorSrc() {
+function editorSrc(hideTools: boolean) {
   const url = new URL("/editor", sheetEditorUrl);
   url.searchParams.set("embed", "1");
   url.searchParams.set("embedOrigin", window.location.origin);
   url.searchParams.set("locale", navigator.language || "en");
+  if (hideTools) {
+    // Editor patch (sheet-editor/patches): start without toolbar and menus
+    url.searchParams.set("chrome", "minimal");
+  }
   return url.toString();
+}
+
+function loadHideTools() {
+  try {
+    return localStorage.getItem(HIDE_TOOLS_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
 }
 
 function loadCurrentId() {
@@ -63,6 +76,7 @@ function SheetWindow() {
   const [isDirty, setIsDirty] = useState(false);
   const [status, setStatus] = useState("");
   const [isDropTarget, setIsDropTarget] = useState(false);
+  const [hideTools, setHideTools] = useState(loadHideTools);
   const readyRef = useRef(false);
 
   // The sheet the editor currently holds, which may lag behind currentId
@@ -358,6 +372,26 @@ function SheetWindow() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  /**
+   * Show or hide the editor's toolbar and menus. The editor fixes its layout
+   * at boot, so this saves pending edits and reloads it; the readiness effect
+   * then reopens the current sheet.
+   */
+  async function handleToggleTools() {
+    if (dirtyRef.current) {
+      await requestSave();
+    }
+    const next = !hideTools;
+    try {
+      localStorage.setItem(HIDE_TOOLS_STORAGE_KEY, String(next));
+    } catch {}
+    readyRef.current = false;
+    openedRef.current = null;
+    setIsReady(false);
+    setStatus("");
+    setHideTools(next);
+  }
+
   /** Switch a PDF between filling its form fields and annotating / editing it */
   async function handleTogglePdfMode() {
     const opened = openedRef.current;
@@ -457,6 +491,19 @@ function SheetWindow() {
         <Button
           variant="secondary"
           py={1}
+          onClick={handleToggleTools}
+          disabled={!isReady}
+          title={
+            hideTools
+              ? "Show the editor's toolbar and menus"
+              : "Hide the editor's toolbar and menus"
+          }
+        >
+          {hideTools ? "Show Tools" : "Hide Tools"}
+        </Button>
+        <Button
+          variant="secondary"
+          py={1}
           onClick={handleDownload}
           disabled={!hasSheet}
         >
@@ -477,7 +524,7 @@ function SheetWindow() {
       <Box sx={{ position: "relative", flexGrow: 1 }}>
         <iframe
           ref={iframeRef}
-          src={editorSrc()}
+          src={editorSrc(hideTools)}
           title="Character Sheet Editor"
           allow="clipboard-read; clipboard-write; fullscreen"
           style={{

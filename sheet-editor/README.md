@@ -1,7 +1,7 @@
 # Character sheet editor (sheets.pangbai.de)
 
 Static deployment of [ranuts/document](https://github.com/ranuts/document)
-(AGPL-3.0, unmodified, pinned in `build.sh`): ONLYOFFICE's editors and its
+(AGPL-3.0, pinned in `build.sh`, with the changes in `patches/`): ONLYOFFICE's editors and its
 x2t converter compiled to WebAssembly, running entirely in the browser.
 
 Owlbear embeds `/editor?embed=1` in the "Character Sheets" window and drives it
@@ -9,6 +9,10 @@ through the [iframe API](https://github.com/ranuts/document/blob/main/docs/embed
 Sheet files never reach a server: Owlbear keeps them in the player's own
 browser (IndexedDB) and passes the bytes to the editor with `postMessage`.
 
+- `patches/minimal-chrome.patch` adds `chrome=minimal` to the editor URL: the
+  editor starts without toolbar, header and side menus (spreadsheets keep the
+  status bar with the sheet tabs). Owlbear's "Hide Tools" uses it; layout is
+  fixed at boot, so toggling reloads the editor.
 - `.xlsm` opens fine but is saved as `.xlsx`: VBA macros are not run or kept.
 - The x2t module is pre-compressed Brotli; `worker.mjs` serves it with
   `Content-Encoding: br` and `encodeBody: "manual"` so it is not re-encoded.
