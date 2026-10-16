@@ -217,7 +217,7 @@ body.pipdoc .mi-ac b{font-size:15px}
 /* 5e mode (the VTT's book button): chips open their 5e card; monster cards only then */
 body.fiveE [data-lookup]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 body:not(.fiveE) [data-act="monster"]{display:none}
-body[data-rules="5e"] [data-act="monster"][data-system="pf2"],body[data-rules="pf2"] [data-act="monster"]:not([data-system="pf2"]){display:none}
+body[data-rules="4e"] [data-act="monster"],body[data-rules="5e"] [data-act="monster"][data-system="pf2"],body[data-rules="pf2"] [data-act="monster"]:not([data-system="pf2"]){display:none}
 .qdel-armed,.mi-btns .qdel-armed{background:var(--crit);border-color:var(--crit);color:#fff;font-size:12px}
 #autoMapBtn[aria-pressed="true"]{border-color:var(--good);color:var(--good)}
 .cbtn[aria-pressed="true"]{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--sunk))}
@@ -410,16 +410,41 @@ const PF2_CONDS=[
   ["石化",false,"化为石像，不能行动"],
   ["无踪",false,"对方不知道你的位置"]
 ];
-/* PF2 rules: the VTT's PF2 button (same-origin localStorage) */
-function pf2Rules(){try{return localStorage.getItem("ruleSystem")==="pf2"}catch(e){return false}}
+/* 4e conditions (the VTT's src/helpers/conditions.ts keeps the same list) */
+const D4_CONDS=[
+  ["被标记",false,"攻击不包括标记者的目标时攻击骰 −2"],
+  ["晕眩",false,"每回合只能进行一个标准、移动或次要动作；不能即时或借机动作；提供战斗优势"],
+  ["定身",false,"无法移动，除非传送或被拉近、推离、滑动"],
+  ["迟缓",false,"速度变为 2，不能从速度加值获益"],
+  ["倒地",false,"攻击骰 −2；近战攻击者获得战斗优势，不邻近的远程攻击对你 +2 防御"],
+  ["虚弱",false,"攻击只造成一半伤害（持续伤害等除外）"],
+  ["震慑",false,"无法进行动作；提供战斗优势；无法夹击"],
+  ["目盲",false,"看不见，目标对你全隐蔽；侦查 −10；提供战斗优势"],
+  ["束缚",false,"无法移动（传送除外）；攻击骰 −2；提供战斗优势"],
+  ["被擒拿",false,"定身；擒拿者受阻或你离开范围时结束"],
+  ["被支配",false,"由支配者每回合替你选择一个动作；提供战斗优势"],
+  ["持续伤害",true,"回合开始时受到等同数值的伤害（豁免终止）"],
+  ["耳聋",false,"听不到声音；侦查 −10"],
+  ["无助",false,"提供战斗优势；可被致命一击"],
+  ["失去意识",false,"无助、无法进行动作；所有防御 −5；可能倒地"],
+  ["濒死",false,"失去意识；必须进行死亡豁免"],
+  ["石化",false,"失去意识；20 点全伤害抗力；不会衰老"],
+  ["被突袭",false,"无法进行动作；提供战斗优势；无法夹击"],
+  ["移除游戏",false,"无法进行动作，与其他东西互无视线和效果线"]
+];
+/* The VTT's rules mode (same-origin localStorage): 5e, pf2 or 4e */
+function rules(){try{const v=localStorage.getItem("ruleSystem");return v==="pf2"||v==="4e"?v:"5e"}catch(e){return "5e"}}
+/* PF2 or 4e: their own condition table instead of the 5e library */
+function pf2Rules(){return rules()!=="5e"}
+function ruleConds(){return rules()==="4e"?D4_CONDS:PF2_CONDS}
 function p2Parse(t){const m=String(t).trim().match(/^(.*?)\s*(\d+)$/);return m?{n:m[1],v:+m[2]}:{n:String(t).trim(),v:null}}
-function p2Entry(n){return PF2_CONDS.find(x=>x[0]===n)}
+function p2Entry(n){return ruleConds().find(x=>x[0]===n)}
 function p2Value(conds,n){for(const t of conds){const p=p2Parse(t);if(p.n===n)return p.v==null?0:p.v}return null}
 function p2Set(conds,n,v){const valued=(p2Entry(n)||[])[1],remove=v==null||(valued&&v<=0),text=valued?n+" "+v:n,i=conds.findIndex(t=>p2Parse(t).n===n);if(i<0)return remove?conds:conds.concat(text);const next=conds.slice();if(remove)next.splice(i,1);else next[i]=text;return next}
 function pf2CondGrid(c){
-  return `<div class="sec-h"><h3>PF2 状态</h3></div><div class="condgrid">${PF2_CONDS.map(([n,valued,d])=>{const v=p2Value(c.conds,n),on=v!==null;
-    return `<div class="condentry"><button class="cbtn" aria-pressed="${on}" data-p2="${esc(n)}"><b>${esc(n)}${valued&&on?" "+v:""}${P2_AC[n]?`<span class="p2ac">${P2_AC[n].s==="v"?"AC−X":"AC−"+((P2_AC[n].c||0)+(P2_AC[n].s||0))}</span>`:""}</b><small>${esc(d)}</small></button>${valued&&on?`<span class="counter p2step"><button data-p2step="${esc(n)}" data-d="-1" aria-label="${esc(n)} 减 1">−</button><b>${v}</b><button data-p2step="${esc(n)}" data-d="1" aria-label="${esc(n)} 加 1">＋</button></span>`:""}</div>`}).join("")}</div>
-    <p class="hint">带数值的状态点一下设为 1，再用 −/＋ 调整，减到 0 自动移除。和这个 NPC 关联的地图棋子会同步显示。<br>标了 AC 的状态会自动计入 AC：措手不及类（−2）只算一次，状态减值取最大的那个，两类相加。</p>`;
+  return `<div class="sec-h"><h3>${rules()==="4e"?"4e":"PF2"} 状态</h3></div><div class="condgrid">${ruleConds().map(([n,valued,d])=>{const v=p2Value(c.conds,n),on=v!==null;
+    return `<div class="condentry"><button class="cbtn" aria-pressed="${on}" data-p2="${esc(n)}"><b>${esc(n)}${valued&&on?" "+v:""}${acTable()[n]?`<span class="p2ac">${acTable()[n].s==="v"?"AC−X":"AC−"+((acTable()[n].c||0)+(acTable()[n].s||0))}</span>`:""}</b><small>${esc(d)}</small></button>${valued&&on?`<span class="counter p2step"><button data-p2step="${esc(n)}" data-d="-1" aria-label="${esc(n)} 减 1">−</button><b>${v}</b><button data-p2step="${esc(n)}" data-d="1" aria-label="${esc(n)} 加 1">＋</button></span>`:""}</div>`}).join("")}</div>
+    <p class="hint">带数值的状态点一下设为 1，再用 −/＋ 调整，减到 0 自动移除。和这个 NPC 关联的地图棋子会同步显示。<br>${rules()==="4e"?"标了 AC 的状态会自动计入 AC（失去意识：所有防御 −5）。":"标了 AC 的状态会自动计入 AC：措手不及类（−2）只算一次，状态减值取最大的那个，两类相加。"}</p>`;
 }
 const FX_PRESETS=[
   {name:"祝福",kind:"buff",rounds:10,ac:0,note:"攻击与豁免 +1d4 · 专注"},
@@ -496,18 +521,20 @@ function addConc(c,name){
 }
 /* PF2 conditions that lower AC: c = circumstance penalty (off-guard and the
    conditions that make you off-guard), s = status penalty ("v": its value) */
+const P4_AC={失去意识:{s:5}};
 const P2_AC={措手不及:{c:2},倒地:{c:2},受擒:{c:2},束缚:{c:2},麻痹:{c:2},困惑:{c:2},失去意识:{c:2,s:4},疲乏:{s:1},超载:{s:1},笨拙:{s:"v"},惊惧:{s:"v"},恶心:{s:"v"}};
 function p2AcParts(c){
   if(!pf2Rules())return [];
   let circ=null,stat=null;
   for(const t of c.conds){
-    const p=p2Parse(t),d=P2_AC[p.n];if(!d)continue;
+    const p=p2Parse(t),d=(rules()==="4e"?P4_AC:P2_AC)[p.n];if(!d)continue;
     if(d.c&&(!circ||d.c>circ.v))circ={t:p.n==="措手不及"?t:t+"（措手不及）",v:d.c};
     const sv=d.s==="v"?(p.v||0):(d.s||0);
     if(sv&&(!stat||sv>stat.v))stat={t,v:sv};
   }
   return [circ,stat].filter(Boolean);
 }
+function acTable(){return rules()==="4e"?P4_AC:P2_AC}
 function p2AcPenalty(c){return p2AcParts(c).reduce((s,x)=>s+x.v,0)}
 function effAC(c){return c.ac+c.fx.reduce((s,f)=>s+(f.ac||0),0)-p2AcPenalty(c)}
 /* The AC shield's tooltip: base, effects, conditions */

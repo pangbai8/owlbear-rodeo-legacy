@@ -3,6 +3,7 @@
 // served with Access-Control-Allow-Origin: *); nothing is copied to this site.
 
 import type { Pf2Location } from "./pf2";
+import type { Dnd4eLocation } from "./dnd4e";
 import { PF2_WIKI, loadPf2Monster } from "./pf2";
 
 export const FIVE_E_BASE = "https://5e.kiwee.top/";
@@ -146,10 +147,14 @@ export type SearchResult = {
   /** From a 5e 2024 rules book (shown dimmed; the table plays 2014) */
   modern: boolean;
   isMonster: boolean;
-  /** From the PF2 mirror (see pf2.ts) instead of 5etools */
-  system?: "pf2";
+  /** From the PF2 or 4e mirror (pf2.ts, dnd4e.ts) instead of 5etools */
+  system?: "pf2" | "4e";
   /** Where a PF2 result's record is */
   pf2?: Pf2Location;
+  /** Where a 4e result's record is */
+  dnd4e?: Dnd4eLocation;
+  /** Color for its category label in the results (4e powers by usage) */
+  accent?: string;
 };
 
 type SearchIndex = {

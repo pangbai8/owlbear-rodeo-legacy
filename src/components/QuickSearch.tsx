@@ -7,7 +7,9 @@ import MonsterCard from "./MonsterCard";
 import { useFloatingWindow } from "../contexts/FloatingWindowContext";
 import EntryCardView from "./EntryCardView";
 import Pf2Card from "./Pf2Card";
+import Dnd4eCard from "./Dnd4eCard";
 import { loadPf2Index, searchPf2 } from "../helpers/pf2";
+import { loadDnd4eIndex, searchDnd4e } from "../helpers/dnd4e";
 import { useRuleSystem } from "../helpers/ruleSystem";
 import { hasEntryCard } from "../helpers/fiveEEntries";
 import {
@@ -58,7 +60,7 @@ function QuickSearch() {
   // Monsters show a compact stat card; other entries (or "full page") show
   // the 5etools page itself, which needs a wide panel for its desktop layout
   const [fullPage, setFullPage] = useState(false);
-  // 5e mode searches 5etools, PF2 mode the PF2 wiki mirror
+  // 5e mode searches 5etools, PF2 and 4e modes their wiki mirrors
   const system = useRuleSystem();
   const selectedMonster = useMemo(
     () =>
@@ -85,7 +87,7 @@ function QuickSearch() {
     const id = ++searchId.current;
     setStatus("loading");
     const timer = setTimeout(() => {
-      (system === "pf2" ? searchPf2 : searchFiveE)(q)
+      (system === "pf2" ? searchPf2 : system === "4e" ? searchDnd4e : searchFiveE)(q)
         .then((found) => {
           if (id !== searchId.current) return;
           setResults(found);
@@ -104,10 +106,10 @@ function QuickSearch() {
     return () => clearTimeout(timer);
   }, [query, system]);
 
-  // Switching between 5e and PF2: the open card belongs to the other one
+  // Switching rules: the open card belongs to the other ones
   useEffect(() => {
     setSelected((current) =>
-      current && (current.system === "pf2") !== (system === "pf2") ? null : current
+      current && (current.system || "5e") !== system ? null : current
     );
   }, [system]);
 
@@ -164,9 +166,12 @@ function QuickSearch() {
 
   function handleFocus() {
     setOpen(true);
-    (system === "pf2" ? loadPf2Index() : loadSearchIndex()).catch(() =>
-      setStatus("error")
-    );
+    (system === "pf2"
+      ? loadPf2Index()
+      : system === "4e"
+      ? loadDnd4eIndex()
+      : loadSearchIndex()
+    ).catch(() => setStatus("error"));
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -196,12 +201,14 @@ function QuickSearch() {
   const showPanel = open && (query.trim() !== "" || selected !== null);
   // Monsters, spells, items, ... get a card of their own; the rest (classes,
   // books, ...) and "full page" show the 5etools page
-  // PF2 entries always have a card (the wiki cannot be shown in a frame)
+  // PF2 and 4e entries always have a card (their wikis are not framed)
   const pf2Selected = selected?.system === "pf2";
+  const dnd4eSelected = selected?.system === "4e";
   const hasCard =
     selected !== null &&
-    (pf2Selected || !!selectedMonster || hasEntryCard(selected));
-  const showPage = selected !== null && !pf2Selected && (!hasCard || fullPage);
+    (pf2Selected || dnd4eSelected || !!selectedMonster || hasEntryCard(selected));
+  const showPage =
+    selected !== null && !pf2Selected && !dnd4eSelected && (!hasCard || fullPage);
   const openFullPage = () => {
     setPageLoading(true);
     setFullPage(true);
@@ -258,9 +265,13 @@ function QuickSearch() {
           placeholder={
             system === "pf2"
               ? "查 PF2 资料：生物、法术、专长…（Ctrl+K）"
+              : system === "4e"
+              ? "查 4e 资料：威能、专长、物品…（Ctrl+K）"
               : "查 5e 资料：怪物、法术、物品…（Ctrl+K）"
           }
-          aria-label={system === "pf2" ? "Search PF2" : "Search 5etools"}
+          aria-label={
+            system === "pf2" ? "Search PF2" : system === "4e" ? "Search 4e" : "Search 5etools"
+          }
           sx={{
             border: "none",
             bg: "transparent",
@@ -377,7 +388,9 @@ function QuickSearch() {
                 </Box>
               ) : (
                 <Box sx={{ flexGrow: 1, overflowY: "auto" }}>
-                  {pf2Selected ? (
+                  {dnd4eSelected ? (
+                    <Dnd4eCard result={selected} />
+                  ) : pf2Selected ? (
                     <Pf2Card result={selected} />
                   ) : selectedMonster ? (
                     <MonsterCard
@@ -397,8 +410,8 @@ function QuickSearch() {
             <Box sx={{ maxHeight: "min(60vh, 520px)", overflowY: "auto" }}>
               {status === "error" && (
                 <Text sx={{ p: 2, fontSize: 1 }}>
-                  {system === "pf2"
-                    ? "加载 PF2 资料失败，请检查网络后再试。"
+                  {system === "pf2" || system === "4e"
+                    ? `加载 ${system === "pf2" ? "PF2" : "4e"} 资料失败，请检查网络后再试。`
                     : "加载 5etools 失败，请检查网络后再试。"}
                 </Text>
               )}
@@ -445,8 +458,8 @@ function QuickSearch() {
                       px: 1,
                       mr: 2,
                       borderRadius: "4px",
-                      bg: result.isMonster ? "primary" : "muted",
-                      color: result.isMonster ? "background" : "text",
+                      bg: result.accent || (result.isMonster ? "primary" : "muted"),
+                      color: result.accent ? "white" : result.isMonster ? "background" : "text",
                       whiteSpace: "nowrap",
                     }}
                   >

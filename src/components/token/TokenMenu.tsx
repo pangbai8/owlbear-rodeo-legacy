@@ -92,7 +92,7 @@ function TokenMenu({
     lookupsOn &&
     token &&
     token.owner === userId &&
-    (token.monster?.system === "pf2") === (ruleSystem === "pf2")
+    (token.monster?.system || "5e") === ruleSystem
       ? token.monster
       : undefined;
 
