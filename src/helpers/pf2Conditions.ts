@@ -59,10 +59,16 @@ export function conditionValue(conditions: string[], name: string) {
 
 /** Sets a condition: null (or 0 for a valued one) removes it */
 export function setCondition(conditions: string[], name: string, value: number | null) {
-  const rest = conditions.filter((text) => parseCondition(text).name !== name);
   const valued = BY_NAME.get(name)?.[1];
-  if (value === null || (valued && value <= 0)) return rest;
-  return [...rest, valued ? `${name} ${value}` : name];
+  const remove = value === null || (valued && value <= 0);
+  const text = valued ? `${name} ${value}` : name;
+  // A changed value keeps its place, so the list does not jump around
+  const index = conditions.findIndex((t) => parseCondition(t).name === name);
+  if (index < 0) return remove ? conditions : [...conditions, text];
+  const next = [...conditions];
+  if (remove) next.splice(index, 1);
+  else next[index] = text;
+  return next;
 }
 
 export function conditionSummary(text: string) {

@@ -13,8 +13,9 @@ test("conditions are strings, with a value for valued ones", () => {
   let list = setCondition([], "惊惧", 1);
   list = setCondition(list, "倒地", 0);
   expect(list).toEqual(["惊惧 1", "倒地"]);
+  // A new value keeps its place
   list = setCondition(list, "惊惧", 3);
-  expect(list).toEqual(["倒地", "惊惧 3"]);
+  expect(list).toEqual(["惊惧 3", "倒地"]);
   expect(conditionValue(list, "惊惧")).toBe(3);
   expect(conditionValue(list, "倒地")).toBe(0);
   expect(conditionValue(list, "恶心")).toBeNull();

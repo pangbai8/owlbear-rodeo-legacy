@@ -414,7 +414,7 @@ function pf2Rules(){try{return localStorage.getItem("ruleSystem")==="pf2"}catch(
 function p2Parse(t){const m=String(t).trim().match(/^(.*?)\s*(\d+)$/);return m?{n:m[1],v:+m[2]}:{n:String(t).trim(),v:null}}
 function p2Entry(n){return PF2_CONDS.find(x=>x[0]===n)}
 function p2Value(conds,n){for(const t of conds){const p=p2Parse(t);if(p.n===n)return p.v==null?0:p.v}return null}
-function p2Set(conds,n,v){const rest=conds.filter(t=>p2Parse(t).n!==n),valued=(p2Entry(n)||[])[1];if(v==null||(valued&&v<=0))return rest;return rest.concat(valued?n+" "+v:n)}
+function p2Set(conds,n,v){const valued=(p2Entry(n)||[])[1],remove=v==null||(valued&&v<=0),text=valued?n+" "+v:n,i=conds.findIndex(t=>p2Parse(t).n===n);if(i<0)return remove?conds:conds.concat(text);const next=conds.slice();if(remove)next.splice(i,1);else next[i]=text;return next}
 function pf2CondGrid(c){
   return `<div class="sec-h"><h3>PF2 状态</h3></div><div class="condgrid">${PF2_CONDS.map(([n,valued,d])=>{const v=p2Value(c.conds,n),on=v!==null;
     return `<div class="condentry"><button class="cbtn" aria-pressed="${on}" data-p2="${esc(n)}"><b>${esc(n)}${valued&&on?" "+v:""}</b><small>${esc(d)}</small></button>${valued&&on?`<span class="counter p2step"><button data-p2step="${esc(n)}" data-d="-1" aria-label="${esc(n)} 减 1">−</button><b>${v}</b><button data-p2step="${esc(n)}" data-d="1" aria-label="${esc(n)} 加 1">＋</button></span>`:""}</div>`}).join("")}</div>
