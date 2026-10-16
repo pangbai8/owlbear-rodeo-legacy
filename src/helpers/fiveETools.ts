@@ -207,17 +207,38 @@ export function loadSearchIndex() {
   return indexPromise;
 }
 
-// 2014 core books come first; the table plays with those rules. The boost
-// only reorders equally good name matches (exact > prefix > contains).
+// Which rules come first: "2014" (5e mode: the 2014 core books first, 2024
+// books dimmed) or "2024" (5r mode: 2024 books first and highlighted, older
+// entries a 2024 book replaced dimmed). The boost only reorders equally good
+// name matches (exact > prefix > contains).
+export type Edition = "2014" | "2024";
 const PREFERRED_SOURCES = new Set(["MM", "PHB", "DMG"]);
 const PREFERRED_BOOST = 20;
+/** 5r mode: the label color of 2024 results */
+export const EDITION_2024_COLOR = "#2e7d6b";
+
+function sourceBonus(source: string, entry: IndexEntry, modern: boolean, edition: Edition) {
+  if (edition === "2024") return modern ? PREFERRED_BOOST : entry.dR ? -15 : 0;
+  return PREFERRED_SOURCES.has(source) ? PREFERRED_BOOST : entry.dR ? -15 : 0;
+}
 
 function toResult(
   entry: IndexEntry,
-  { sources, modernSources }: Pick<SearchIndex, "sources" | "modernSources">
+  { sources, modernSources }: Pick<SearchIndex, "sources" | "modernSources">,
+  edition: Edition = "2014"
 ): SearchResult {
   const source =
     typeof entry.s === "number" ? sources[entry.s] || "" : String(entry.s);
+  const modern = modernSources.has(source);
+  if (edition === "2024") {
+    return {
+      ...toResult(entry, { sources, modernSources }),
+      // Dimmed when a 2024 book replaced it; 2024 entries stand out
+      reprinted: entry.dR === 1,
+      modern: false,
+      accent: modern ? EDITION_2024_COLOR : undefined,
+    };
+  }
   const page = CATEGORY_PAGE[entry.c] || "search.html";
   const hash = entry.uh || entry.u;
   return {
@@ -230,7 +251,7 @@ function toResult(
     url: `${FIVE_E_BASE}${page}#${hash}`,
     // Not dimmed as "old" when it is a book the table prefers
     reprinted: entry.dR === 1 && !PREFERRED_SOURCES.has(source),
-    modern: modernSources.has(source),
+    modern,
     isMonster: entry.c === CATEGORY_CREATURE,
   };
 }
@@ -245,11 +266,15 @@ export function matchScore(name: string, query: string) {
   return 0;
 }
 
-export async function searchFiveE(query: string, limit = 60) {
+export async function searchFiveE(
+  query: string,
+  limit = 60,
+  edition: Edition = "2014"
+) {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const index = await loadSearchIndex();
-  const { entries, sources } = index;
+  const { entries, sources, modernSources } = index;
   const scored: [number, IndexEntry][] = [];
   for (const entry of entries) {
     const score = Math.max(
@@ -258,12 +283,8 @@ export async function searchFiveE(query: string, limit = 60) {
     );
     if (score === 0) continue;
     const source = typeof entry.s === "number" ? sources[entry.s] : entry.s;
-    const sourceBonus = PREFERRED_SOURCES.has(source)
-      ? PREFERRED_BOOST
-      : entry.dR
-      ? -15
-      : 0;
-    scored.push([score + (CATEGORY_BOOST[entry.c] || 0) + sourceBonus, entry]);
+    const bonus = sourceBonus(source, entry, modernSources.has(source), edition);
+    scored.push([score + (CATEGORY_BOOST[entry.c] || 0) + bonus, entry]);
   }
   scored.sort(
     (a, b) =>
@@ -271,7 +292,7 @@ export async function searchFiveE(query: string, limit = 60) {
       (a[1].cn || a[1].n).length - (b[1].cn || b[1].n).length ||
       a[1].id - b[1].id
   );
-  return scored.slice(0, limit).map(([, entry]) => toResult(entry, index));
+  return scored.slice(0, limit).map(([, entry]) => toResult(entry, index, edition));
 }
 
 /* ---------- monsters ---------- */
@@ -497,13 +518,14 @@ const LOOKUP_CATEGORIES = { condition: [6, 49, 21], spell: [2] };
 /** Finds a condition or spell by name and opens its card; false if none */
 export async function lookupFiveE(
   name: string,
-  kind: keyof typeof LOOKUP_CATEGORIES
+  kind: keyof typeof LOOKUP_CATEGORIES,
+  edition: Edition = "2014"
 ) {
   const categories = LOOKUP_CATEGORIES[kind];
-  const found = (await searchFiveE(name, 200)).filter((r) =>
+  const found = (await searchFiveE(name, 200, edition)).filter((r) =>
     categories.includes(r.category)
   );
-  // Results come best first (exact names, then 2014 core books)
+  // Results come best first (exact names, then the edition's books)
   if (!found[0]) return false;
   openFiveECard(found[0]);
   return true;

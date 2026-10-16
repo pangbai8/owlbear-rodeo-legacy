@@ -3,6 +3,7 @@ import { Box, Flex, Text } from "theme-ui";
 import {
   DND4E_CONDITIONS,
   DND5E_CONDITIONS,
+  DND5R_CONDITIONS,
   PF2_CONDITIONS,
   conditionMax,
   conditionValue,
@@ -23,7 +24,13 @@ type ConditionPickerProps = {
 /** The token menu's 5e or PF2 conditions (in place of the color rings) */
 function ConditionPicker({ conditions, onChange, system }: ConditionPickerProps) {
   const table =
-    system === "pf2" ? PF2_CONDITIONS : system === "4e" ? DND4E_CONDITIONS : DND5E_CONDITIONS;
+    system === "pf2"
+      ? PF2_CONDITIONS
+      : system === "4e"
+      ? DND4E_CONDITIONS
+      : system === "5r"
+      ? DND5R_CONDITIONS
+      : DND5E_CONDITIONS;
   const set = (name: string, value: number | null) =>
     onChange(setCondition(conditions, name, value, table));
 
@@ -34,7 +41,7 @@ function ConditionPicker({ conditions, onChange, system }: ConditionPickerProps)
       system === "pf2" ? findPf2(name, "condition") : system === "4e" ? findDnd4e(name, "condition") : null;
     (find
       ? find.then((result) => result && openFiveECard(result))
-      : lookupFiveE(name, "condition")
+      : lookupFiveE(name, "condition", system === "5r" ? "2024" : "2014")
     ).catch(() => {});
   }
 

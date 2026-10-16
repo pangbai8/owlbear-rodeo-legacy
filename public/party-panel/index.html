@@ -217,7 +217,7 @@ body.pipdoc .mi-ac b{font-size:15px}
 /* 5e mode (the VTT's book button): chips open their 5e card; monster cards only then */
 body.fiveE [data-lookup]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 body:not(.fiveE) [data-act="monster"]{display:none}
-body[data-rules="4e"] [data-act="monster"],body[data-rules="5e"] [data-act="monster"][data-system="pf2"],body[data-rules="pf2"] [data-act="monster"]:not([data-system="pf2"]){display:none}
+body[data-rules="4e"] [data-act="monster"],body[data-rules="5e"] [data-act="monster"][data-system="pf2"],body[data-rules="5r"] [data-act="monster"][data-system="pf2"],body[data-rules="pf2"] [data-act="monster"]:not([data-system="pf2"]){display:none}
 .qdel-armed,.mi-btns .qdel-armed{background:var(--crit);border-color:var(--crit);color:#fff;font-size:12px}
 #autoMapBtn[aria-pressed="true"]{border-color:var(--good);color:var(--good)}
 .cbtn[aria-pressed="true"]{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--sunk))}
@@ -432,19 +432,37 @@ const D4_CONDS=[
   ["被突袭",false,"无法进行动作；提供战斗优势；无法夹击"],
   ["移除游戏",false,"无法进行动作，与其他东西互无视线和效果线"]
 ];
-/* The VTT's rules mode (same-origin localStorage): 5e, pf2 or 4e */
-function rules(){try{const v=localStorage.getItem("ruleSystem");return v==="pf2"||v==="4e"?v:"5e"}catch(e){return "5e"}}
-/* PF2 or 4e: their own condition table instead of the 5e library */
+/* 5r: the 2024 revision's conditions (exhaustion: the level counter) */
+const R5_CONDS=[
+  ["目盲",false,"看不见；需视觉的检定自动失败；攻击检定劣势，对你的攻击检定优势"],
+  ["魅惑",false,"不能攻击魅惑者或以有害效果指定它；魅惑者对你的社交检定优势"],
+  ["耳聋",false,"听不见；需听觉的检定自动失败"],
+  ["恐慌",false,"看得见恐惧源时属性检定与攻击检定劣势；不能主动靠近它"],
+  ["受擒",false,"速度为 0；攻击擒抱者以外的目标劣势；擒抱者移动时可拖着你"],
+  ["失能",false,"不能动作、附赠动作或反应；专注中断；不能说话；先攻劣势"],
+  ["隐形",false,"先攻优势；不受需看见目标的效果影响；攻击检定优势，对你的攻击劣势"],
+  ["麻痹",false,"失能且速度为 0；力量敏捷豁免自动失败；对你的攻击优势，5 尺内命中即重击"],
+  ["石化",false,"化为石像：失能、速度为 0；所有伤害抗性，免疫中毒"],
+  ["中毒",false,"攻击检定与属性检定劣势"],
+  ["倒地",false,"只能爬行或花一半速度起身；攻击劣势；5 尺内攻击你优势，更远劣势"],
+  ["束缚",false,"速度为 0；攻击检定劣势，对你的攻击优势；敏捷豁免劣势"],
+  ["震慑",false,"失能；力量敏捷豁免自动失败；对你的攻击优势"],
+  ["昏迷",false,"失能并倒地、速度为 0；力量敏捷豁免失败；对你的攻击优势，5 尺内命中即重击"]
+];
+/* The VTT's rules mode (same-origin localStorage): 5e, 5r, pf2 or 4e */
+function rules(){try{const v=localStorage.getItem("ruleSystem");return v==="5r"||v==="pf2"||v==="4e"?v:"5e"}catch(e){return "5e"}}
+/* 5r, PF2 or 4e: their own condition table instead of the 5e library */
 function pf2Rules(){return rules()!=="5e"}
-function ruleConds(){return rules()==="4e"?D4_CONDS:PF2_CONDS}
+function ruleConds(){const r=rules();return r==="4e"?D4_CONDS:r==="5r"?R5_CONDS:PF2_CONDS}
+const RULES_LABEL={"5r":"5r","pf2":"PF2","4e":"4e"};
 function p2Parse(t){const m=String(t).trim().match(/^(.*?)\s*(\d+)$/);return m?{n:m[1],v:+m[2]}:{n:String(t).trim(),v:null}}
 function p2Entry(n){return ruleConds().find(x=>x[0]===n)}
 function p2Value(conds,n){for(const t of conds){const p=p2Parse(t);if(p.n===n)return p.v==null?0:p.v}return null}
 function p2Set(conds,n,v){const valued=(p2Entry(n)||[])[1],remove=v==null||(valued&&v<=0),text=valued?n+" "+v:n,i=conds.findIndex(t=>p2Parse(t).n===n);if(i<0)return remove?conds:conds.concat(text);const next=conds.slice();if(remove)next.splice(i,1);else next[i]=text;return next}
 function pf2CondGrid(c){
-  return `<div class="sec-h"><h3>${rules()==="4e"?"4e":"PF2"} 状态</h3></div><div class="condgrid">${ruleConds().map(([n,valued,d])=>{const v=p2Value(c.conds,n),on=v!==null;
+  return `<div class="sec-h"><h3>${RULES_LABEL[rules()]||"PF2"} 状态</h3></div><div class="condgrid">${ruleConds().map(([n,valued,d])=>{const v=p2Value(c.conds,n),on=v!==null;
     return `<div class="condentry"><button class="cbtn" aria-pressed="${on}" data-p2="${esc(n)}"><b>${esc(n)}${valued&&on?" "+v:""}${acTable()[n]?`<span class="p2ac">${acTable()[n].s==="v"?"AC−X":"AC−"+((acTable()[n].c||0)+(acTable()[n].s||0))}</span>`:""}</b><small>${esc(d)}</small></button>${valued&&on?`<span class="counter p2step"><button data-p2step="${esc(n)}" data-d="-1" aria-label="${esc(n)} 减 1">−</button><b>${v}</b><button data-p2step="${esc(n)}" data-d="1" aria-label="${esc(n)} 加 1">＋</button></span>`:""}</div>`}).join("")}</div>
-    <p class="hint">带数值的状态点一下设为 1，再用 −/＋ 调整，减到 0 自动移除。和这个 NPC 关联的地图棋子会同步显示。<br>${rules()==="4e"?"标了 AC 的状态会自动计入 AC（失去意识：所有防御 −5）。":"标了 AC 的状态会自动计入 AC：措手不及类（−2）只算一次，状态减值取最大的那个，两类相加。"}</p>`;
+    <p class="hint">带数值的状态点一下设为 1，再用 −/＋ 调整，减到 0 自动移除。和这个 NPC 关联的地图棋子会同步显示。${rules()==="4e"?"<br>标了 AC 的状态会自动计入 AC（失去意识：所有防御 −5）。":rules()==="pf2"?"<br>标了 AC 的状态会自动计入 AC：措手不及类（−2）只算一次，状态减值取最大的那个，两类相加。":"<br>力竭等级在下方调整。"}</p>`;
 }
 const FX_PRESETS=[
   {name:"祝福",kind:"buff",rounds:10,ac:0,note:"攻击与豁免 +1d4 · 专注"},
@@ -527,14 +545,14 @@ function p2AcParts(c){
   if(!pf2Rules())return [];
   let circ=null,stat=null;
   for(const t of c.conds){
-    const p=p2Parse(t),d=(rules()==="4e"?P4_AC:P2_AC)[p.n];if(!d)continue;
+    const p=p2Parse(t),d=acTable()[p.n];if(!d)continue;
     if(d.c&&(!circ||d.c>circ.v))circ={t:p.n==="措手不及"?t:t+"（措手不及）",v:d.c};
     const sv=d.s==="v"?(p.v||0):(d.s||0);
     if(sv&&(!stat||sv>stat.v))stat={t,v:sv};
   }
   return [circ,stat].filter(Boolean);
 }
-function acTable(){return rules()==="4e"?P4_AC:P2_AC}
+function acTable(){const r=rules();return r==="4e"?P4_AC:r==="pf2"?P2_AC:{}}
 function p2AcPenalty(c){return p2AcParts(c).reduce((s,x)=>s+x.v,0)}
 function effAC(c){return c.ac+c.fx.reduce((s,f)=>s+(f.ac||0),0)-p2AcPenalty(c)}
 /* The AC shield's tooltip: base, effects, conditions */
@@ -1563,7 +1581,7 @@ function condModal(id,doc=document){
     <div class="sec"><div class="sec-h"><h3>角色当前状态</h3></div><div class="chips">${c.conds.length?c.conds.map(n=>`<span class="chip cond" title="${esc(condSummary(c,n))}">${esc(n)}${condLibrary.some(x=>x[0]===n)?"":`<button class="btn sm ghost" data-editcond="${esc(n)}" title="补充摘要并保存到状态库">存入库</button>`}<button class="x" data-custom-remove="${esc(n)}" aria-label="从角色移除${esc(n)}">×</button></span>`).join(""):`<span class="empty-line">无异常状态</span>`}</div></div>
     <div class="sec"><div class="sec-h"><h3>增益 / 减益</h3><button class="btn sm" data-addfx>＋ 效果</button></div><div class="chips">${c.fx.length?c.fx.map(f=>`<span class="chip ${f.kind}">${esc(f.name)}${f.rounds==null?"":" · "+f.rounds+"轮"}<button class="x" data-removefx="${esc(f.id)}" aria-label="移除${esc(f.name)}">×</button></span>`).join(""):`<span class="empty-line">没有增益或减益</span>`}</div></div>
     <div class="fields">
-      ${pf2Rules()?"":`<div class="field"><label>力竭等级（0–6）</label><span class="counter"><button data-exh="-1" aria-label="减少力竭">−</button><b>${c.exh}</b><button data-exh="1" aria-label="增加力竭">＋</button></span></div>`}
+      ${pf2Rules()&&rules()!=="5r"?"":`<div class="field"><label>力竭等级（0–6）</label><span class="counter"><button data-exh="-1" aria-label="减少力竭">−</button><b>${c.exh}</b><button data-exh="1" aria-label="增加力竭">＋</button></span></div>`}
       ${multi?`<div class="field"><label>可同时专注</label><span class="counter"><button data-cm="-1" aria-label="减少专注上限">−</button><b>${c.concMax} 个</b><button data-cm="1" aria-label="增加专注上限">＋</button></span></div>`:""}
     </div>
     <div class="sec"><div class="sec-h"><h3>专注 ${c.concs.length}/${lim}</h3></div>

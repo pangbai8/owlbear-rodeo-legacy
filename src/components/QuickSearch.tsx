@@ -10,7 +10,7 @@ import Pf2Card from "./Pf2Card";
 import Dnd4eCard from "./Dnd4eCard";
 import { loadPf2Index, searchPf2 } from "../helpers/pf2";
 import { loadDnd4eIndex, searchDnd4e } from "../helpers/dnd4e";
-import { useRuleSystem } from "../helpers/ruleSystem";
+import { dataSystemOf, useRuleSystem } from "../helpers/ruleSystem";
 import { hasEntryCard } from "../helpers/fiveEEntries";
 import {
   MONSTER_DRAG_TYPE,
@@ -87,7 +87,12 @@ function QuickSearch() {
     const id = ++searchId.current;
     setStatus("loading");
     const timer = setTimeout(() => {
-      (system === "pf2" ? searchPf2 : system === "4e" ? searchDnd4e : searchFiveE)(q)
+      (system === "pf2"
+        ? searchPf2(q)
+        : system === "4e"
+        ? searchDnd4e(q)
+        : searchFiveE(q, 60, system === "5r" ? "2024" : "2014")
+      )
         .then((found) => {
           if (id !== searchId.current) return;
           setResults(found);
@@ -109,7 +114,7 @@ function QuickSearch() {
   // Switching rules: the open card belongs to the other ones
   useEffect(() => {
     setSelected((current) =>
-      current && (current.system || "5e") !== system ? null : current
+      current && (current.system || "5e") !== dataSystemOf(system) ? null : current
     );
   }, [system]);
 
@@ -267,6 +272,8 @@ function QuickSearch() {
               ? "查 PF2 资料：生物、法术、专长…（Ctrl+K）"
               : system === "4e"
               ? "查 4e 资料：威能、专长、物品…（Ctrl+K）"
+              : system === "5r"
+              ? "查 5r 资料（2024 版优先）：怪物、法术、物品…（Ctrl+K）"
               : "查 5e 资料：怪物、法术、物品…（Ctrl+K）"
           }
           aria-label={
@@ -488,8 +495,12 @@ function QuickSearch() {
                     title={
                       result.modern
                         ? "5e 2024 版规则"
+                        : system === "5r" && result.accent
+                        ? "5r · 2024 版规则"
                         : result.reprinted
-                        ? "已在新版书中重印"
+                        ? system === "5r"
+                          ? "已有 2024 版"
+                          : "已在新版书中重印"
                         : undefined
                     }
                   >

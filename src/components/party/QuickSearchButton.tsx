@@ -13,7 +13,8 @@ import {
 } from "../../helpers/ruleSystem";
 
 const DESCRIPTION: Record<RuleSystem, string> = {
-  "5e": "5etools 资料、怪物拖入、5e 状态",
+  "5e": "5etools 资料（2014 版优先）、怪物拖入、5e 状态",
+  "5r": "5etools 资料（2024 修订版优先并高亮）、怪物拖入、5r 状态",
   pf2: "PF2 中文维基资料、生物拖入、PF2 状态",
   "4e": "4e Wiki 资料（威能、专长、物品…）、4e 状态",
 };
@@ -64,7 +65,7 @@ function QuickSearchButton() {
         aria-label="Rules Mode"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        title={isOpen ? `规则模式：${current}（点击切换）` : "规则模式：关闭（点击选择 5e / PF2 / 4e）"}
+        title={isOpen ? `规则模式：${current}（点击切换）` : "规则模式：关闭（点击选择 5e / 5r / PF2 / 4e）"}
         onClick={() => setMenuOpen((open) => !open)}
         sx={{ color: isOpen ? "primary" : "text", position: "relative" }}
       >
