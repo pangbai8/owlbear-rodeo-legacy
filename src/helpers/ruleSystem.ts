@@ -1,18 +1,21 @@
-// Which rules the reference tools use: 5e (5etools) or PF2 (the PF2 wiki
-// mirror). The search bar's visibility (FloatingWindow "quickSearch") turns
+// Which rules the reference tools use: 5e (5etools), PF2 (the PF2 wiki
+// mirror) or 4e (the 4e wiki mirror). The search bar's visibility (FloatingWindow "quickSearch") turns
 // them on; this picks which one, so only one is on at a time. Stored per
 // browser; the party panel (same origin) reads the same keys.
 
 import { useEffect, useState } from "react";
 
-export type RuleSystem = "5e" | "pf2";
+export type RuleSystem = "5e" | "pf2" | "4e";
+
+export const RULE_SYSTEMS: RuleSystem[] = ["5e", "pf2", "4e"];
 
 const KEY = "ruleSystem";
 const CHANGE_EVENT = "ruleSystem:change";
 
 export function getRuleSystem(): RuleSystem {
   try {
-    return localStorage.getItem(KEY) === "pf2" ? "pf2" : "5e";
+    const value = localStorage.getItem(KEY);
+    return value === "pf2" || value === "4e" ? value : "5e";
   } catch {
     return "5e";
   }
@@ -39,4 +42,5 @@ export function useRuleSystem(): RuleSystem {
 export const RULE_SYSTEM_LABEL: Record<RuleSystem, string> = {
   "5e": "5e",
   pf2: "PF2",
+  "4e": "4e",
 };

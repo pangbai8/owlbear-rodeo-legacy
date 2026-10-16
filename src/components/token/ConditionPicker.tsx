@@ -1,6 +1,7 @@
 import { Box, Flex, Text } from "theme-ui";
 
 import {
+  DND4E_CONDITIONS,
   DND5E_CONDITIONS,
   PF2_CONDITIONS,
   conditionMax,
@@ -9,6 +10,7 @@ import {
   setCondition,
 } from "../../helpers/conditions";
 import { findPf2 } from "../../helpers/pf2";
+import { findDnd4e } from "../../helpers/dnd4e";
 import { lookupFiveE, openFiveECard } from "../../helpers/fiveETools";
 import { RuleSystem } from "../../helpers/ruleSystem";
 
@@ -20,14 +22,18 @@ type ConditionPickerProps = {
 
 /** The token menu's 5e or PF2 conditions (in place of the color rings) */
 function ConditionPicker({ conditions, onChange, system }: ConditionPickerProps) {
-  const table = system === "pf2" ? PF2_CONDITIONS : DND5E_CONDITIONS;
+  const table =
+    system === "pf2" ? PF2_CONDITIONS : system === "4e" ? DND4E_CONDITIONS : DND5E_CONDITIONS;
   const set = (name: string, value: number | null) =>
     onChange(setCondition(conditions, name, value, table));
 
   // A name opens its rules card in the search bar
   function lookUp(name: string) {
-    (system === "pf2"
-      ? findPf2(name, "condition").then((result) => result && openFiveECard(result))
+    // 4e: the wiki's condition table (one page for all)
+    const find =
+      system === "pf2" ? findPf2(name, "condition") : system === "4e" ? findDnd4e(name, "condition") : null;
+    (find
+      ? find.then((result) => result && openFiveECard(result))
       : lookupFiveE(name, "condition")
     ).catch(() => {});
   }

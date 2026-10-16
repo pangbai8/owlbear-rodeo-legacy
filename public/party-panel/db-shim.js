@@ -555,7 +555,8 @@
   }
   function ruleSystem() {
     try {
-      return localStorage.getItem(RULES_KEY) === "pf2" ? "pf2" : "5e";
+      var value = localStorage.getItem(RULES_KEY);
+      return value === "pf2" || value === "4e" ? value : "5e";
     } catch (e) {
       return "5e";
     }

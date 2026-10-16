@@ -15,6 +15,7 @@ import {
   openMonsterCard,
 } from "../helpers/fiveETools";
 import { findPf2 } from "../helpers/pf2";
+import { findDnd4e } from "../helpers/dnd4e";
 import { getRuleSystem } from "../helpers/ruleSystem";
 import {
   PartyLink,
@@ -97,8 +98,9 @@ function PartyPanelWindow() {
         case "party-panel-lookup":
           if (typeof data.name === "string" && data.name.trim()) {
             const kind = data.kind === "spell" ? "spell" : "condition";
-            (getRuleSystem() === "pf2"
-              ? findPf2(data.name.trim(), kind).then((result) => {
+            const rules = getRuleSystem();
+            (rules === "pf2" || rules === "4e"
+              ? (rules === "pf2" ? findPf2 : findDnd4e)(data.name.trim(), kind).then((result) => {
                   if (result) openFiveECard(result);
                   return !!result;
                 })
@@ -107,7 +109,7 @@ function PartyPanelWindow() {
               .then((found) => {
                 if (!found)
                   addToastRef.current(
-                    `${getRuleSystem() === "pf2" ? "PF2" : "5e"} 资料里没找到「${data.name}」`
+                    `${{ "5e": "5e", pf2: "PF2", "4e": "4e" }[getRuleSystem()]} 资料里没找到「${data.name}」`
                   );
               })
               .catch(() => addToastRef.current("读取 5e 资料失败"));
