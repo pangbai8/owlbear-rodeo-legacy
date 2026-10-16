@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Box, Flex, Text } from "theme-ui";
 import { useToasts } from "react-toast-notifications";
 
@@ -57,7 +57,28 @@ function GlobalImageDrop({
 
   const userId = useUserId();
   const { addMap, getMapState } = useMapData();
-  const { addToken } = useTokenData();
+  const {
+    addToken,
+    tokens: libraryTokens,
+    updateTokensHidden,
+  } = useTokenData();
+
+  // One sidebar entry per monster: copies from drops before monsters were
+  // reused stay in the library (tokens on maps still use their images) but
+  // are hidden from the sidebar
+  useEffect(() => {
+    const kept = new Set<string>();
+    const duplicates: string[] = [];
+    const visible = libraryTokens
+      .filter((t) => t.owner === userId && t.monster && !t.hideInSidebar)
+      .sort((a, b) => a.created - b.created);
+    for (const token of visible) {
+      const key = `${token.monster!.source}|${token.monster!.englishName}`;
+      if (kept.has(key)) duplicates.push(token.id);
+      else kept.add(key);
+    }
+    if (duplicates.length > 0) updateTokensHidden(duplicates, true);
+  }, [libraryTokens, userId, updateTokensHidden]);
   const { addAssets } = useAssets();
 
   const mapStageRef = useMapStage();
@@ -152,8 +173,23 @@ function GlobalImageDrop({
       // Keep track of tokens so we can add them to the map
       let tokens = [];
       for (let file of droppedImagesRef.current) {
-        const { token, assets } = await createTokenFromFile(file, userId);
         const monster = droppedMonsterRef.current;
+        // The same monster dropped again: reuse its token in the library
+        // instead of adding another copy to the sidebar
+        const same = monster
+          ? libraryTokens.filter(
+              (t) =>
+                t.owner === userId &&
+                t.monster?.source === monster.source &&
+                t.monster?.englishName === monster.englishName
+            )
+          : [];
+        const existing = same.find((t) => !t.hideInSidebar) || same[0];
+        if (existing) {
+          tokens.push(existing);
+          continue;
+        }
+        const { token, assets } = await createTokenFromFile(file, userId);
         if (monster) {
           const { name, englishName, source, url } = monster;
           token.monster = { name, englishName, source, url };
