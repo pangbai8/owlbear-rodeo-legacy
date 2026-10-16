@@ -119,3 +119,16 @@ test("system messages get a label", () => {
   const message = toClientMessage({ id: "1", channel_id: "1", type: 7, author: user, content: "", timestamp: "t" });
   assert.equal(message.system, "加入了服务器");
 });
+
+test("speakerOf: a monster name, with 5etools token art only", async () => {
+  const { speakerOf } = await import("../src/discord.mjs");
+  assert.deepEqual(speakerOf({ name: " 地精头目 ", avatarUrl: "https://5e.kiwee.top/img/bestiary/tokens/MM/Goblin%20Boss.webp" }), {
+    name: "地精头目",
+    avatarUrl: "https://5e.kiwee.top/img/bestiary/tokens/MM/Goblin%20Boss.webp",
+  });
+  assert.deepEqual(speakerOf({ name: "x", avatarUrl: "https://evil.example/a.png" }), { name: "x", avatarUrl: null });
+  assert.equal(speakerOf({ name: "" }), null);
+  assert.equal(speakerOf({ name: "a".repeat(81) }), null);
+  assert.equal(speakerOf("地精"), null);
+  assert.equal(speakerOf(null), null);
+});

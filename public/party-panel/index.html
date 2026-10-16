@@ -212,6 +212,9 @@ body.pipdoc .mi-ac b{font-size:15px}
 .cbtn b{font-size:13.5px}
 .cbtn small{font-size:11.5px;color:var(--muted);line-height:1.35}
 .mi-btns .d{color:var(--muted);font-size:14px}
+/* 5e mode (the VTT's book button): chips open their 5e card; monster cards only then */
+body.fiveE [data-lookup]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+body:not(.fiveE) [data-act="monster"]{display:none}
 .qdel-armed,.mi-btns .qdel-armed{background:var(--crit);border-color:var(--crit);color:#fff;font-size:12px}
 #autoMapBtn[aria-pressed="true"]{border-color:var(--good);color:var(--good)}
 .cbtn[aria-pressed="true"]{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--sunk))}
@@ -795,7 +798,7 @@ function card(id,c){
   <div class="head">
     <div class="init"><label class="init-l" for="init-${id}">先攻</label><input id="init-${id}" class="init-v ${c.initPending?"pending":""}" type="number" inputmode="numeric" value="${c.initPending?"":c.init}" placeholder="?" data-fkey="init-${id}" data-act="initset" title="${c.initPending?"等待手动填写先攻":"先攻结果，可直接修改"}"><label class="init-l" for="initb-${id}">加值</label><span class="init-b"><input id="initb-${id}" type="number" inputmode="numeric" value="${c.initBonus}" data-fkey="initb-${id}" data-act="initb" title="先攻加值"><button class="init-d" data-act="rollinit" title="掷先攻：1d20 ${sgn(c.initBonus)}${c.initAdv?"，优势":""}" aria-label="为 ${esc(c.name)} 掷先攻">🎲</button></span></div>
     <div class="who"><h2>${esc(c.name)}${turn?`<span class="turn-tag">行动中</span>`:""}</h2><p>${esc(sub)}</p></div>
-    <div class="acbox">${c.monster?qdelBtn(id,c,"iconbtn"):""}${c.monster&&c.monster.url?`<button class="iconbtn" data-act="monster" data-monster="${esc(JSON.stringify(c.monster))}" aria-label="查看 ${esc(c.name)} 的怪物资料" title="查看怪物资料（属性、攻击、动作）">📖</button>`:""}<div class="shield ${acCls}" title="基础 AC ${c.ac}${ac!==c.ac?"，效果调整 "+(ac-c.ac>0?"+":"")+(ac-c.ac):""}"><b>${ac}</b><i>AC</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
+    <div class="acbox">${c.monster?qdelBtn(id,c,"iconbtn"):""}${c.token&&c.token.id?`<button class="iconbtn" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}${c.monster&&c.monster.url?`<button class="iconbtn" data-act="monster" data-monster="${esc(JSON.stringify(c.monster))}" aria-label="查看 ${esc(c.name)} 的怪物资料" title="查看怪物资料（属性、攻击、动作）">📖</button>`:""}<div class="shield ${acCls}" title="基础 AC ${c.ac}${ac!==c.ac?"，效果调整 "+(ac-c.ac>0?"+":"")+(ac-c.ac):""}"><b>${ac}</b><i>AC</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
   </div>
   <div class="hp">
     <div class="hp-top"><span class="hp-cur">${c.hp}</span><span class="hp-max">/ ${c.maxHp}</span>${c.temp?`<span class="temp" title="临时生命">+${c.temp} 临时</span>`:""}<span class="status-pill ${lvlState}">${label}</span></div>
@@ -817,9 +820,9 @@ function card(id,c){
   h+=`<section class="sec"><div class="sec-h"><h3>状态</h3><button class="btn sm ghost" data-act="conds">管理</button></div><div class="chips">`;
   let any=false;
   if(multiConc()&&(c.concMax>1||c.concs.length>1)){any=true;h+=`<span class="chip conc" title="多重专注：可同时维持的专注数">专注 ${c.concs.length}/${concLimit(c)}</span>`}
-  c.concs.forEach((n,i)=>{any=true;h+=`<span class="chip conc" title="受到伤害时需要专注检定">专注：${esc(n)}<button class="x" data-act="dropconc" data-i="${i}" aria-label="结束专注${esc(n)}">×</button></span>`});
-  c.conds.forEach(n=>{any=true;const d=condSummary(c,n);h+=`<span class="chip cond" title="${esc(d)}">${esc(n)}<button class="x" data-act="uncond" data-n="${esc(n)}" aria-label="移除${esc(n)}">×</button></span>`});
-  if(c.exh>0){any=true;h+=`<span class="chip cond" title="每级：d20 检定 −2，速度 −5 尺；6 级死亡">力竭 ${c.exh}</span>`}
+  c.concs.forEach((n,i)=>{any=true;h+=`<span class="chip conc" data-lookup="spell:${esc(n)}" title="受到伤害时需要专注检定">专注：${esc(n)}<button class="x" data-act="dropconc" data-i="${i}" aria-label="结束专注${esc(n)}">×</button></span>`});
+  c.conds.forEach(n=>{any=true;const d=condSummary(c,n);h+=`<span class="chip cond" data-lookup="cond:${esc(n)}" title="${esc(d)}">${esc(n)}<button class="x" data-act="uncond" data-n="${esc(n)}" aria-label="移除${esc(n)}">×</button></span>`});
+  if(c.exh>0){any=true;h+=`<span class="chip cond" data-lookup="cond:力竭" title="每级：d20 检定 −2，速度 −5 尺；6 级死亡">力竭 ${c.exh}</span>`}
   if(!any)h+=`<span class="empty-line">无异常状态</span>`;
   h+=`</div></section>`;
   h+=`<section class="sec"><div class="sec-h"><h3>增益 / 减益</h3><button class="btn sm ghost" data-act="fx">＋ 效果</button></div><div class="chips">`;
@@ -924,7 +927,7 @@ function miniList(ids,inPip){
         ${c.dcs.length?`<div class="mi-dc">${c.dcs.map(x=>`<span>${x.name?esc(x.name)+" ":""}DC <b>${x.val}</b></span>`).join("")}</div>`:""}
         ${(()=>{const sb=spellBlock(c,true);return sb?`<div class="mi-spell">${sb}</div>`:""})()}</div>
       <div class="mi-ac">AC<b class="${acc}">${ac}</b></div>
-      <div class="mi-btns"><button class="m" data-act="mhp" data-kind="dmg" aria-label="${esc(c.name)} 受到伤害">−</button><button class="p" data-act="mhp" data-kind="heal" aria-label="${esc(c.name)} 回复生命">＋</button>${c.monster?qdelBtn(id,c,"d"):""}</div>
+      <div class="mi-btns"><button class="m" data-act="mhp" data-kind="dmg" aria-label="${esc(c.name)} 受到伤害">−</button><button class="p" data-act="mhp" data-kind="heal" aria-label="${esc(c.name)} 回复生命">＋</button>${c.token&&c.token.id&&!inPip?`<button class="d" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}${c.monster?qdelBtn(id,c,"d"):""}</div>
     </div>`;
   }
   return h+`</div>`;

@@ -13,20 +13,23 @@ import {
   loadMonster,
   loadSearchIndex,
   monsterRefOf,
-  monsterResult,
-  onOpenMonsterCard,
+  onOpenFiveECard,
   searchFiveE,
 } from "../helpers/fiveETools";
 
 /**
- * Small search bar at the top of the game page for the Chinese 5etools site:
+ * "5e mode" (the sidebar's book button): while on, a small search bar at the
+ * top of the game page for the Chinese 5etools site, plus lookups from the
+ * party panel's condition and concentration chips and the monster cards.
+ * The bar:
  * results expand below it, a click shows the page, and monsters can be
  * dragged onto the map (as a token) or into the party status panel.
  */
 const VISIBLE_KEY = "quickSearch.visible";
 
 function QuickSearch() {
-  // The sidebar's search button shows or hides the bar (remembered per browser)
+  // The sidebar's book button turns 5e mode on or off (remembered per browser;
+  // the party panel reads the same key). Off until turned on.
   const { isOpen: visible, setIsOpen: setVisible } =
     useFloatingWindow("quickSearch");
   // Latest setter for the window-level Ctrl+K listener (registered once)
@@ -39,8 +42,8 @@ function QuickSearch() {
     try {
       stored = localStorage.getItem(VISIBLE_KEY);
     } catch {}
-    if (stored === "false") restoring.current = false;
-    else setVisible(true);
+    if (stored === "true") setVisible(true);
+    else restoring.current = false;
     // Run once: restore the saved choice
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -131,13 +134,13 @@ function QuickSearch() {
     };
   }, []);
 
-  // A token or party panel NPC asks for its monster's card
+  // A token, a party panel NPC or chip asks for a card
   useEffect(
     () =>
-      onOpenMonsterCard((ref) => {
+      onOpenFiveECard((result) => {
         setVisibleRef.current(true);
         setOpen(true);
-        setSelected(monsterResult(ref));
+        setSelected(result);
         setFullPage(false);
         setPageLoading(true);
       }),

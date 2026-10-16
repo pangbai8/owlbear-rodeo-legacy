@@ -76,6 +76,7 @@
       docs.set(path, data);
     }
     emit(path, before, data);
+    scheduleLinks();
   }
   /** A full copy from the server (first connect, reconnect, room cleared) */
   function applyAll(next) {
@@ -87,6 +88,7 @@
       applyChange(path, next[path] === undefined ? null : next[path]);
     });
     listeners.forEach(prime);
+    scheduleLinks();
   }
   function prime(l) {
     if (l.primed || !ready) return;
@@ -345,7 +347,7 @@
     for (var n = 2; ; n++) if (!taken.has(name + " " + n)) return name + " " + n;
   }
 
-  function addMonster(stats) {
+  function addMonster(stats, link) {
     var team = currentTeam();
     var writes = [];
     if (!docs.has("teams/" + team)) {
@@ -377,6 +379,10 @@
       // Its stat card can be opened again from the 📖 button on the card
       monster: { name: stats.name, englishName: stats.englishName, source: stats.source, url: stats.url },
     };
+    // Dropped on the map: the token it stands for (HP and turn show on it)
+    if (link && typeof link.tokenStateId === "string") {
+      npc.token = { id: link.tokenStateId, map: String(link.mapId || "") };
+    }
     var id = "c" + Math.random().toString(36).slice(2, 10);
     writes.push(db.doc("teams/" + team + "/members/" + id).set(npc));
     return Promise.all(writes).then(function () {
@@ -436,7 +442,7 @@
     if (fatal) return reply({ error: "无法连接房间的小队数据" });
     whenReady()
       .then(function () {
-        return addMonster(data.stats);
+        return addMonster(data.stats, data.link);
       })
       .then(function (name) {
         reply({ name: name });
@@ -444,6 +450,90 @@
       .catch(function (error) {
         reply({ error: error && error.message ? error.message : String(error) });
       });
+  });
+
+  /* ---------- NPCs linked to map tokens ---------- */
+
+  function vttWindow() {
+    return window.parent !== window ? window.parent : window.opener;
+  }
+
+  // HP and whose turn it is, for every NPC with a token: the VTT marks them
+  var linksTimer = null;
+  function scheduleLinks() {
+    clearTimeout(linksTimer);
+    linksTimer = setTimeout(postLinks, 150);
+  }
+  function postLinks() {
+    var target = vttWindow();
+    if (!target || !ready) return;
+    var turns = {};
+    docs.forEach(function (data, path) {
+      var m = path.match(/^teams\/([^/]+)$/);
+      if (m && data && data.meta && data.meta.round > 0 && data.meta.turn) turns[m[1]] = data.meta.turn;
+    });
+    var links = [];
+    docs.forEach(function (data, path) {
+      var m = path.match(/^teams\/([^/]+)\/members\/([^/]+)$/);
+      if (!m || !data || !data.token || typeof data.token.id !== "string") return;
+      links.push({
+        tokenStateId: data.token.id,
+        mapId: String(data.token.map || ""),
+        name: String(data.name || ""),
+        hp: Number(data.hp) || 0,
+        maxHp: Math.max(1, Number(data.maxHp) || 1),
+        turn: turns[m[1]] === m[2],
+      });
+    });
+    try {
+      target.postMessage({ type: "party-panel-links", links: links }, location.origin);
+    } catch (e) {}
+  }
+  window.addEventListener("message", function (event) {
+    if (event.origin === location.origin && event.data && event.data.type === "party-panel-links-request") postLinks();
+  });
+
+  // 📍 on a linked NPC: the map scrolls to its token
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest && event.target.closest('[data-act="locate"]');
+    if (!button) return;
+    var target = vttWindow();
+    if (target) target.postMessage({ type: "party-panel-locate", tokenStateId: button.dataset.token }, location.origin);
+  });
+
+  /* ---------- 5e mode (the VTT's book button) ---------- */
+
+  var FIVE_E_KEY = "quickSearch.visible";
+  function fiveEMode() {
+    try {
+      return localStorage.getItem(FIVE_E_KEY) === "true";
+    } catch (e) {
+      return false;
+    }
+  }
+  function syncFiveEMode() {
+    if (document.body) document.body.classList.toggle("fiveE", fiveEMode() && !!vttWindow());
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", syncFiveEMode);
+  else syncFiveEMode();
+  window.addEventListener("storage", function (event) {
+    if (event.key === FIVE_E_KEY) syncFiveEMode();
+  });
+
+  // Condition and concentration chips open their 5e card in the VTT
+  document.addEventListener("click", function (event) {
+    if (!document.body.classList.contains("fiveE")) return;
+    if (event.target.closest && event.target.closest("[data-act]")) return;
+    var chip = event.target.closest && event.target.closest("[data-lookup]");
+    if (!chip) return;
+    var value = chip.getAttribute("data-lookup");
+    var colon = value.indexOf(":");
+    var target = vttWindow();
+    if (colon < 0 || !target) return;
+    target.postMessage(
+      { type: "party-panel-lookup", kind: value.slice(0, colon), name: value.slice(colon + 1) },
+      location.origin
+    );
   });
 
   // 📖 on an NPC card from the quick search: the VTT shows its stat card

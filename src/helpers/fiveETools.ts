@@ -440,20 +440,40 @@ export function monsterResult(ref: MonsterRef): SearchResult {
   };
 }
 
-const OPEN_MONSTER_EVENT = "fiveE:openMonster";
+const OPEN_CARD_EVENT = "fiveE:openCard";
 
-/** Opens a monster's stat card in the quick search bar (from anywhere) */
-export function openMonsterCard(ref: MonsterRef) {
-  window.dispatchEvent(new CustomEvent(OPEN_MONSTER_EVENT, { detail: ref }));
+/** Opens a search result's card in the quick search bar (from anywhere) */
+export function openFiveECard(result: SearchResult) {
+  window.dispatchEvent(new CustomEvent(OPEN_CARD_EVENT, { detail: result }));
 }
 
-export function onOpenMonsterCard(listener: (ref: MonsterRef) => void) {
-  const handler = (event: Event) => {
-    const ref = (event as CustomEvent).detail;
-    if (isMonsterRef(ref)) listener(ref);
-  };
-  window.addEventListener(OPEN_MONSTER_EVENT, handler);
-  return () => window.removeEventListener(OPEN_MONSTER_EVENT, handler);
+/** Opens a stored monster's stat card (token menu, party panel 📖) */
+export function openMonsterCard(ref: MonsterRef) {
+  if (isMonsterRef(ref)) openFiveECard(monsterResult(ref));
+}
+
+export function onOpenFiveECard(listener: (result: SearchResult) => void) {
+  const handler = (event: Event) => listener((event as CustomEvent).detail);
+  window.addEventListener(OPEN_CARD_EVENT, handler);
+  return () => window.removeEventListener(OPEN_CARD_EVENT, handler);
+}
+
+// Conditions (and diseases, statuses like 专注) or spells, for panel chips
+const LOOKUP_CATEGORIES = { condition: [6, 49, 21], spell: [2] };
+
+/** Finds a condition or spell by name and opens its card; false if none */
+export async function lookupFiveE(
+  name: string,
+  kind: keyof typeof LOOKUP_CATEGORIES
+) {
+  const categories = LOOKUP_CATEGORIES[kind];
+  const found = (await searchFiveE(name, 200)).filter((r) =>
+    categories.includes(r.category)
+  );
+  // Results come best first (exact names, then 2014 core books)
+  if (!found[0]) return false;
+  openFiveECard(found[0]);
+  return true;
 }
 
 export function monsterRefOf(result: SearchResult): MonsterRef {

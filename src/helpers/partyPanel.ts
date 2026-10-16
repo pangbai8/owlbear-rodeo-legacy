@@ -1,11 +1,12 @@
-// The party status panel's "地图怪物入队" switch (public/party-panel/db-shim.js
-// stores it in this origin's localStorage): monsters dropped on the map are
-// also added to the panel as NPCs.
+// Messages between the VTT and the party status panel (public/party-panel,
+// db-shim.js), relayed by PartyPanelWindow, which owns the panel's iframe.
 
 import { MonsterStats } from "./fiveETools";
 
+/* ---------- "地图怪物入队" switch ---------- */
+
+// Stored by the panel in this origin's localStorage, so it is per browser
 const AUTO_ADD_KEY = "partyPanel.autoAddMapMonsters";
-const ADD_EVENT = "partyPanel:addMonster";
 
 export function autoAddMapMonsters() {
   try {
@@ -15,15 +16,110 @@ export function autoAddMapMonsters() {
   }
 }
 
-/** Asks the party panel (PartyPanelWindow) to add a monster as an NPC */
-export function addMonsterToPartyPanel(stats: MonsterStats) {
-  window.dispatchEvent(new CustomEvent(ADD_EVENT, { detail: stats }));
+/* ---------- adding a monster dropped on the map ---------- */
+
+/** The map token a panel NPC stands for */
+export type TokenLink = { tokenStateId: string; mapId: string };
+
+type AddRequest = {
+  stats: MonsterStats;
+  link?: TokenLink;
+  resolve: (name: string) => void;
+  reject: (error: Error) => void;
+  /** Set by the listener (dispatchEvent runs it synchronously) */
+  claimed?: boolean;
+};
+
+const ADD_EVENT = "partyPanel:addMonster";
+
+/** Adds a monster to the panel's current team; resolves with its NPC name */
+export function addMonsterToPartyPanel(
+  stats: MonsterStats,
+  link?: TokenLink
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const detail: AddRequest = { stats, link, resolve, reject };
+    window.dispatchEvent(new CustomEvent(ADD_EVENT, { detail }));
+    // Nobody listening: the panel is not part of this page
+    if (!detail.claimed) reject(new Error("小队面板没有加载"));
+  });
 }
 
 export function onAddMonsterToPartyPanel(
-  listener: (stats: MonsterStats) => void
+  listener: (request: AddRequest) => void
 ) {
-  const handler = (event: Event) => listener((event as CustomEvent).detail);
+  const handler = (event: Event) => {
+    const request: AddRequest = (event as CustomEvent).detail;
+    request.claimed = true;
+    listener(request);
+  };
   window.addEventListener(ADD_EVENT, handler);
   return () => window.removeEventListener(ADD_EVENT, handler);
+}
+
+/** "地精", then "地精 2", "地精 3"… (the panel names NPCs the same way) */
+export function uniqueName(name: string, taken: Iterable<string>) {
+  const used = new Set(taken);
+  if (!used.has(name)) return name;
+  for (let n = 2; ; n++) {
+    if (!used.has(`${name} ${n}`)) return `${name} ${n}`;
+  }
+}
+
+/* ---------- NPCs linked to tokens: HP and turn ---------- */
+
+export type PartyLink = TokenLink & {
+  name: string;
+  hp: number;
+  maxHp: number;
+  /** It is this NPC's turn in its team's combat */
+  turn: boolean;
+};
+
+const LINKS_EVENT = "partyPanel:links";
+let latestLinks: PartyLink[] = [];
+
+export function emitPartyLinks(links: PartyLink[]) {
+  latestLinks = links;
+  window.dispatchEvent(new CustomEvent(LINKS_EVENT, { detail: links }));
+}
+
+/** Calls the listener with the latest links now and on every change */
+export function onPartyLinks(listener: (links: PartyLink[]) => void) {
+  const handler = (event: Event) => listener((event as CustomEvent).detail);
+  window.addEventListener(LINKS_EVENT, handler);
+  listener(latestLinks);
+  return () => window.removeEventListener(LINKS_EVENT, handler);
+}
+
+// Status rings the panel sets on linked tokens (others are left alone)
+const HURT = "yellow";
+const DOWN = "red";
+const TURN = "primary";
+const MANAGED = new Set<string>([HURT, DOWN, TURN]);
+
+/** A linked token's status rings: bloodied (≤ half HP), down (0), its turn */
+export function linkedStatuses<S extends string>(
+  statuses: S[],
+  link: Pick<PartyLink, "hp" | "maxHp" | "turn">
+): string[] {
+  const kept: string[] = statuses.filter((s) => s && !MANAGED.has(s));
+  if (link.turn) kept.unshift(TURN);
+  if (link.hp <= 0) kept.push(DOWN);
+  else if (link.hp / link.maxHp <= 0.5) kept.push(HURT);
+  return kept;
+}
+
+/* ---------- 📍 locate and 5e lookups ---------- */
+
+const LOCATE_EVENT = "partyPanel:locate";
+
+export function locateToken(tokenStateId: string) {
+  window.dispatchEvent(new CustomEvent(LOCATE_EVENT, { detail: tokenStateId }));
+}
+
+export function onLocateToken(listener: (tokenStateId: string) => void) {
+  const handler = (event: Event) => listener((event as CustomEvent).detail);
+  window.addEventListener(LOCATE_EVENT, handler);
+  return () => window.removeEventListener(LOCATE_EVENT, handler);
 }

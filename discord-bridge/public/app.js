@@ -51,6 +51,31 @@ async function api(path, options = {}) {
   return data;
 }
 
+// The VTT page embedding this one sends dice rolls from its 5e stat cards to
+// the channel open here, as the signed-in user. Only that parent may ask
+// (and only the sites in FRAME_ANCESTORS can embed this page).
+window.addEventListener("message", async (event) => {
+  const data = event.data;
+  if (data?.type !== "bridge-send" || window.parent === window || event.source !== window.parent) return;
+  const ancestor = location.ancestorOrigins?.[0];
+  if (ancestor && ancestor !== event.origin) return;
+  const reply = (payload) =>
+    event.source.postMessage({ type: "bridge-send-result", id: data.id, ...payload }, event.origin);
+  if (!state.channelId) return reply({ error: "请先在 Discord 窗口里登录并选一个频道" });
+  try {
+    const result = await api(`/api/channels/${state.channelId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: String(data.content || ""), speaker: data.speaker || null }),
+    });
+    state.stick = true;
+    upsert([result.message]);
+    reply({ ok: true });
+  } catch (error) {
+    reply({ error: error.message });
+  }
+});
+
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {

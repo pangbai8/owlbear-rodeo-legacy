@@ -3,6 +3,7 @@ import { IconButton } from "theme-ui";
 import FloatingWindow, { besidePartyRect } from "./FloatingWindow";
 import OpenInNewIcon from "../icons/OpenInNewIcon";
 import { FloatingWindowName } from "../contexts/FloatingWindowContext";
+import { rollsToDiscord } from "../helpers/discordBridge";
 
 /** Chat page shown in the window, e.g. a same-site Boluo mirror */
 export const chatUrl = process.env.REACT_APP_CHAT_URL || "";
@@ -46,6 +47,8 @@ function ChatFrame({ chat }: { chat: ChatWindowConfig }) {
       title={chat.title}
       storageKey={chat.storageKey}
       defaultRect={() => besidePartyRect(chat.offsetX, 440)}
+      // Dice rolls from the 5e cards are sent through the Discord page
+      preload={chat.name === "discordChat" && rollsToDiscord()}
       headerActions={
         <IconButton
           aria-label={`Open ${chat.title} in New Window`}

@@ -19,6 +19,7 @@ import TokenAttachmentIcon from "../../icons/TokenAttachmentIcon";
 
 import { useUserId } from "../../contexts/UserIdContext";
 import { useTokenData } from "../../contexts/TokenDataContext";
+import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
 import { openMonsterCard } from "../../helpers/fiveETools";
 
 import {
@@ -79,8 +80,9 @@ function TokenMenu({
   // Monsters from the quick search keep their stat card; only the one who
   // dropped them (the GM) has the token in their library
   const token = tokenState ? tokensById[tokenState.tokenId] : undefined;
+  const { isOpen: fiveEMode } = useFloatingWindow("quickSearch");
   const monster =
-    token && token.owner === userId ? token.monster : undefined;
+    fiveEMode && token && token.owner === userId ? token.monster : undefined;
 
   const wasOpen = usePrevious(isOpen);
 

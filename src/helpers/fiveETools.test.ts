@@ -6,7 +6,7 @@ import {
   matchScore,
   monsterResult,
   monsterStats,
-  onOpenMonsterCard,
+  onOpenFiveECard,
   openMonsterCard,
   parseMonsterDrag,
   proficiencyBonus,
@@ -186,10 +186,10 @@ test("stored monsters: checked, turned back into a result, opened by event", () 
   });
 
   const opened: unknown[] = [];
-  const stop = onOpenMonsterCard((r) => opened.push(r));
+  const stop = onOpenFiveECard((r) => opened.push(r));
   openMonsterCard(ref);
   openMonsterCard({ ...ref, url: "javascript:alert(1)" });
   stop();
   openMonsterCard(ref);
-  expect(opened).toEqual([ref]);
+  expect(opened).toEqual([monsterResult(ref)]);
 });

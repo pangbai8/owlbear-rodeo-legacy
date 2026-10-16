@@ -12,6 +12,7 @@ import {
   displayName,
   memberAllowed,
   readConfig,
+  speakerOf,
   toClientMessage,
   webhookUsername,
 } from "./discord.mjs";
@@ -545,7 +546,12 @@ export class Hub extends DurableObject {
       return { content: String(form.get("content") || ""), characterId: String(form.get("characterId") || ""), files };
     }
     const body = await request.json().catch(() => ({}));
-    return { content: String(body.content || ""), characterId: String(body.characterId || ""), files: [] };
+    return {
+      content: String(body.content || ""),
+      characterId: String(body.characterId || ""),
+      speaker: speakerOf(body.speaker),
+      files: [],
+    };
   }
 
   async send({ channel, guild, member, access }, request) {
@@ -563,10 +569,14 @@ export class Hub extends DurableObject {
     if (files.length > 10) return error(400, "too_many_files", "一次最多 10 个文件");
     if (files.reduce((sum, f) => sum + f.size, 0) > MAX_UPLOAD_BYTES) return error(413, "too_large", "文件总大小不能超过 10MB");
 
+    // A monster rolling from the VTT's stat card speaks under its own name
+    const { speaker } = input;
     const payload = {
       content: text,
-      username: webhookUsername(character ? characterDisplayName(character) : profile.name),
-      avatar_url: character?.avatarUrl || profile.avatar,
+      username: webhookUsername(
+        speaker ? speaker.name : character ? characterDisplayName(character) : profile.name,
+      ),
+      avatar_url: (speaker ? speaker.avatarUrl : null) || character?.avatarUrl || profile.avatar,
       allowed_mentions: { parse: ["users", "roles"] },
     };
     const message = await this.withWebhook(channel.id, ({ id, token }) => {
