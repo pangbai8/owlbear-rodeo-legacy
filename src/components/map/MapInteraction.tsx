@@ -12,6 +12,7 @@ import usePreventContextMenu from "../../hooks/usePreventContextMenu";
 
 import { getGridMaxZoom } from "../../helpers/grid";
 import KonvaBridge from "../../helpers/KonvaBridge";
+import { onLocateToken } from "../../helpers/partyPanel";
 
 import {
   MapInteractionEmitter,
@@ -86,6 +87,26 @@ function MapInteraction({
     setStageScale,
     mapLayerRef,
     containerRef
+  );
+
+  // 📍 in the party panel: scroll the map so that token is in the middle
+  useEffect(
+    () =>
+      onLocateToken((tokenStateId) => {
+        const stage = mapStageRef.current;
+        const node = stage?.findOne(`#${tokenStateId}`);
+        if (!stage || !node) return;
+        const rect = node.getClientRect();
+        const position = stage.position();
+        const newTranslate = {
+          x: position.x + stage.width() / 2 - (rect.x + rect.width / 2),
+          y: position.y + stage.height() / 2 - (rect.y + rect.height / 2),
+        };
+        stage.position(newTranslate);
+        stageTranslateRef.current = newTranslate;
+        stage.batchDraw();
+      }),
+    [mapStageRef]
   );
 
   const previousSelectedToolRef = useRef(selectedToolId);

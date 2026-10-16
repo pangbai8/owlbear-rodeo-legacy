@@ -3,6 +3,8 @@ import { Box, Text } from "theme-ui";
 
 import { SearchResult } from "../helpers/fiveETools";
 import { EntryCard, loadEntryCard } from "../helpers/fiveEEntries";
+import { TextPart, splitRolls } from "../helpers/fiveEDice";
+import { RollLog, RollableText, useDiceRoller } from "./DiceRoller";
 
 type EntryCardViewProps = {
   result: SearchResult;
@@ -13,6 +15,8 @@ type EntryCardViewProps = {
 function EntryCardView({ result, onOpenFullPage }: EntryCardViewProps) {
   const [card, setCard] = useState<EntryCard | null>(null);
   const [error, setError] = useState("");
+  // Spell damage and the like: rolled as the user (no speaker)
+  const roller = useDiceRoller();
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +50,11 @@ function EntryCardView({ result, onOpenFullPage }: EntryCardViewProps) {
   if (!card) {
     return <Text sx={{ p: 3, fontSize: 1, color: "gray" }}>正在读取资料…</Text>;
   }
+  const rollLabel = (part: Exclude<TextPart, string>) =>
+    `${card.name}${part.kind === "damage" ? " 伤害" : part.kind === "hit" ? " 命中" : ""}`;
+  const hasRolls = [...card.lines.map((l) => l.text), ...card.paragraphs].some(
+    (text) => splitRolls(text).some((part) => typeof part !== "string")
+  );
   return (
     <Box sx={{ p: 3, fontSize: 1, lineHeight: 1.6 }}>
       <Text sx={{ fontSize: 3, fontWeight: "bold", display: "block" }}>
@@ -59,11 +68,13 @@ function EntryCardView({ result, onOpenFullPage }: EntryCardViewProps) {
       <Text sx={{ fontSize: 0, color: "gray", display: "block" }}>
         {card.subtitle} · {result.source}
       </Text>
+      {hasRolls && <RollLog roller={roller} />}
       {card.lines.length > 0 && (
         <Box sx={{ borderTop: "1px solid", borderColor: "border", mt: 2, pt: 2 }}>
           {card.lines.map((line) => (
             <Text key={line.label} sx={{ display: "block" }}>
-              <b>{line.label}</b> {line.text}
+              <b>{line.label}</b>{" "}
+              <RollableText parts={splitRolls(line.text)} label={rollLabel} roller={roller} />
             </Text>
           ))}
         </Box>
@@ -71,7 +82,7 @@ function EntryCardView({ result, onOpenFullPage }: EntryCardViewProps) {
       <Box sx={{ borderTop: "1px solid", borderColor: "border", mt: 2, pt: 2 }}>
         {card.paragraphs.map((p, i) => (
           <Text key={i} sx={{ display: "block", mb: 1 }}>
-            {p}
+            <RollableText parts={splitRolls(p)} label={rollLabel} roller={roller} />
           </Text>
         ))}
       </Box>

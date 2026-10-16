@@ -189,6 +189,8 @@ type FloatingWindowProps = {
   defaultRect: () => Rect;
   /** Extra buttons shown in the title bar before the close button */
   headerActions?: React.ReactNode;
+  /** Load the contents (hidden) before the window is first opened */
+  preload?: boolean;
   children: React.ReactNode;
 };
 
@@ -203,11 +205,12 @@ function FloatingWindow({
   storageKey,
   defaultRect,
   headerActions,
+  preload = false,
   children,
 }: FloatingWindowProps) {
   const { isOpen, setIsOpen, isFront, bringToFront } = useFloatingWindow(name);
   const [rect, setRect] = useState(() => loadRect(storageKey, defaultRect));
-  const [hasOpened, setHasOpened] = useState(false);
+  const [hasOpened, setHasOpened] = useState(preload);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const bringToFrontRef = useRef(bringToFront);

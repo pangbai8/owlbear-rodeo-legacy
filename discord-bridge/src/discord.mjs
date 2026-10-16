@@ -74,6 +74,18 @@ export function avatarUrl(user, member, guildId) {
 }
 
 /** Webhook names: 1-80 chars, no "discord"/"clyde", not "everyone"/"here" */
+// Avatars the VTT may give a speaker: the 5etools token art it uses
+const SPEAKER_AVATAR = /^https:\/\/5e\.kiwee\.top\/img\/[^\s"'<>]+$/;
+
+/** { name, avatarUrl } sent by the VTT for a monster's dice roll, or null */
+export function speakerOf(value) {
+  if (!value || typeof value !== "object") return null;
+  const name = String(value.name || "").trim();
+  if (!name || Array.from(name).length > 80) return null;
+  const avatarUrl = SPEAKER_AVATAR.test(String(value.avatarUrl || "")) ? String(value.avatarUrl) : null;
+  return { name, avatarUrl };
+}
+
 export function webhookUsername(name) {
   let result = String(name || "")
     .replace(/[\u0000-\u001f]/g, "")

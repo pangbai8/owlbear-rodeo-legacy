@@ -8,6 +8,12 @@ import {
   loadMonsterRecord,
 } from "../helpers/fiveETools";
 import { Statblock, statblock } from "../helpers/fiveEStatblock";
+import { splitChecks, splitRolls } from "../helpers/fiveEDice";
+import { RollLog, RollableText, useDiceRoller } from "./DiceRoller";
+
+// "力量 +5，敏捷 +3": the word before a bonus names the check
+const checkName = (before: string) =>
+  before.split(/[，,、；;]/).pop()!.trim();
 
 type MonsterCardProps = {
   monster: MonsterRef;
@@ -19,6 +25,8 @@ function MonsterCard({ monster, onOpenFullPage }: MonsterCardProps) {
   const [card, setCard] = useState<Statblock | null>(null);
   const [tokenUrl, setTokenUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // Rolls speak as the monster in Discord, with its token art
+  const roller = useDiceRoller({ name: monster.name, avatarUrl: tokenUrl });
 
   useEffect(() => {
     let cancelled = false;
@@ -88,12 +96,22 @@ function MonsterCard({ monster, onOpenFullPage }: MonsterCardProps) {
         <Text sx={{ fontSize: 0, color: "primary", whiteSpace: "nowrap" }}>⠿ 拖动</Text>
       </Flex>
 
-      <Box sx={rule} />
+      <RollLog roller={roller} />
       <Text sx={{ display: "block" }}>
-        <b>护甲等级</b> {card.ac}　<b>先攻</b> {card.initiative}
+        <b>护甲等级</b> {card.ac}　<b>先攻</b>{" "}
+        <RollableText
+          parts={splitChecks(card.initiative)}
+          label={() => "先攻"}
+          roller={roller}
+        />
       </Text>
       <Text sx={{ display: "block" }}>
-        <b>生命值</b> {card.hp}
+        <b>生命值</b>{" "}
+        <RollableText
+          parts={splitRolls(card.hp)}
+          label={() => "生命值"}
+          roller={roller}
+        />
       </Text>
       <Text sx={{ display: "block" }}>
         <b>速度</b> {card.speed || "—"}
@@ -104,7 +122,13 @@ function MonsterCard({ monster, onOpenFullPage }: MonsterCardProps) {
           <Box key={a.key} sx={{ flex: 1 }}>
             <Text sx={{ fontSize: 0, color: "gray", display: "block" }}>{a.label}</Text>
             <Text sx={{ display: "block" }}>
-              {a.score} ({a.mod})
+              {a.score} (
+              <RollableText
+                parts={splitChecks(a.mod)}
+                label={() => `${a.label}检定`}
+                roller={roller}
+              />
+              )
             </Text>
           </Box>
         ))}
@@ -112,7 +136,22 @@ function MonsterCard({ monster, onOpenFullPage }: MonsterCardProps) {
       <Box sx={rule} />
       {card.lines.map((line) => (
         <Text key={line.label} sx={{ display: "block" }}>
-          <b>{line.label}</b> {line.text}
+          <b>{line.label}</b>{" "}
+          {line.label === "豁免" || line.label === "技能" ? (
+            <RollableText
+              parts={splitChecks(line.text)}
+              label={(_, before) =>
+                `${checkName(before)}${line.label === "豁免" ? "豁免" : "检定"}`
+              }
+              roller={roller}
+            />
+          ) : (
+            <RollableText
+              parts={splitRolls(line.text)}
+              label={() => line.label}
+              roller={roller}
+            />
+          )}
         </Text>
       ))}
       {card.sections.map((section) => (
@@ -139,7 +178,18 @@ function MonsterCard({ monster, onOpenFullPage }: MonsterCardProps) {
                 item.paragraphs.map((p, j) => (
                   <Text key={j} sx={{ display: "block" }}>
                     {j === 0 && item.name && <b>{item.name}。</b>}
-                    {p}
+                    <RollableText
+                      parts={splitRolls(p)}
+                      label={(part) => {
+                        const name = item.name || section.title;
+                        return part.kind === "hit"
+                          ? `${name} 命中`
+                          : part.kind === "damage"
+                          ? `${name} 伤害`
+                          : name;
+                      }}
+                      roller={roller}
+                    />
                   </Text>
                 ))
               )}

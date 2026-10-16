@@ -29,6 +29,12 @@ import {
   AssetManifestAssets,
 } from "../types/Asset";
 import { TokenState } from "../types/TokenState";
+import { Color } from "../helpers/colors";
+import {
+  PartyLink,
+  linkedStatuses,
+  onPartyLinks,
+} from "../helpers/partyPanel";
 import { DrawingState } from "../types/Drawing";
 import { FogState } from "../types/Fog";
 import { Note } from "../types/Note";
@@ -195,6 +201,72 @@ function NetworkedMapAndTokens({ session }: { session: Session }) {
       updateMapState(debouncedMapState.mapId, debouncedMapState);
     }
   }, [currentMap, debouncedMapState, userId, database, updateMapState]);
+
+  /**
+   * Party panel NPCs linked to tokens (monsters dropped on the map): their HP
+   * and turn show as status rings. The map owner applies them for everyone,
+   * outside the undo history.
+   */
+  const currentMapRef = useRef(currentMap);
+  currentMapRef.current = currentMap;
+  const currentMapStateRef = useRef(currentMapState);
+  currentMapStateRef.current = currentMapState;
+  const partyLinksRef = useRef<PartyLink[]>([]);
+  // The links listener is registered once; the user id loads later
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+
+  function getMapTokens() {
+    const state = currentMapStateRef.current;
+    return {
+      mapId: currentMapRef.current?.id || null,
+      labels: state ? Object.values(state.tokens).map((t) => t.label) : [],
+    };
+  }
+
+  function applyPartyLinks() {
+    const map = currentMapRef.current;
+    const state = currentMapStateRef.current;
+    if (!map || !state || map.owner !== userIdRef.current) return;
+    const changes: Record<string, Color[]> = {};
+    for (const link of partyLinksRef.current) {
+      const token = state.tokens[link.tokenStateId];
+      if (!token || link.mapId !== map.id) continue;
+      const current = token.statuses || [];
+      const statuses = linkedStatuses(current, link) as Color[];
+      if (statuses.join() !== current.join()) {
+        changes[token.id] = statuses;
+      }
+    }
+    if (Object.keys(changes).length === 0) return;
+    setCurrentMapState((prev) => {
+      if (!prev || prev.mapId !== map.id) return prev;
+      const tokens = { ...prev.tokens };
+      for (const id in changes) {
+        if (tokens[id]) tokens[id] = { ...tokens[id], statuses: changes[id] };
+      }
+      return { ...prev, tokens };
+    });
+  }
+
+  useEffect(
+    () =>
+      onPartyLinks((links) => {
+        partyLinksRef.current = links;
+        applyPartyLinks();
+      }),
+    // applyPartyLinks reads refs and the (stable) state setter only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+  // Also when the map changes or a linked token is added after its NPC
+  const tokenCount = currentMapState
+    ? Object.keys(currentMapState.tokens).length
+    : 0;
+  useEffect(() => {
+    applyPartyLinks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMap?.id, currentMapState?.mapId, tokenCount, userId]);
 
   async function handleMapChange(
     newMap: MapType | null,
@@ -410,6 +482,7 @@ function NetworkedMapAndTokens({ session }: { session: Session }) {
     <GlobalImageDrop
       onMapChange={handleMapChange}
       onMapTokensStateCreate={handleMapTokensStateCreate}
+      getMapTokens={getMapTokens}
     >
       <Map
         map={currentMap}

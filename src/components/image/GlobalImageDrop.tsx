@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Box, Flex, Text } from "theme-ui";
 import { useToasts } from "react-toast-notifications";
 
@@ -8,7 +8,12 @@ import ConfirmModal from "../../modals/ConfirmModal";
 
 import { createMapFromFile } from "../../helpers/map";
 import { createTokenFromFile } from "../../helpers/token";
-import { MonsterRef } from "../../helpers/fiveETools";
+import { MonsterStats } from "../../helpers/fiveETools";
+import {
+  addMonsterToPartyPanel,
+  autoAddMapMonsters,
+  uniqueName,
+} from "../../helpers/partyPanel";
 import {
   createTokenState,
   clientPositionToMapPosition,
@@ -38,18 +43,42 @@ type GlobalImageDropProps = {
   children?: React.ReactNode;
   onMapChange: (map: Map, mapState: MapState) => void;
   onMapTokensStateCreate: (states: TokenState[]) => void;
+  /** The current map and its token labels, to number dropped monsters */
+  getMapTokens: () => { mapId: string | null; labels: string[] };
 };
 
 function GlobalImageDrop({
   children,
   onMapChange,
   onMapTokensStateCreate,
+  getMapTokens,
 }: GlobalImageDropProps) {
   const { addToast } = useToasts();
 
   const userId = useUserId();
   const { addMap, getMapState } = useMapData();
-  const { addToken } = useTokenData();
+  const {
+    addToken,
+    tokens: libraryTokens,
+    updateTokensHidden,
+  } = useTokenData();
+
+  // One sidebar entry per monster: copies from drops before monsters were
+  // reused stay in the library (tokens on maps still use their images) but
+  // are hidden from the sidebar
+  useEffect(() => {
+    const kept = new Set<string>();
+    const duplicates: string[] = [];
+    const visible = libraryTokens
+      .filter((t) => t.owner === userId && t.monster && !t.hideInSidebar)
+      .sort((a, b) => a.created - b.created);
+    for (const token of visible) {
+      const key = `${token.monster!.source}|${token.monster!.englishName}`;
+      if (kept.has(key)) duplicates.push(token.id);
+      else kept.add(key);
+    }
+    if (duplicates.length > 0) updateTokensHidden(duplicates, true);
+  }, [libraryTokens, userId, updateTokensHidden]);
   const { addAssets } = useAssets();
 
   const mapStageRef = useMapStage();
@@ -61,7 +90,7 @@ function GlobalImageDrop({
 
   const droppedImagesRef = useRef<File[]>();
   const dropPositionRef = useRef<Vector2>();
-  const droppedMonsterRef = useRef<MonsterRef>();
+  const droppedMonsterRef = useRef<MonsterStats>();
   const [droppingType, setDroppingType] = useState<"maps" | "tokens">("maps");
 
   async function handleDrop({
@@ -144,8 +173,27 @@ function GlobalImageDrop({
       // Keep track of tokens so we can add them to the map
       let tokens = [];
       for (let file of droppedImagesRef.current) {
+        const monster = droppedMonsterRef.current;
+        // The same monster dropped again: reuse its token in the library
+        // instead of adding another copy to the sidebar
+        const same = monster
+          ? libraryTokens.filter(
+              (t) =>
+                t.owner === userId &&
+                t.monster?.source === monster.source &&
+                t.monster?.englishName === monster.englishName
+            )
+          : [];
+        const existing = same.find((t) => !t.hideInSidebar) || same[0];
+        if (existing) {
+          tokens.push(existing);
+          continue;
+        }
         const { token, assets } = await createTokenFromFile(file, userId);
-        if (droppedMonsterRef.current) token.monster = droppedMonsterRef.current;
+        if (monster) {
+          const { name, englishName, source, url } = monster;
+          token.monster = { name, englishName, source, url };
+        }
         await addToken(token);
         await addAssets(assets);
         tokens.push(token);
@@ -172,11 +220,35 @@ function GlobalImageDrop({
               offset = Vector2.add(offset, 0.01);
             }
           }
+          const monster = droppedMonsterRef.current;
+          if (monster && tokenStates.length === 1) {
+            await nameMonsterToken(monster, tokenStates[0]);
+          }
           if (tokenStates.length > 0) {
             onMapTokensStateCreate(tokenStates);
           }
         }
       }
+    }
+  }
+
+  /**
+   * Numbers a monster's label ("地精", "地精 2"…). With the party panel's
+   * "地图怪物入队" switch on it also joins the panel, linked to this token,
+   * and takes the panel's name for it.
+   */
+  async function nameMonsterToken(monster: MonsterStats, tokenState: TokenState) {
+    const { mapId, labels } = getMapTokens();
+    tokenState.label = uniqueName(monster.name, labels);
+    if (!autoAddMapMonsters() || !mapId) return;
+    try {
+      tokenState.label = await addMonsterToPartyPanel(monster, {
+        tokenStateId: tokenState.id,
+        mapId,
+      });
+      addToast(`已把「${tokenState.label}」加入小队面板`);
+    } catch (e) {
+      addToast(`没能加入小队面板：${e instanceof Error ? e.message : e}`);
     }
   }
 
