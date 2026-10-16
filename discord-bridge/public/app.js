@@ -777,6 +777,21 @@ $("identity-select").addEventListener("change", (event) => {
 });
 $("characters-button").addEventListener("click", () => characterPanel?.open());
 
+// Help: how this works and how to invite the bot (also from the login screen)
+function openHelp() {
+  $("help").hidden = false;
+  $("help-close").focus();
+}
+function closeHelp() {
+  $("help").hidden = true;
+}
+$("help-button").addEventListener("click", openHelp);
+$("help-open-login").addEventListener("click", openHelp);
+$("help-close").addEventListener("click", closeHelp);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("help").hidden) closeHelp();
+});
+
 // ---- composer --------------------------------------------------------------
 
 function showComposerError(message) {

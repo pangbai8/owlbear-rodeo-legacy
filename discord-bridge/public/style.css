@@ -713,6 +713,50 @@ pre.code-block code {
   color: var(--primary);
 }
 
+/* help panel: over the login screen too */
+
+.help-panel {
+  position: fixed;
+  z-index: 20;
+}
+
+.help-body h3 {
+  font-size: 14px;
+  margin: 16px 0 6px;
+}
+
+.help-body h3:first-child {
+  margin-top: 0;
+}
+
+.help-body p,
+.help-body li {
+  line-height: 1.6;
+  margin: 4px 0;
+}
+
+.help-body ol,
+.help-body ul {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+
+.help-body code {
+  background: var(--bg-raised);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.primary-link {
+  text-decoration: none;
+  color: inherit;
+  margin-top: 4px;
+}
+
+#help-open-login {
+  margin-top: 16px;
+}
+
 /* character panel */
 
 .panel {
