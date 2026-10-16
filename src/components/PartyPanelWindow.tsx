@@ -16,7 +16,7 @@ import {
 } from "../helpers/fiveETools";
 import { findPf2 } from "../helpers/pf2";
 import { findDnd4e } from "../helpers/dnd4e";
-import { getRuleSystem } from "../helpers/ruleSystem";
+import { RULE_SYSTEM_LABEL, getRuleSystem } from "../helpers/ruleSystem";
 import {
   PartyLink,
   emitPartyLinks,
@@ -104,12 +104,12 @@ function PartyPanelWindow() {
                   if (result) openFiveECard(result);
                   return !!result;
                 })
-              : lookupFiveE(data.name.trim(), kind)
+              : lookupFiveE(data.name.trim(), kind, rules === "5r" ? "2024" : "2014")
             )
               .then((found) => {
                 if (!found)
                   addToastRef.current(
-                    `${{ "5e": "5e", pf2: "PF2", "4e": "4e" }[getRuleSystem()]} 资料里没找到「${data.name}」`
+                    `${RULE_SYSTEM_LABEL[getRuleSystem()]} 资料里没找到「${data.name}」`
                   );
               })
               .catch(() => addToastRef.current("读取 5e 资料失败"));

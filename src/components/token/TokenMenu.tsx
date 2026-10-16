@@ -20,7 +20,7 @@ import TokenAttachmentIcon from "../../icons/TokenAttachmentIcon";
 import { useUserId } from "../../contexts/UserIdContext";
 import { useTokenData } from "../../contexts/TokenDataContext";
 import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
-import { useRuleSystem } from "../../helpers/ruleSystem";
+import { dataSystemOf, useRuleSystem } from "../../helpers/ruleSystem";
 import ConditionPicker from "./ConditionPicker";
 import { openMonsterCard } from "../../helpers/fiveETools";
 
@@ -92,7 +92,7 @@ function TokenMenu({
     lookupsOn &&
     token &&
     token.owner === userId &&
-    (token.monster?.system || "5e") === ruleSystem
+    (token.monster?.system || "5e") === dataSystemOf(ruleSystem)
       ? token.monster
       : undefined;
 

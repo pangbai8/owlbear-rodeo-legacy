@@ -193,3 +193,12 @@ test("stored monsters: checked, turned back into a result, opened by event", () 
   openMonsterCard(ref);
   expect(opened).toEqual([monsterResult(ref)]);
 });
+
+test("5r: 2024 books first and highlighted, replaced entries dimmed", async () => {
+  // The searchFiveE index above: Goblin Boss in MM (replaced, dR) and XMM
+  const results = await searchFiveE("地精头目", 60, "2024");
+  expect(results.map((r) => r.source)).toEqual(["XMM", "MM"]);
+  expect(results[0]).toMatchObject({ accent: "#2e7d6b", reprinted: false });
+  expect(results[1]).toMatchObject({ reprinted: true });
+  expect(results[1].accent).toBeUndefined();
+});
