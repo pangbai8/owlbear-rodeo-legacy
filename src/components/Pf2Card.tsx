@@ -174,11 +174,7 @@ const SAVES: [string, string][] = [
 
 function CreatureCard({ result, record }: { result: SearchResult; record: any }) {
   const image = record.image ? `/pf2img/${record.image}` : null;
-  // Rolls speak as the creature in Discord, with its art
-  const roller = useDiceRoller({
-    name: record.中文 || result.name,
-    avatarUrl: image ? window.location.origin + image : null,
-  });
+  const roller = useDiceRoller();
 
   function handleDragStart(event: React.DragEvent) {
     event.dataTransfer.effectAllowed = "copy";
