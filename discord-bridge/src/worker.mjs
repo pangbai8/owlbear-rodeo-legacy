@@ -5,6 +5,7 @@
 // still reaches the page when it is embedded in an iframe.
 import { API, discordRequest, readConfig } from "./discord.mjs";
 import { verifyInteraction } from "./interactions.mjs";
+import { MANAGE_WEBHOOKS, READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "./permissions.mjs";
 import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
@@ -162,6 +163,19 @@ async function handle(request, env) {
   // Uploaded character avatars are public: Discord fetches them for webhook messages
   const avatar = url.pathname.match(/^\/avatars\/([0-9a-f]{32})$/);
   if (avatar && request.method === "GET") return hub().fetch(`https://hub/internal/avatars/${avatar[1]}`);
+
+  // "邀请机器人": Discord's page to add the bot to a server, with the
+  // permissions it needs (view channel, read history, manage webhooks) and
+  // its message context-menu commands
+  if (url.pathname === "/invite") {
+    const permissions = (VIEW_CHANNEL | READ_MESSAGE_HISTORY | MANAGE_WEBHOOKS).toString();
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      scope: "bot applications.commands",
+      permissions,
+    });
+    return Response.redirect(`https://discord.com/oauth2/authorize?${params}`, 302);
+  }
 
   if (url.pathname === "/auth/login") return login(url, config);
   if (url.pathname === "/auth/callback") return callback(request, url, env, config);
