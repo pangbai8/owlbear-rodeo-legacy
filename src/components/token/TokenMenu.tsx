@@ -20,6 +20,8 @@ import TokenAttachmentIcon from "../../icons/TokenAttachmentIcon";
 import { useUserId } from "../../contexts/UserIdContext";
 import { useTokenData } from "../../contexts/TokenDataContext";
 import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
+import { useRuleSystem } from "../../helpers/ruleSystem";
+import Pf2ConditionPicker from "./Pf2ConditionPicker";
 import { openMonsterCard } from "../../helpers/fiveETools";
 
 import {
@@ -80,9 +82,19 @@ function TokenMenu({
   // Monsters from the quick search keep their stat card; only the one who
   // dropped them (the GM) has the token in their library
   const token = tokenState ? tokensById[tokenState.tokenId] : undefined;
-  const { isOpen: fiveEMode } = useFloatingWindow("quickSearch");
+  // Only with its rules' mode on (5e or PF2)
+  const { isOpen: lookupsOn } = useFloatingWindow("quickSearch");
+  const ruleSystem = useRuleSystem();
+  // PF2 mode: PF2 conditions instead of the color rings, in a wider menu
+  const pf2Mode = lookupsOn && ruleSystem === "pf2";
+  const menuWidth = pf2Mode ? 260 : 156;
   const monster =
-    fiveEMode && token && token.owner === userId ? token.monster : undefined;
+    lookupsOn &&
+    token &&
+    token.owner === userId &&
+    (token.monster?.system === "pf2") === (ruleSystem === "pf2")
+      ? token.monster
+      : undefined;
 
   const wasOpen = usePrevious(isOpen);
 
@@ -96,16 +108,16 @@ function TokenMenu({
         const mapElement = document.querySelector(".map");
         if (mapElement) {
           const mapRect = mapElement.getBoundingClientRect();
-          // Center X for the menu which is 156px wide
+          // Center X for the menu
           setMenuLeft(
-            mapRect.left + imageRect.x + imageRect.width / 2 - 156 / 2
+            mapRect.left + imageRect.x + imageRect.width / 2 - menuWidth / 2
           );
           // Y 20px from the bottom
           setMenuTop(mapRect.top + imageRect.y + imageRect.height + 20);
         }
       }
     }
-  }, [isOpen, tokenState, wasOpen, tokenImage]);
+  }, [isOpen, tokenState, wasOpen, tokenImage, menuWidth]);
 
   function handleLabelChange(event: React.ChangeEvent<HTMLInputElement>) {
     const label = event.target.value.substring(0, 48);
@@ -186,7 +198,7 @@ function TokenMenu({
       left={`${menuLeft}px`}
       onModalContent={handleModalContent}
     >
-      <Box sx={{ width: "156px", overflow: "hidden" }} p={1}>
+      <Box sx={{ width: `${menuWidth}px`, overflow: "hidden" }} p={1}>
         <Flex
           as="form"
           onSubmit={(e) => {
@@ -217,6 +229,15 @@ function TokenMenu({
             autoComplete="off"
           />
         </Flex>
+        {pf2Mode ? (
+          <Pf2ConditionPicker
+            conditions={tokenState?.conditions || []}
+            onChange={(conditions) =>
+              tokenState &&
+              onTokenStateChange({ [tokenState.id]: { conditions } })
+            }
+          />
+        ) : (
         <Box
           sx={{
             display: "flex",
@@ -257,6 +278,7 @@ function TokenMenu({
               </Box>
             ))}
         </Box>
+        )}
         {/* Only show hide and lock token actions to map owners */}
         {map && map.owner === userId && tokenState && (
           <Flex sx={{ alignItems: "center", justifyContent: "space-around" }}>

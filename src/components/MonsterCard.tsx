@@ -25,8 +25,7 @@ function MonsterCard({ monster, onOpenFullPage }: MonsterCardProps) {
   const [card, setCard] = useState<Statblock | null>(null);
   const [tokenUrl, setTokenUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
-  // Rolls speak as the monster in Discord, with its token art
-  const roller = useDiceRoller({ name: monster.name, avatarUrl: tokenUrl });
+  const roller = useDiceRoller();
 
   useEffect(() => {
     let cancelled = false;

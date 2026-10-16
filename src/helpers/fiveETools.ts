@@ -2,6 +2,9 @@
 // browser reads its public search index and bestiary data directly (both are
 // served with Access-Control-Allow-Origin: *); nothing is copied to this site.
 
+import type { Pf2Location } from "./pf2";
+import { PF2_WIKI, loadPf2Monster } from "./pf2";
+
 export const FIVE_E_BASE = "https://5e.kiwee.top/";
 
 /** Drag data type for a monster dragged out of the quick search */
@@ -143,6 +146,10 @@ export type SearchResult = {
   /** From a 5e 2024 rules book (shown dimmed; the table plays 2014) */
   modern: boolean;
   isMonster: boolean;
+  /** From the PF2 mirror (see pf2.ts) instead of 5etools */
+  system?: "pf2";
+  /** Where a PF2 result's record is */
+  pf2?: Pf2Location;
 };
 
 type SearchIndex = {
@@ -269,6 +276,8 @@ export type MonsterRef = {
   englishName: string;
   source: string;
   url: string;
+  /** A PF2 creature (its url is on the PF2 wiki) */
+  system?: "pf2";
 };
 
 export type MonsterStats = MonsterRef & {
@@ -390,7 +399,8 @@ export function monsterStats(record: any, ref: MonsterRef): MonsterStats {
 
 const statsCache = new Map<string, Promise<MonsterStats>>();
 
-export function loadMonster(ref: MonsterRef) {
+export function loadMonster(ref: MonsterRef): Promise<MonsterStats> {
+  if (ref.system === "pf2") return loadPf2Monster(ref);
   const key = `${ref.source}|${ref.englishName}`;
   if (!statsCache.has(key)) {
     statsCache.set(
@@ -420,12 +430,30 @@ export function isMonsterRef(value: any): value is MonsterRef {
     typeof value.englishName === "string" &&
     typeof value.source === "string" &&
     typeof value.url === "string" &&
-    value.url.startsWith(FIVE_E_BASE)
+    (value.system === "pf2"
+      ? value.url.startsWith(PF2_WIKI)
+      : value.system === undefined && value.url.startsWith(FIVE_E_BASE))
   );
 }
 
 /** The search result a stored monster stands for, to show its card again */
 export function monsterResult(ref: MonsterRef): SearchResult {
+  if (ref.system === "pf2") {
+    // Its record is found by name when the card opens
+    return {
+      id: -1,
+      name: ref.name,
+      englishName: ref.englishName !== ref.name ? ref.englishName : "",
+      category: 1000,
+      categoryLabel: "生物",
+      source: ref.source,
+      url: ref.url,
+      reprinted: false,
+      modern: false,
+      isMonster: true,
+      system: "pf2",
+    };
+  }
   return {
     id: -1,
     name: ref.name,
@@ -482,7 +510,24 @@ export function monsterRefOf(result: SearchResult): MonsterRef {
     englishName: result.englishName || result.name,
     source: result.source,
     url: result.url,
+    ...(result.system === "pf2" ? { system: "pf2" as const } : {}),
   };
+}
+
+/** Crops a tall or wide picture to a square (biased up, where heads are) */
+async function squareImage(blob: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+  const { width, height } = bitmap;
+  if (Math.abs(width - height) <= 2) return blob;
+  const side = Math.min(width, height);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = side;
+  const sx = (width - side) / 2;
+  const sy = height > width ? (height - side) * 0.15 : 0;
+  canvas.getContext("2d")!.drawImage(bitmap, sx, sy, side, side, 0, 0, side, side);
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("crop failed"))), "image/webp", 0.9)
+  );
 }
 
 /** A round placeholder when 5etools has no token art for a monster */
@@ -520,6 +565,8 @@ export async function monsterTokenFile(stats: MonsterStats) {
     const response = await fetch(stats.tokenUrl).catch(() => null);
     if (response?.ok) blob = await response.blob();
   }
+  // PF2 art is a portrait, not a round token: crop it square
+  if (blob) blob = await squareImage(blob).catch(() => blob);
   if (!blob) blob = await placeholderToken(stats.name);
   const size = stats.size > 1 ? ` ${stats.size}x${stats.size}` : "";
   const extension = blob.type === "image/webp" ? "webp" : "png";

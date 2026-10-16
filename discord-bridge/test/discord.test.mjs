@@ -127,6 +127,9 @@ test("speakerOf: a monster name, with 5etools token art only", async () => {
     avatarUrl: "https://5e.kiwee.top/img/bestiary/tokens/MM/Goblin%20Boss.webp",
   });
   assert.deepEqual(speakerOf({ name: "x", avatarUrl: "https://evil.example/a.png" }), { name: "x", avatarUrl: null });
+  // PF2 creature art through the VTT's proxy
+  const pf2 = "https://vtt.pangbai.de/pf2img/thumb/a/ae/Goblin_Commando.webp/300px-Goblin_Commando.webp.png";
+  assert.equal(speakerOf({ name: "地精突击手", avatarUrl: pf2 }).avatarUrl, pf2);
   assert.equal(speakerOf({ name: "" }), null);
   assert.equal(speakerOf({ name: "a".repeat(81) }), null);
   assert.equal(speakerOf("地精"), null);

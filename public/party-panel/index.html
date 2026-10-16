@@ -147,6 +147,8 @@ body.pipdoc .mi-ac b{font-size:15px}
 .res .rs{font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:0 4px;white-space:nowrap}
 .res .pip{--c:var(--res)}
 .counter{display:inline-flex;align-items:center;gap:4px}
+.p2step{margin-top:4px}.p2step b{min-width:2em}
+.p2ac{margin-left:6px;padding:0 5px;border-radius:4px;background:color-mix(in srgb,var(--crit) 22%,transparent);color:var(--crit);font-size:11px;font-weight:600}
 .counter button{width:24px;height:24px;border:1px solid var(--line);background:var(--sunk);border-radius:5px;padding:0;line-height:1}
 .counter b{font-family:var(--f-num);font-size:13px;min-width:4.5em;text-align:center}
 
@@ -215,6 +217,7 @@ body.pipdoc .mi-ac b{font-size:15px}
 /* 5e mode (the VTT's book button): chips open their 5e card; monster cards only then */
 body.fiveE [data-lookup]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 body:not(.fiveE) [data-act="monster"]{display:none}
+body[data-rules="5e"] [data-act="monster"][data-system="pf2"],body[data-rules="pf2"] [data-act="monster"]:not([data-system="pf2"]){display:none}
 .qdel-armed,.mi-btns .qdel-armed{background:var(--crit);border-color:var(--crit);color:#fff;font-size:12px}
 #autoMapBtn[aria-pressed="true"]{border-color:var(--good);color:var(--good)}
 .cbtn[aria-pressed="true"]{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--sunk))}
@@ -369,6 +372,55 @@ const CONDS=[
   ["震慑","失能；力量敏捷豁免自动失败，攻击你有优势"],
   ["昏迷","失能并倒地；力量敏捷豁免失败，5 尺内命中即重击"]
 ];
+/* PF2 conditions (the VTT's src/helpers/pf2Conditions.ts keeps the same list:
+   change both together). Stored in c.conds as "倒地" or with a value "惊惧 1". */
+const PF2_CONDS=[
+  ["惊惧",true,"所有检定和 DC 受等同数值的状态减值；每回合结束时减 1"],
+  ["恶心",true,"所有检定和 DC 受状态减值；可花 1 动作进行强韧豁免来降低"],
+  ["缓慢",true,"回合开始时少获得等同数值的动作"],
+  ["震慑",true,"不能行动；之后的回合失去等同数值的动作"],
+  ["倒地",false,"措手不及，攻击检定 −2；只能爬行或起身"],
+  ["措手不及",false,"AC −2（环境减值）"],
+  ["受擒",false,"措手不及且禁足；操作动作需 DC 5 纯骰检定"],
+  ["束缚",false,"措手不及且禁足；只能尝试逃脱或强行挣脱"],
+  ["禁足",false,"不能用移动动作离开当前位置"],
+  ["隐蔽",false,"以你为目标需通过 DC 5 纯骰检定"],
+  ["藏匿",false,"对方知道你的方位但看不到你；以你为目标需 DC 11 纯骰检定"],
+  ["隐形",false,"所有生物都看不见你"],
+  ["目盲",false,"看不见；视觉相关检定自动失败，察觉检定 −4"],
+  ["目眩",false,"所有生物和物体对你都处于隐蔽"],
+  ["耳聋",false,"听不见；听觉相关检定自动失败，察觉检定 −2"],
+  ["麻痹",false,"措手不及；不能行动，只能回忆知识等纯心智动作"],
+  ["困惑",false,"措手不及；随机攻击，不能延迟、准备或做反应"],
+  ["被控制",false,"由控制者决定你的行动"],
+  ["迷魂",false,"察觉和技能检定 −2；不能使用专注动作（除非与迷魂源有关）"],
+  ["逃跑",false,"必须尽力远离来源移动"],
+  ["疲乏",false,"AC 和豁免 −1；探索时不能进行探索活动"],
+  ["失去意识",false,"倒地、目盲且措手不及；AC、察觉和反射 −4"],
+  ["濒死",true,"失去意识；每回合开始进行复苏检定，达到 4（减毁灭值）时死亡"],
+  ["受伤",true,"再次进入濒死时，濒死值额外增加受伤值"],
+  ["毁灭",true,"濒死致死的数值降低等同数值"],
+  ["笨拙",true,"敏捷类检定和 DC（含 AC、反射）受状态减值"],
+  ["力竭",true,"力量类检定和 DC（含近战攻击与伤害）受状态减值"],
+  ["呆滞",true,"智力、感知、魅力类检定和 DC 受减值；施法需纯骰检定"],
+  ["流失",true,"体质类检定和 DC 受减值；生命值上限减少 等级×数值"],
+  ["持续伤害",false,"回合结束时受到伤害，然后进行 DC 15 纯骰检定来结束"],
+  ["迅捷",false,"回合开始时额外获得 1 个受限动作"],
+  ["超载",false,"笨拙 1，速度 −10 尺"],
+  ["石化",false,"化为石像，不能行动"],
+  ["无踪",false,"对方不知道你的位置"]
+];
+/* PF2 rules: the VTT's PF2 button (same-origin localStorage) */
+function pf2Rules(){try{return localStorage.getItem("ruleSystem")==="pf2"}catch(e){return false}}
+function p2Parse(t){const m=String(t).trim().match(/^(.*?)\s*(\d+)$/);return m?{n:m[1],v:+m[2]}:{n:String(t).trim(),v:null}}
+function p2Entry(n){return PF2_CONDS.find(x=>x[0]===n)}
+function p2Value(conds,n){for(const t of conds){const p=p2Parse(t);if(p.n===n)return p.v==null?0:p.v}return null}
+function p2Set(conds,n,v){const valued=(p2Entry(n)||[])[1],remove=v==null||(valued&&v<=0),text=valued?n+" "+v:n,i=conds.findIndex(t=>p2Parse(t).n===n);if(i<0)return remove?conds:conds.concat(text);const next=conds.slice();if(remove)next.splice(i,1);else next[i]=text;return next}
+function pf2CondGrid(c){
+  return `<div class="sec-h"><h3>PF2 状态</h3></div><div class="condgrid">${PF2_CONDS.map(([n,valued,d])=>{const v=p2Value(c.conds,n),on=v!==null;
+    return `<div class="condentry"><button class="cbtn" aria-pressed="${on}" data-p2="${esc(n)}"><b>${esc(n)}${valued&&on?" "+v:""}${P2_AC[n]?`<span class="p2ac">${P2_AC[n].s==="v"?"AC−X":"AC−"+((P2_AC[n].c||0)+(P2_AC[n].s||0))}</span>`:""}</b><small>${esc(d)}</small></button>${valued&&on?`<span class="counter p2step"><button data-p2step="${esc(n)}" data-d="-1" aria-label="${esc(n)} 减 1">−</button><b>${v}</b><button data-p2step="${esc(n)}" data-d="1" aria-label="${esc(n)} 加 1">＋</button></span>`:""}</div>`}).join("")}</div>
+    <p class="hint">带数值的状态点一下设为 1，再用 −/＋ 调整，减到 0 自动移除。和这个 NPC 关联的地图棋子会同步显示。<br>标了 AC 的状态会自动计入 AC：措手不及类（−2）只算一次，状态减值取最大的那个，两类相加。</p>`;
+}
 const FX_PRESETS=[
   {name:"祝福",kind:"buff",rounds:10,ac:0,note:"攻击与豁免 +1d4 · 专注"},
   {name:"加速术",kind:"buff",rounds:10,ac:2,note:"速度翻倍，额外动作 · 专注"},
@@ -442,7 +494,30 @@ function addConc(c,name){
   c.concs.push(name);c.conc=c.concs[0];
   if(ended.length)toast(c.name+" 开始专注「"+name+"」，"+(concLimit(c)>1?"已达上限 "+concLimit(c)+" 个，":"")+"「"+ended.join("」「")+"」的专注结束。");
 }
-function effAC(c){return c.ac+c.fx.reduce((s,f)=>s+(f.ac||0),0)}
+/* PF2 conditions that lower AC: c = circumstance penalty (off-guard and the
+   conditions that make you off-guard), s = status penalty ("v": its value) */
+const P2_AC={措手不及:{c:2},倒地:{c:2},受擒:{c:2},束缚:{c:2},麻痹:{c:2},困惑:{c:2},失去意识:{c:2,s:4},疲乏:{s:1},超载:{s:1},笨拙:{s:"v"},惊惧:{s:"v"},恶心:{s:"v"}};
+function p2AcParts(c){
+  if(!pf2Rules())return [];
+  let circ=null,stat=null;
+  for(const t of c.conds){
+    const p=p2Parse(t),d=P2_AC[p.n];if(!d)continue;
+    if(d.c&&(!circ||d.c>circ.v))circ={t:p.n==="措手不及"?t:t+"（措手不及）",v:d.c};
+    const sv=d.s==="v"?(p.v||0):(d.s||0);
+    if(sv&&(!stat||sv>stat.v))stat={t,v:sv};
+  }
+  return [circ,stat].filter(Boolean);
+}
+function p2AcPenalty(c){return p2AcParts(c).reduce((s,x)=>s+x.v,0)}
+function effAC(c){return c.ac+c.fx.reduce((s,f)=>s+(f.ac||0),0)-p2AcPenalty(c)}
+/* The AC shield's tooltip: base, effects, conditions */
+function acNote(c){
+  const fx=c.fx.reduce((s,f)=>s+(f.ac||0),0),parts=p2AcParts(c);
+  let note="基础 AC "+c.ac;
+  if(fx)note+="，效果调整 "+(fx>0?"+":"")+fx;
+  if(parts.length)note+="，状态调整 −"+parts.reduce((s,x)=>s+x.v,0)+"（"+parts.map(x=>x.t+" −"+x.v).join("，")+"）";
+  return note;
+}
 function clsName(c){const C=getClass(c.cls);return C?C.n:(c.clsLabel||"")}
 
 /* custom classes */
@@ -501,7 +576,7 @@ try{const raw=lsGet(COND_LIBRARY_KEY);condLibrary=raw==null?CONDS.map(x=>x.slice
 function saveCondLibrary(next){
   try{localStorage.setItem(COND_LIBRARY_KEY,JSON.stringify(next));condLibrary=next;return true}catch(e){toast("状态库保存失败，请检查浏览器存储设置。可通过导出备份。");return false}
 }
-function condSummary(c,n){return Object.prototype.hasOwnProperty.call(c.condNotes||{},n)?c.condNotes[n]:(condLibrary.find(x=>x[0]===n)||CONDS.find(x=>x[0]===n)||[])[1]||""}
+function condSummary(c,n){return Object.prototype.hasOwnProperty.call(c.condNotes||{},n)?c.condNotes[n]:(condLibrary.find(x=>x[0]===n)||CONDS.find(x=>x[0]===n)||p2Entry(p2Parse(n).n)||[])[pf2Rules()&&p2Entry(p2Parse(n).n)?2:1]||""}
 function setCond(c,n,summary){if(!c.conds.includes(n))c.conds.push(n);c.condNotes=Object.assign(Object.create(null),c.condNotes||{});c.condNotes[n]=summary}
 function condLibraryModal(doc=document){
   openModal(`<h2>导入 / 导出状态库</h2><p class="sub">导出后可在其他面板、浏览器或团中导入。导入会替换此浏览器保存的状态库；角色身上已有的状态保留。</p><div class="field"><label for="cl-json">状态库 JSON（名称、规则摘要）</label><textarea id="cl-json" class="json">${esc(JSON.stringify(condLibrary,null,2))}</textarea></div><div class="mfoot"><button class="btn" data-export>下载状态库</button><button class="btn" data-import>导入并替换</button><button class="btn primary" data-x>关闭</button></div>`,root=>{
@@ -798,7 +873,7 @@ function card(id,c){
   <div class="head">
     <div class="init"><label class="init-l" for="init-${id}">先攻</label><input id="init-${id}" class="init-v ${c.initPending?"pending":""}" type="number" inputmode="numeric" value="${c.initPending?"":c.init}" placeholder="?" data-fkey="init-${id}" data-act="initset" title="${c.initPending?"等待手动填写先攻":"先攻结果，可直接修改"}"><label class="init-l" for="initb-${id}">加值</label><span class="init-b"><input id="initb-${id}" type="number" inputmode="numeric" value="${c.initBonus}" data-fkey="initb-${id}" data-act="initb" title="先攻加值"><button class="init-d" data-act="rollinit" title="掷先攻：1d20 ${sgn(c.initBonus)}${c.initAdv?"，优势":""}" aria-label="为 ${esc(c.name)} 掷先攻">🎲</button></span></div>
     <div class="who"><h2>${esc(c.name)}${turn?`<span class="turn-tag">行动中</span>`:""}</h2><p>${esc(sub)}</p></div>
-    <div class="acbox">${c.monster?qdelBtn(id,c,"iconbtn"):""}${c.token&&c.token.id?`<button class="iconbtn" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}${c.monster&&c.monster.url?`<button class="iconbtn" data-act="monster" data-monster="${esc(JSON.stringify(c.monster))}" aria-label="查看 ${esc(c.name)} 的怪物资料" title="查看怪物资料（属性、攻击、动作）">📖</button>`:""}<div class="shield ${acCls}" title="基础 AC ${c.ac}${ac!==c.ac?"，效果调整 "+(ac-c.ac>0?"+":"")+(ac-c.ac):""}"><b>${ac}</b><i>AC</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
+    <div class="acbox">${c.monster?qdelBtn(id,c,"iconbtn"):""}${c.token&&c.token.id?`<button class="iconbtn" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}${c.monster&&c.monster.url?`<button class="iconbtn" data-act="monster" data-system="${c.monster.system==="pf2"?"pf2":"5e"}" data-monster="${esc(JSON.stringify(c.monster))}" aria-label="查看 ${esc(c.name)} 的怪物资料" title="查看怪物资料（属性、攻击、动作）">📖</button>`:""}<div class="shield ${acCls}" title="${esc(acNote(c))}"><b>${ac}</b><i>AC</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
   </div>
   <div class="hp">
     <div class="hp-top"><span class="hp-cur">${c.hp}</span><span class="hp-max">/ ${c.maxHp}</span>${c.temp?`<span class="temp" title="临时生命">+${c.temp} 临时</span>`:""}<span class="status-pill ${lvlState}">${label}</span></div>
@@ -1451,17 +1526,17 @@ function condModal(id,doc=document){
     const c=S.chars[id];if(!c){modalClose();return}
     const lim=concLimit(c),multi=multiConc();
     root.innerHTML=`<h2>${esc(c.name)} 的状态</h2><p class="sub">点选状态为当前角色添加 / 移除。状态库供本浏览器所有小队和角色共用；删除资料不会移除角色已有的状态。</p>
-    <div class="sec-h"><h3>状态库</h3><div class="group cond-tools"><button class="btn sm ghost" data-editor aria-expanded="${editorOpen}">${editorOpen?"收起表单":"＋ 新增"}</button><button class="btn sm ghost ${managing?"active":""}" data-managelib aria-pressed="${managing}">${managing?"完成管理":"管理"}</button>${managing?`<button class="btn sm ghost" data-libraryio>导入 / 导出</button>`:""}</div></div>
+    ${pf2Rules()?pf2CondGrid(c):`<div class="sec-h"><h3>状态库</h3><div class="group cond-tools"><button class="btn sm ghost" data-editor aria-expanded="${editorOpen}">${editorOpen?"收起表单":"＋ 新增"}</button><button class="btn sm ghost ${managing?"active":""}" data-managelib aria-pressed="${managing}">${managing?"完成管理":"管理"}</button>${managing?`<button class="btn sm ghost" data-libraryio>导入 / 导出</button>`:""}</div></div>
     <div class="condgrid">${condLibrary.length?condLibrary.map(([n,d])=>`<div class="condentry ${managing?"managing":""} ${menuName===n?"menu-open":""}"><button class="cbtn" aria-pressed="${c.conds.includes(n)}" data-cond="${esc(n)}"><b>${esc(n)}</b><small>${esc(d)||"暂无规则摘要"}</small></button>${managing?`<button class="cond-more" data-condmenu="${esc(n)}" aria-label="管理${esc(n)}" aria-expanded="${menuName===n}">⋯</button>${menuName===n?`<div class="cond-menu" role="group" aria-label="${esc(n)}的管理操作"><button data-editcond="${esc(n)}">编辑资料</button><button class="danger" data-deletecond="${esc(n)}">${deletePending===n?"确认删除":"删除状态"}</button></div>`:""}`:""}</div>`).join(""):`<span class="empty-line">状态库为空，点击「＋ 新增」添加状态。</span>`}</div>
     ${editorOpen?`<div class="sec"><div class="cond-editor-toggle"><h3>新增 / 编辑状态资料</h3><button class="btn sm ghost" data-editor>收起</button></div>
       <div class="fields"><div class="field wide"><label for="m-custom">状态名</label><input id="m-custom" maxlength="80" value="${esc(customPending)}" placeholder="例如 受伤、流血"></div><div class="field wide"><label for="m-summary">规则摘要</label><textarea id="m-summary" maxlength="2000" rows="3" placeholder="描述此状态的规则效果">${esc(summaryPending)}</textarea></div></div>
       <div class="group" style="margin-top:8px"><button class="btn sm" data-savecustom>保存到状态库</button><button class="btn sm" data-addcustom>保存并添加给角色</button></div><p class="hint">同名保存会更新资料；角色已应用的规则摘要保持原样。可将状态库单独导出供其他团使用。</p>
     </div>
-    `:""}
+    `:""}`}
     <div class="sec"><div class="sec-h"><h3>角色当前状态</h3></div><div class="chips">${c.conds.length?c.conds.map(n=>`<span class="chip cond" title="${esc(condSummary(c,n))}">${esc(n)}${condLibrary.some(x=>x[0]===n)?"":`<button class="btn sm ghost" data-editcond="${esc(n)}" title="补充摘要并保存到状态库">存入库</button>`}<button class="x" data-custom-remove="${esc(n)}" aria-label="从角色移除${esc(n)}">×</button></span>`).join(""):`<span class="empty-line">无异常状态</span>`}</div></div>
     <div class="sec"><div class="sec-h"><h3>增益 / 减益</h3><button class="btn sm" data-addfx>＋ 效果</button></div><div class="chips">${c.fx.length?c.fx.map(f=>`<span class="chip ${f.kind}">${esc(f.name)}${f.rounds==null?"":" · "+f.rounds+"轮"}<button class="x" data-removefx="${esc(f.id)}" aria-label="移除${esc(f.name)}">×</button></span>`).join(""):`<span class="empty-line">没有增益或减益</span>`}</div></div>
     <div class="fields">
-      <div class="field"><label>力竭等级（0–6）</label><span class="counter"><button data-exh="-1" aria-label="减少力竭">−</button><b>${c.exh}</b><button data-exh="1" aria-label="增加力竭">＋</button></span></div>
+      ${pf2Rules()?"":`<div class="field"><label>力竭等级（0–6）</label><span class="counter"><button data-exh="-1" aria-label="减少力竭">−</button><b>${c.exh}</b><button data-exh="1" aria-label="增加力竭">＋</button></span></div>`}
       ${multi?`<div class="field"><label>可同时专注</label><span class="counter"><button data-cm="-1" aria-label="减少专注上限">−</button><b>${c.concMax} 个</b><button data-cm="1" aria-label="增加专注上限">＋</button></span></div>`:""}
     </div>
     <div class="sec"><div class="sec-h"><h3>专注 ${c.concs.length}/${lim}</h3></div>
@@ -1496,6 +1571,8 @@ function condModal(id,doc=document){
       if(t.hasAttribute("data-addconc")){addPending(root);draw(root);root.querySelector("#m-conc").focus();return}
       if(t.dataset.dc!=null){mutate(id,c=>{c.concs.splice(int(t.dataset.dc),1)})}
       if(t.dataset.cm){mutate(id,c=>{c.concMax=clamp(c.concMax+int(t.dataset.cm),1,9);if(c.concs.length>c.concMax){const gone=c.concs.splice(0,c.concs.length-c.concMax);toast("专注上限降低，「"+gone.join("」「")+"」的专注结束。")}})}
+      if(t.dataset.p2!=null){const n=t.dataset.p2;mutate(id,c=>{const v=p2Value(c.conds,n);c.conds=p2Set(c.conds,n,v!==null?null:(p2Entry(n)||[])[1]?1:0)})}
+      if(t.dataset.p2step!=null){const n=t.dataset.p2step;mutate(id,c=>{const v=p2Value(c.conds,n)||0;c.conds=p2Set(c.conds,n,Math.min(9,v+int(t.dataset.d)))})}
       if(t.dataset.cond){const n=t.dataset.cond;mutate(id,c=>{if(c.conds.includes(n))c.conds=c.conds.filter(x=>x!==n);else setCond(c,n,(condLibrary.find(x=>x[0]===n)||[])[1]||"")})}
       if(t.dataset.exh){mutate(id,c=>{c.exh=clamp(c.exh+int(t.dataset.exh),0,6)})}
       draw(root);

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Box, Flex, Label, Checkbox, Text } from "theme-ui";
+import React, { useState } from "react";
+import { Box, Text } from "theme-ui";
 
 import {
   Roll,
@@ -9,41 +9,21 @@ import {
   rollDice,
   rollExpression,
 } from "../helpers/fiveEDice";
-import {
-  Speaker,
-  rollsToDiscord,
-  sendToDiscord,
-  setRollsToDiscord,
-} from "../helpers/discordBridge";
 
 type LoggedRoll = { id: number; label: string; result: RollResult };
 
 let nextRollId = 1;
 
-/** Rolls from a 5e card: a short log, optionally sent to Discord */
-export function useDiceRoller(speaker?: Speaker) {
+/** Rolls from a 5e or PF2 card, kept as a short log on the card */
+export function useDiceRoller() {
   const [log, setLog] = useState<LoggedRoll[]>([]);
-  const [toDiscord, setToDiscordState] = useState(rollsToDiscord);
-  const [discordError, setDiscordError] = useState("");
-
-  function setToDiscord(value: boolean) {
-    setToDiscordState(value);
-    setDiscordError("");
-    setRollsToDiscord(value);
-  }
 
   function roll(label: string, dice: Roll) {
     const result = rollDice(dice);
     setLog((prev) => [{ id: nextRollId++, label, result }, ...prev].slice(0, 4));
-    if (toDiscord) {
-      setDiscordError("");
-      sendToDiscord(`🎲 **${label}**：${describeRoll(result)}`, speaker).catch(
-        (e) => setDiscordError(e instanceof Error ? e.message : String(e))
-      );
-    }
   }
 
-  return { log, roll, toDiscord, setToDiscord, discordError };
+  return { log, roll };
 }
 
 export type DiceRoller = ReturnType<typeof useDiceRoller>;
@@ -59,33 +39,62 @@ export function RollableText({
   roller: DiceRoller;
 }) {
   let before = "";
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (typeof part === "string") {
-          before = part;
-          return part;
-        }
-        const name = label(part, before);
-        return (
-          <Text
-            key={i}
-            as="button"
-            onClick={() => roller.roll(name, part.roll)}
-            title={`掷 ${rollExpression(part.roll)}：${name}`}
-            sx={rollButton}
-          >
-            {part.text}
-          </Text>
-        );
-      })}
-    </>
-  );
+  // PF2 text marks bold with **…**, which may run across a roll
+  let bold = false;
+  const wrap = (key: string, node: React.ReactNode) =>
+    bold ? <b key={key}>{node}</b> : <React.Fragment key={key}>{node}</React.Fragment>;
+  const out: React.ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (typeof part === "string") {
+      before = part.replace(/\*\*/g, "");
+      part.split("**").forEach((piece, j) => {
+        if (j > 0) bold = !bold;
+        if (piece) out.push(wrap(`${i}-${j}`, piece));
+      });
+      return;
+    }
+    const name = label(part, before);
+    const button = (text: string, modifier: number, suffix: string, key: string) => {
+      const roll = { ...part.roll, modifier };
+      const title = name + suffix;
+      return (
+        <Text
+          key={key}
+          as="button"
+          onClick={() => roller.roll(title, roll)}
+          title={`掷 ${rollExpression(roll)}：${title}`}
+          sx={rollButton}
+        >
+          {text}
+        </Text>
+      );
+    };
+    if (part.map) {
+      // PF2: first, second and third attack (multiple attack penalty)
+      const signed = (n: number) => (n < 0 ? `−${-n}` : `+${n}`);
+      const m = part.roll.modifier;
+      out.push(
+        wrap(
+          `${i}`,
+          <>
+            {button(part.text, m, "", `${i}a`)}
+            {" / "}
+            {button(signed(m - part.map), m - part.map, "（第二击）", `${i}b`)}
+            {" / "}
+            {button(signed(m - 2 * part.map), m - 2 * part.map, "（第三击）", `${i}c`)}
+          </>
+        )
+      );
+    } else {
+      out.push(wrap(`${i}`, button(part.text, part.roll.modifier, "", `${i}a`)));
+    }
+  });
+  return <>{out}</>;
 }
 
-/** The latest rolls and the "send to Discord" switch */
+/** The latest rolls */
 export function RollLog({ roller }: { roller: DiceRoller }) {
-  const { log, toDiscord, setToDiscord, discordError } = roller;
+  const { log } = roller;
   return (
     <Box
       sx={{
@@ -107,23 +116,8 @@ export function RollLog({ roller }: { roller: DiceRoller }) {
           🎲 <b>{label}</b>：{describeRoll(result)}
         </Text>
       ))}
-      <Flex sx={{ alignItems: "center", justifyContent: "space-between" }}>
-        <Text sx={{ fontSize: 0, color: "gray" }}>
-          {log.length ? "" : "点下划线的数值掷骰"}
-        </Text>
-        <Label sx={{ width: "auto", alignItems: "center", fontSize: 0, cursor: "pointer" }}>
-          <Checkbox
-            checked={toDiscord}
-            onChange={(e) => setToDiscord(e.target.checked)}
-            sx={{ width: 16, height: 16, mr: 1 }}
-          />
-          掷骰结果发到 Discord
-        </Label>
-      </Flex>
-      {discordError && (
-        <Text sx={{ display: "block", fontSize: 0, color: "red" }}>
-          没能发到 Discord：{discordError}
-        </Text>
+      {log.length === 0 && (
+        <Text sx={{ fontSize: 0, color: "gray" }}>点下划线的数值掷骰</Text>
       )}
     </Box>
   );

@@ -60,6 +60,12 @@ export const TokenStateSchema = {
           },
           type: "array",
         },
+        conditions: {
+          items: {
+            type: "string",
+          },
+          type: "array",
+        },
         tokenId: {
           type: "string",
         },

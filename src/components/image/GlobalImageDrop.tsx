@@ -73,7 +73,7 @@ function GlobalImageDrop({
       .filter((t) => t.owner === userId && t.monster && !t.hideInSidebar)
       .sort((a, b) => a.created - b.created);
     for (const token of visible) {
-      const key = `${token.monster!.source}|${token.monster!.englishName}`;
+      const key = `${token.monster!.system || "5e"}|${token.monster!.source}|${token.monster!.englishName}`;
       if (kept.has(key)) duplicates.push(token.id);
       else kept.add(key);
     }
@@ -180,6 +180,7 @@ function GlobalImageDrop({
           ? libraryTokens.filter(
               (t) =>
                 t.owner === userId &&
+                (t.monster?.system || "5e") === (monster.system || "5e") &&
                 t.monster?.source === monster.source &&
                 t.monster?.englishName === monster.englishName
             )
@@ -191,8 +192,8 @@ function GlobalImageDrop({
         }
         const { token, assets } = await createTokenFromFile(file, userId);
         if (monster) {
-          const { name, englishName, source, url } = monster;
-          token.monster = { name, englishName, source, url };
+          const { name, englishName, source, url, system } = monster;
+          token.monster = { name, englishName, source, url, ...(system ? { system } : {}) };
         }
         await addToken(token);
         await addAssets(assets);

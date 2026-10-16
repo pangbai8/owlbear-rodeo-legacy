@@ -19,6 +19,7 @@ import { useDataURL } from "../../contexts/AssetsContext";
 
 import TokenStatus from "./TokenStatus";
 import TokenLabel from "./TokenLabel";
+import TokenConditions from "./TokenConditions";
 import TokenOutline from "./TokenOutline";
 
 import { Intersection, getScaledOutline } from "../../helpers/token";
@@ -485,6 +486,13 @@ function Token({
                   />
                 </Group>
               </Group>
+            ) : null}
+            {tokenState.conditions?.length ? (
+              <TokenConditions
+                tokenState={tokenState}
+                width={tokenWidth}
+                height={tokenHeight}
+              />
             ) : null}
             {tokenState.label ? (
               <TokenLabel

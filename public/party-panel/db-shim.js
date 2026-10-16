@@ -379,6 +379,7 @@
       // Its stat card can be opened again from the 📖 button on the card
       monster: { name: stats.name, englishName: stats.englishName, source: stats.source, url: stats.url },
     };
+    if (stats.system === "pf2") npc.monster.system = "pf2";
     // Dropped on the map: the token it stands for (HP and turn show on it)
     if (link && typeof link.tokenStateId === "string") {
       npc.token = { id: link.tokenStateId, map: String(link.mapId || "") };
@@ -483,6 +484,9 @@
         hp: Number(data.hp) || 0,
         maxHp: Math.max(1, Number(data.maxHp) || 1),
         turn: turns[m[1]] === m[2],
+        // PF2 NPCs: their conditions show (and are edited) on the token too
+        pf2: !!(data.monster && data.monster.system === "pf2"),
+        conds: Array.isArray(data.conds) ? data.conds.filter(function (c) { return typeof c === "string"; }) : [],
       });
     });
     try {
@@ -493,6 +497,21 @@
     if (event.origin === location.origin && event.data && event.data.type === "party-panel-links-request") postLinks();
   });
 
+  // Conditions changed on a PF2 token: the VTT updates its linked NPC
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (event.origin !== location.origin || !data || data.type !== "party-panel-set-conds" || !ready) return;
+    if (typeof data.tokenStateId !== "string" || !Array.isArray(data.conds)) return;
+    var conds = data.conds.filter(function (c) { return typeof c === "string"; }).slice(0, 40);
+    docs.forEach(function (doc, path) {
+      if (!/^teams\/[^/]+\/members\/[^/]+$/.test(path) || !doc || !doc.token || doc.token.id !== data.tokenStateId) return;
+      if (JSON.stringify(doc.conds || []) === JSON.stringify(conds)) return;
+      var next = copy(doc);
+      next.conds = conds;
+      db.doc(path).set(next).catch(function () {});
+    });
+  });
+
   // 📍 on a linked NPC: the map scrolls to its token
   document.addEventListener("click", function (event) {
     var button = event.target.closest && event.target.closest('[data-act="locate"]');
@@ -501,9 +520,10 @@
     if (target) target.postMessage({ type: "party-panel-locate", tokenStateId: button.dataset.token }, location.origin);
   });
 
-  /* ---------- 5e mode (the VTT's book button) ---------- */
+  /* ---------- 5e / PF2 mode (the VTT's book and PF2 buttons) ---------- */
 
   var FIVE_E_KEY = "quickSearch.visible";
+  var RULES_KEY = "ruleSystem";
   function fiveEMode() {
     try {
       return localStorage.getItem(FIVE_E_KEY) === "true";
@@ -511,13 +531,23 @@
       return false;
     }
   }
+  function ruleSystem() {
+    try {
+      return localStorage.getItem(RULES_KEY) === "pf2" ? "pf2" : "5e";
+    } catch (e) {
+      return "5e";
+    }
+  }
+  // body.fiveE: lookups on (either rules); data-rules: which rules
   function syncFiveEMode() {
-    if (document.body) document.body.classList.toggle("fiveE", fiveEMode() && !!vttWindow());
+    if (!document.body) return;
+    document.body.classList.toggle("fiveE", fiveEMode() && !!vttWindow());
+    document.body.setAttribute("data-rules", ruleSystem());
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", syncFiveEMode);
   else syncFiveEMode();
   window.addEventListener("storage", function (event) {
-    if (event.key === FIVE_E_KEY) syncFiveEMode();
+    if (event.key === FIVE_E_KEY || event.key === RULES_KEY) syncFiveEMode();
   });
 
   // Condition and concentration chips open their 5e card in the VTT

@@ -10,6 +10,8 @@ export type BaseTokenState = {
   category: TokenCategory;
   label: string;
   statuses: Color[];
+  /** PF2 conditions ("倒地", "惊惧 1"), set from the token menu in PF2 mode */
+  conditions?: string[];
   x: number;
   y: number;
   lastModifiedBy: string;
