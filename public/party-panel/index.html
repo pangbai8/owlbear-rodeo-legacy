@@ -148,6 +148,7 @@ body.pipdoc .mi-ac b{font-size:15px}
 .res .pip{--c:var(--res)}
 .counter{display:inline-flex;align-items:center;gap:4px}
 .p2step{margin-top:4px}.p2step b{min-width:2em}
+.p2ac{margin-left:6px;padding:0 5px;border-radius:4px;background:color-mix(in srgb,var(--crit) 22%,transparent);color:var(--crit);font-size:11px;font-weight:600}
 .counter button{width:24px;height:24px;border:1px solid var(--line);background:var(--sunk);border-radius:5px;padding:0;line-height:1}
 .counter b{font-family:var(--f-num);font-size:13px;min-width:4.5em;text-align:center}
 
@@ -417,8 +418,8 @@ function p2Value(conds,n){for(const t of conds){const p=p2Parse(t);if(p.n===n)re
 function p2Set(conds,n,v){const valued=(p2Entry(n)||[])[1],remove=v==null||(valued&&v<=0),text=valued?n+" "+v:n,i=conds.findIndex(t=>p2Parse(t).n===n);if(i<0)return remove?conds:conds.concat(text);const next=conds.slice();if(remove)next.splice(i,1);else next[i]=text;return next}
 function pf2CondGrid(c){
   return `<div class="sec-h"><h3>PF2 状态</h3></div><div class="condgrid">${PF2_CONDS.map(([n,valued,d])=>{const v=p2Value(c.conds,n),on=v!==null;
-    return `<div class="condentry"><button class="cbtn" aria-pressed="${on}" data-p2="${esc(n)}"><b>${esc(n)}${valued&&on?" "+v:""}</b><small>${esc(d)}</small></button>${valued&&on?`<span class="counter p2step"><button data-p2step="${esc(n)}" data-d="-1" aria-label="${esc(n)} 减 1">−</button><b>${v}</b><button data-p2step="${esc(n)}" data-d="1" aria-label="${esc(n)} 加 1">＋</button></span>`:""}</div>`}).join("")}</div>
-    <p class="hint">带数值的状态点一下设为 1，再用 −/＋ 调整，减到 0 自动移除。和这个 NPC 关联的地图棋子会同步显示。</p>`;
+    return `<div class="condentry"><button class="cbtn" aria-pressed="${on}" data-p2="${esc(n)}"><b>${esc(n)}${valued&&on?" "+v:""}${P2_AC[n]?`<span class="p2ac">${P2_AC[n].s==="v"?"AC−X":"AC−"+((P2_AC[n].c||0)+(P2_AC[n].s||0))}</span>`:""}</b><small>${esc(d)}</small></button>${valued&&on?`<span class="counter p2step"><button data-p2step="${esc(n)}" data-d="-1" aria-label="${esc(n)} 减 1">−</button><b>${v}</b><button data-p2step="${esc(n)}" data-d="1" aria-label="${esc(n)} 加 1">＋</button></span>`:""}</div>`}).join("")}</div>
+    <p class="hint">带数值的状态点一下设为 1，再用 −/＋ 调整，减到 0 自动移除。和这个 NPC 关联的地图棋子会同步显示。<br>标了 AC 的状态会自动计入 AC：措手不及类（−2）只算一次，状态减值取最大的那个，两类相加。</p>`;
 }
 const FX_PRESETS=[
   {name:"祝福",kind:"buff",rounds:10,ac:0,note:"攻击与豁免 +1d4 · 专注"},
@@ -493,7 +494,30 @@ function addConc(c,name){
   c.concs.push(name);c.conc=c.concs[0];
   if(ended.length)toast(c.name+" 开始专注「"+name+"」，"+(concLimit(c)>1?"已达上限 "+concLimit(c)+" 个，":"")+"「"+ended.join("」「")+"」的专注结束。");
 }
-function effAC(c){return c.ac+c.fx.reduce((s,f)=>s+(f.ac||0),0)}
+/* PF2 conditions that lower AC: c = circumstance penalty (off-guard and the
+   conditions that make you off-guard), s = status penalty ("v": its value) */
+const P2_AC={措手不及:{c:2},倒地:{c:2},受擒:{c:2},束缚:{c:2},麻痹:{c:2},困惑:{c:2},失去意识:{c:2,s:4},疲乏:{s:1},超载:{s:1},笨拙:{s:"v"},惊惧:{s:"v"},恶心:{s:"v"}};
+function p2AcParts(c){
+  if(!pf2Rules())return [];
+  let circ=null,stat=null;
+  for(const t of c.conds){
+    const p=p2Parse(t),d=P2_AC[p.n];if(!d)continue;
+    if(d.c&&(!circ||d.c>circ.v))circ={t:p.n==="措手不及"?t:t+"（措手不及）",v:d.c};
+    const sv=d.s==="v"?(p.v||0):(d.s||0);
+    if(sv&&(!stat||sv>stat.v))stat={t,v:sv};
+  }
+  return [circ,stat].filter(Boolean);
+}
+function p2AcPenalty(c){return p2AcParts(c).reduce((s,x)=>s+x.v,0)}
+function effAC(c){return c.ac+c.fx.reduce((s,f)=>s+(f.ac||0),0)-p2AcPenalty(c)}
+/* The AC shield's tooltip: base, effects, conditions */
+function acNote(c){
+  const fx=c.fx.reduce((s,f)=>s+(f.ac||0),0),parts=p2AcParts(c);
+  let note="基础 AC "+c.ac;
+  if(fx)note+="，效果调整 "+(fx>0?"+":"")+fx;
+  if(parts.length)note+="，状态调整 −"+parts.reduce((s,x)=>s+x.v,0)+"（"+parts.map(x=>x.t+" −"+x.v).join("，")+"）";
+  return note;
+}
 function clsName(c){const C=getClass(c.cls);return C?C.n:(c.clsLabel||"")}
 
 /* custom classes */
@@ -849,7 +873,7 @@ function card(id,c){
   <div class="head">
     <div class="init"><label class="init-l" for="init-${id}">先攻</label><input id="init-${id}" class="init-v ${c.initPending?"pending":""}" type="number" inputmode="numeric" value="${c.initPending?"":c.init}" placeholder="?" data-fkey="init-${id}" data-act="initset" title="${c.initPending?"等待手动填写先攻":"先攻结果，可直接修改"}"><label class="init-l" for="initb-${id}">加值</label><span class="init-b"><input id="initb-${id}" type="number" inputmode="numeric" value="${c.initBonus}" data-fkey="initb-${id}" data-act="initb" title="先攻加值"><button class="init-d" data-act="rollinit" title="掷先攻：1d20 ${sgn(c.initBonus)}${c.initAdv?"，优势":""}" aria-label="为 ${esc(c.name)} 掷先攻">🎲</button></span></div>
     <div class="who"><h2>${esc(c.name)}${turn?`<span class="turn-tag">行动中</span>`:""}</h2><p>${esc(sub)}</p></div>
-    <div class="acbox">${c.monster?qdelBtn(id,c,"iconbtn"):""}${c.token&&c.token.id?`<button class="iconbtn" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}${c.monster&&c.monster.url?`<button class="iconbtn" data-act="monster" data-system="${c.monster.system==="pf2"?"pf2":"5e"}" data-monster="${esc(JSON.stringify(c.monster))}" aria-label="查看 ${esc(c.name)} 的怪物资料" title="查看怪物资料（属性、攻击、动作）">📖</button>`:""}<div class="shield ${acCls}" title="基础 AC ${c.ac}${ac!==c.ac?"，效果调整 "+(ac-c.ac>0?"+":"")+(ac-c.ac):""}"><b>${ac}</b><i>AC</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
+    <div class="acbox">${c.monster?qdelBtn(id,c,"iconbtn"):""}${c.token&&c.token.id?`<button class="iconbtn" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}${c.monster&&c.monster.url?`<button class="iconbtn" data-act="monster" data-system="${c.monster.system==="pf2"?"pf2":"5e"}" data-monster="${esc(JSON.stringify(c.monster))}" aria-label="查看 ${esc(c.name)} 的怪物资料" title="查看怪物资料（属性、攻击、动作）">📖</button>`:""}<div class="shield ${acCls}" title="${esc(acNote(c))}"><b>${ac}</b><i>AC</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
   </div>
   <div class="hp">
     <div class="hp-top"><span class="hp-cur">${c.hp}</span><span class="hp-max">/ ${c.maxHp}</span>${c.temp?`<span class="temp" title="临时生命">+${c.temp} 临时</span>`:""}<span class="status-pill ${lvlState}">${label}</span></div>
