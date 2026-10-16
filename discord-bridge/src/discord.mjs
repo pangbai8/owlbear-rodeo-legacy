@@ -73,9 +73,10 @@ export function avatarUrl(user, member, guildId) {
   return defaultAvatarUrl(user);
 }
 
-/** Webhook names: 1-80 chars, no "discord"/"clyde", not "everyone"/"here" */
-// Avatars the VTT may give a speaker: the 5etools token art it uses
-const SPEAKER_AVATAR = /^https:\/\/5e\.kiwee\.top\/img\/[^\s"'<>]+$/;
+// Avatars the VTT may give a speaker: 5etools token art, or PF2 creature art
+// through the VTT's own image proxy
+const SPEAKER_AVATAR =
+  /^https:\/\/(5e\.kiwee\.top\/img|vtt\.pangbai\.de\/pf2img)\/[^\s"'<>]+$/;
 
 /** { name, avatarUrl } sent by the VTT for a monster's dice roll, or null */
 export function speakerOf(value) {
@@ -86,6 +87,7 @@ export function speakerOf(value) {
   return { name, avatarUrl };
 }
 
+/** Webhook names: 1-80 chars, no "discord"/"clyde", not "everyone"/"here" */
 export function webhookUsername(name) {
   let result = String(name || "")
     .replace(/[\u0000-\u001f]/g, "")

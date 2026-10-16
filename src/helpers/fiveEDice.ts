@@ -5,7 +5,15 @@ export type Roll = { count: number; sides: number; modifier: number };
 
 export type RollKind = "hit" | "damage" | "check";
 
-export type TextPart = string | { text: string; roll: Roll; kind: RollKind };
+export type TextPart =
+  | string
+  | {
+      text: string;
+      roll: Roll;
+      kind: RollKind;
+      /** PF2 strikes: the multiple attack penalty step (5, or 4 if agile) */
+      map?: number;
+    };
 
 export type RollResult = Roll & {
   rolls: number[];
@@ -117,4 +125,75 @@ export function describeRoll(result: RollResult) {
         : ""
       : "";
   return `${rollExpression(result)} = ${result.total}（${detail}）${natural}`;
+}
+
+// PF2 strikes: "斩马刀+8（触及10尺，摔绊…）" — a weapon name, its bonus,
+// then its traits in brackets; spell attacks: "法术攻击 +8", "法术攻击调整值+8"
+const PF2_STRIKE = /([^\s◆◇⟲，,。；;：:、（()*•]+)([+\-−]\d+)(?=\s*[（(])/g;
+const PF2_SPELL_ATTACK = /(法术攻击(?:调整值)?)\s*([+\-−]\d+)/g;
+
+/** splitRolls for PF2 text: strikes get the multiple attack penalty */
+export function splitPf2Rolls(text: string): TextPart[] {
+  const hits: { index: number; end: number; part: TextPart }[] = [];
+  let m: RegExpExecArray | null;
+  const strike = new RegExp(PF2_STRIKE.source, "g");
+  while ((m = strike.exec(text))) {
+    const bonusStart = m.index + m[1].length;
+    // Agile weapons (灵巧) take −4/−8 instead of −5/−10
+    const close = text.indexOf("）", bonusStart);
+    const traits = text.slice(bonusStart, close > 0 ? close : bonusStart + 60);
+    hits.push({
+      index: bonusStart,
+      end: bonusStart + m[2].length,
+      part: {
+        text: m[2],
+        roll: { count: 1, sides: 20, modifier: toNumber(m[2]) },
+        kind: "hit",
+        map: /灵巧/.test(traits) ? 4 : 5,
+      },
+    });
+  }
+  const spell = new RegExp(PF2_SPELL_ATTACK.source, "g");
+  while ((m = spell.exec(text))) {
+    const bonusStart = m.index + m[0].length - m[2].length;
+    hits.push({
+      index: bonusStart,
+      end: bonusStart + m[2].length,
+      part: {
+        text: m[2],
+        roll: { count: 1, sides: 20, modifier: toNumber(m[2]) },
+        kind: "hit",
+      },
+    });
+  }
+  hits.sort((a, b) => a.index - b.index);
+  // Dice and the rest in between, as for 5e text
+  const parts: TextPart[] = [];
+  let last = 0;
+  for (const hit of hits) {
+    if (hit.index < last) continue;
+    parts.push(...splitRolls(text.slice(last, hit.index)));
+    parts.push(hit.part);
+    last = hit.end;
+  }
+  parts.push(...splitRolls(text.slice(last)));
+  // Trait dice ("致命d10", "双手d8") are not damage rolls: back to text
+  const merged: TextPart[] = [];
+  for (const part of parts) {
+    const previous = merged[merged.length - 1];
+    if (
+      typeof part !== "string" &&
+      part.kind === "damage" &&
+      /^d\d/.test(part.text) &&
+      typeof previous === "string" &&
+      /[一-鿿]$/.test(previous)
+    ) {
+      merged[merged.length - 1] = previous + part.text;
+    } else if (typeof part === "string" && typeof previous === "string") {
+      merged[merged.length - 1] = previous + part;
+    } else {
+      merged.push(part);
+    }
+  }
+  return merged;
 }

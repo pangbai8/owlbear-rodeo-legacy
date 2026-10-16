@@ -215,6 +215,7 @@ body.pipdoc .mi-ac b{font-size:15px}
 /* 5e mode (the VTT's book button): chips open their 5e card; monster cards only then */
 body.fiveE [data-lookup]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 body:not(.fiveE) [data-act="monster"]{display:none}
+body[data-rules="5e"] [data-act="monster"][data-system="pf2"],body[data-rules="pf2"] [data-act="monster"]:not([data-system="pf2"]){display:none}
 .qdel-armed,.mi-btns .qdel-armed{background:var(--crit);border-color:var(--crit);color:#fff;font-size:12px}
 #autoMapBtn[aria-pressed="true"]{border-color:var(--good);color:var(--good)}
 .cbtn[aria-pressed="true"]{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--sunk))}
@@ -798,7 +799,7 @@ function card(id,c){
   <div class="head">
     <div class="init"><label class="init-l" for="init-${id}">先攻</label><input id="init-${id}" class="init-v ${c.initPending?"pending":""}" type="number" inputmode="numeric" value="${c.initPending?"":c.init}" placeholder="?" data-fkey="init-${id}" data-act="initset" title="${c.initPending?"等待手动填写先攻":"先攻结果，可直接修改"}"><label class="init-l" for="initb-${id}">加值</label><span class="init-b"><input id="initb-${id}" type="number" inputmode="numeric" value="${c.initBonus}" data-fkey="initb-${id}" data-act="initb" title="先攻加值"><button class="init-d" data-act="rollinit" title="掷先攻：1d20 ${sgn(c.initBonus)}${c.initAdv?"，优势":""}" aria-label="为 ${esc(c.name)} 掷先攻">🎲</button></span></div>
     <div class="who"><h2>${esc(c.name)}${turn?`<span class="turn-tag">行动中</span>`:""}</h2><p>${esc(sub)}</p></div>
-    <div class="acbox">${c.monster?qdelBtn(id,c,"iconbtn"):""}${c.token&&c.token.id?`<button class="iconbtn" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}${c.monster&&c.monster.url?`<button class="iconbtn" data-act="monster" data-monster="${esc(JSON.stringify(c.monster))}" aria-label="查看 ${esc(c.name)} 的怪物资料" title="查看怪物资料（属性、攻击、动作）">📖</button>`:""}<div class="shield ${acCls}" title="基础 AC ${c.ac}${ac!==c.ac?"，效果调整 "+(ac-c.ac>0?"+":"")+(ac-c.ac):""}"><b>${ac}</b><i>AC</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
+    <div class="acbox">${c.monster?qdelBtn(id,c,"iconbtn"):""}${c.token&&c.token.id?`<button class="iconbtn" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}${c.monster&&c.monster.url?`<button class="iconbtn" data-act="monster" data-system="${c.monster.system==="pf2"?"pf2":"5e"}" data-monster="${esc(JSON.stringify(c.monster))}" aria-label="查看 ${esc(c.name)} 的怪物资料" title="查看怪物资料（属性、攻击、动作）">📖</button>`:""}<div class="shield ${acCls}" title="基础 AC ${c.ac}${ac!==c.ac?"，效果调整 "+(ac-c.ac>0?"+":"")+(ac-c.ac):""}"><b>${ac}</b><i>AC</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
   </div>
   <div class="hp">
     <div class="hp-top"><span class="hp-cur">${c.hp}</span><span class="hp-max">/ ${c.maxHp}</span>${c.temp?`<span class="temp" title="临时生命">+${c.temp} 临时</span>`:""}<span class="status-pill ${lvlState}">${label}</span></div>

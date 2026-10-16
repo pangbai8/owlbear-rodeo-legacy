@@ -20,6 +20,7 @@ import TokenAttachmentIcon from "../../icons/TokenAttachmentIcon";
 import { useUserId } from "../../contexts/UserIdContext";
 import { useTokenData } from "../../contexts/TokenDataContext";
 import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
+import { useRuleSystem } from "../../helpers/ruleSystem";
 import { openMonsterCard } from "../../helpers/fiveETools";
 
 import {
@@ -80,9 +81,16 @@ function TokenMenu({
   // Monsters from the quick search keep their stat card; only the one who
   // dropped them (the GM) has the token in their library
   const token = tokenState ? tokensById[tokenState.tokenId] : undefined;
-  const { isOpen: fiveEMode } = useFloatingWindow("quickSearch");
+  // Only with its rules' mode on (5e or PF2)
+  const { isOpen: lookupsOn } = useFloatingWindow("quickSearch");
+  const ruleSystem = useRuleSystem();
   const monster =
-    fiveEMode && token && token.owner === userId ? token.monster : undefined;
+    lookupsOn &&
+    token &&
+    token.owner === userId &&
+    (token.monster?.system === "pf2") === (ruleSystem === "pf2")
+      ? token.monster
+      : undefined;
 
   const wasOpen = usePrevious(isOpen);
 

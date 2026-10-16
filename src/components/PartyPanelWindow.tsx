@@ -11,8 +11,11 @@ import {
   isMonsterRef,
   loadMonster,
   lookupFiveE,
+  openFiveECard,
   openMonsterCard,
 } from "../helpers/fiveETools";
+import { findPf2 } from "../helpers/pf2";
+import { getRuleSystem } from "../helpers/ruleSystem";
 import {
   PartyLink,
   emitPartyLinks,
@@ -92,9 +95,19 @@ function PartyPanelWindow() {
         // A condition or concentration chip (5e mode)
         case "party-panel-lookup":
           if (typeof data.name === "string" && data.name.trim()) {
-            lookupFiveE(data.name.trim(), data.kind === "spell" ? "spell" : "condition")
+            const kind = data.kind === "spell" ? "spell" : "condition";
+            (getRuleSystem() === "pf2"
+              ? findPf2(data.name.trim(), kind).then((result) => {
+                  if (result) openFiveECard(result);
+                  return !!result;
+                })
+              : lookupFiveE(data.name.trim(), kind)
+            )
               .then((found) => {
-                if (!found) addToastRef.current(`5e 资料里没找到「${data.name}」`);
+                if (!found)
+                  addToastRef.current(
+                    `${getRuleSystem() === "pf2" ? "PF2" : "5e"} 资料里没找到「${data.name}」`
+                  );
               })
               .catch(() => addToastRef.current("读取 5e 资料失败"));
           }

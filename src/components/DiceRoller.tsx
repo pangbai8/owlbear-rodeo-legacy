@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Box, Flex, Label, Checkbox, Text } from "theme-ui";
 
 import {
@@ -59,28 +59,57 @@ export function RollableText({
   roller: DiceRoller;
 }) {
   let before = "";
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (typeof part === "string") {
-          before = part;
-          return part;
-        }
-        const name = label(part, before);
-        return (
-          <Text
-            key={i}
-            as="button"
-            onClick={() => roller.roll(name, part.roll)}
-            title={`掷 ${rollExpression(part.roll)}：${name}`}
-            sx={rollButton}
-          >
-            {part.text}
-          </Text>
-        );
-      })}
-    </>
-  );
+  // PF2 text marks bold with **…**, which may run across a roll
+  let bold = false;
+  const wrap = (key: string, node: React.ReactNode) =>
+    bold ? <b key={key}>{node}</b> : <React.Fragment key={key}>{node}</React.Fragment>;
+  const out: React.ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (typeof part === "string") {
+      before = part.replace(/\*\*/g, "");
+      part.split("**").forEach((piece, j) => {
+        if (j > 0) bold = !bold;
+        if (piece) out.push(wrap(`${i}-${j}`, piece));
+      });
+      return;
+    }
+    const name = label(part, before);
+    const button = (text: string, modifier: number, suffix: string, key: string) => {
+      const roll = { ...part.roll, modifier };
+      const title = name + suffix;
+      return (
+        <Text
+          key={key}
+          as="button"
+          onClick={() => roller.roll(title, roll)}
+          title={`掷 ${rollExpression(roll)}：${title}`}
+          sx={rollButton}
+        >
+          {text}
+        </Text>
+      );
+    };
+    if (part.map) {
+      // PF2: first, second and third attack (multiple attack penalty)
+      const signed = (n: number) => (n < 0 ? `−${-n}` : `+${n}`);
+      const m = part.roll.modifier;
+      out.push(
+        wrap(
+          `${i}`,
+          <>
+            {button(part.text, m, "", `${i}a`)}
+            {" / "}
+            {button(signed(m - part.map), m - part.map, "（第二击）", `${i}b`)}
+            {" / "}
+            {button(signed(m - 2 * part.map), m - 2 * part.map, "（第三击）", `${i}c`)}
+          </>
+        )
+      );
+    } else {
+      out.push(wrap(`${i}`, button(part.text, part.roll.modifier, "", `${i}a`)));
+    }
+  });
+  return <>{out}</>;
 }
 
 /** The latest rolls and the "send to Discord" switch */

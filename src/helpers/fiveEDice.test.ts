@@ -3,6 +3,7 @@ import {
   rollDice,
   rollExpression,
   splitChecks,
+  splitPf2Rolls,
   splitRolls,
 } from "./fiveEDice";
 
@@ -54,4 +55,32 @@ test("rolling and describing", () => {
     const n = rollDice({ count: 1, sides: 6, modifier: 0 }).rolls[0];
     expect(n >= 1 && n <= 6).toBe(true);
   }
+});
+
+test("PF2: strikes with the multiple attack penalty, spell attacks, damage", () => {
+  const parts = splitPf2Rolls(
+    "**近战** ◆ 斩马刀+8（触及10尺，摔绊，多用P），**伤害** 1d8+3挥砍"
+  );
+  expect(parts).toEqual([
+    "**近战** ◆ 斩马刀",
+    { text: "+8", roll: { count: 1, sides: 20, modifier: 8 }, kind: "hit", map: 5 },
+    "（触及10尺，摔绊，多用P），**伤害** ",
+    { text: "1d8+3", roll: { count: 1, sides: 8, modifier: 3 }, kind: "damage" },
+    "挥砍",
+  ]);
+  expect(splitPf2Rolls("◆ 匕首+7（灵巧，敏捷）")[1]).toMatchObject({ map: 4 });
+  expect(splitPf2Rolls("奥术先天法术 DC 20，法术攻击 +12；")).toEqual([
+    "奥术先天法术 DC 20，法术攻击 ",
+    { text: "+12", roll: { count: 1, sides: 20, modifier: 12 }, kind: "hit" },
+    "；",
+  ]);
+});
+
+test("PF2: trait dice like 致命d10 stay text", () => {
+  const parts = splitPf2Rolls("◆ 短弓+8（致命d10，射程增量60尺），**伤害** 1d6穿刺");
+  expect(parts.filter((p) => typeof p !== "string").map((p) => (p as any).text)).toEqual([
+    "+8",
+    "1d6",
+  ]);
+  expect(parts[2]).toBe("（致命d10，射程增量60尺），**伤害** ");
 });

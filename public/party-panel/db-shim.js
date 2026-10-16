@@ -379,6 +379,7 @@
       // Its stat card can be opened again from the 📖 button on the card
       monster: { name: stats.name, englishName: stats.englishName, source: stats.source, url: stats.url },
     };
+    if (stats.system === "pf2") npc.monster.system = "pf2";
     // Dropped on the map: the token it stands for (HP and turn show on it)
     if (link && typeof link.tokenStateId === "string") {
       npc.token = { id: link.tokenStateId, map: String(link.mapId || "") };
@@ -501,9 +502,10 @@
     if (target) target.postMessage({ type: "party-panel-locate", tokenStateId: button.dataset.token }, location.origin);
   });
 
-  /* ---------- 5e mode (the VTT's book button) ---------- */
+  /* ---------- 5e / PF2 mode (the VTT's book and PF2 buttons) ---------- */
 
   var FIVE_E_KEY = "quickSearch.visible";
+  var RULES_KEY = "ruleSystem";
   function fiveEMode() {
     try {
       return localStorage.getItem(FIVE_E_KEY) === "true";
@@ -511,13 +513,23 @@
       return false;
     }
   }
+  function ruleSystem() {
+    try {
+      return localStorage.getItem(RULES_KEY) === "pf2" ? "pf2" : "5e";
+    } catch (e) {
+      return "5e";
+    }
+  }
+  // body.fiveE: lookups on (either rules); data-rules: which rules
   function syncFiveEMode() {
-    if (document.body) document.body.classList.toggle("fiveE", fiveEMode() && !!vttWindow());
+    if (!document.body) return;
+    document.body.classList.toggle("fiveE", fiveEMode() && !!vttWindow());
+    document.body.setAttribute("data-rules", ruleSystem());
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", syncFiveEMode);
   else syncFiveEMode();
   window.addEventListener("storage", function (event) {
-    if (event.key === FIVE_E_KEY) syncFiveEMode();
+    if (event.key === FIVE_E_KEY || event.key === RULES_KEY) syncFiveEMode();
   });
 
   // Condition and concentration chips open their 5e card in the VTT

@@ -8,6 +8,27 @@ const iceServers = [
   { urls: "stun:stun.miwifi.com:3478" },
   { urls: "stun:stun.hitv.com:3478" },
 ];
+// PF2 creature art for tokens: the Huiji image CDN refuses other sites'
+// referrers and sends no CORS headers, so the VTT reads it through here
+const PF2_IMAGE_HOST = "https://huiji-thumb.huijistatic.com/pf2/uploads/";
+const PF2_IMAGE_PATH =
+  /^\/pf2img\/((?:thumb\/)?[0-9a-f]\/[0-9a-f]{2}\/[^/?#]+(?:\/[^/?#]+)?)$/;
+
+async function pf2Image(path) {
+  const upstream = await fetch(PF2_IMAGE_HOST + path, {
+    cf: { cacheEverything: true, cacheTtl: 30 * 86400 },
+  });
+  const type = upstream.headers.get("Content-Type") || "";
+  if (!upstream.ok || !type.startsWith("image/"))
+    return new Response("Not found", { status: 404 });
+  return new Response(upstream.body, {
+    headers: {
+      "Content-Type": type,
+      "Cache-Control": "public, max-age=2592000",
+    },
+  });
+}
+
 const json = (body, status = 200, headers = {}) =>
   Response.json(body, { status, headers });
 export default {
@@ -35,6 +56,8 @@ export default {
         cors,
       );
     if (url.pathname === "/iceservers") return json({ iceServers }, 200, cors);
+    const image = url.pathname.match(PF2_IMAGE_PATH);
+    if (image && request.method === "GET") return pf2Image(image[1]);
     const room = url.searchParams.get("room");
     // /party/ws: the party status panel's shared data for this room
     if (
