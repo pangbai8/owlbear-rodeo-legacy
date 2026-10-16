@@ -74,6 +74,10 @@ export type PartyLink = TokenLink & {
   maxHp: number;
   /** It is this NPC's turn in its team's combat */
   turn: boolean;
+  /** A PF2 creature: its conditions sync with the token's */
+  pf2?: boolean;
+  /** Its conditions ("倒地", "惊惧 1"), for PF2 NPCs */
+  conds?: string[];
 };
 
 const LINKS_EVENT = "partyPanel:links";
@@ -108,6 +112,42 @@ export function linkedStatuses<S extends string>(
   if (link.hp <= 0) kept.push(DOWN);
   else if (link.hp / link.maxHp <= 0.5) kept.push(HURT);
   return kept;
+}
+
+/* ---------- PF2 conditions: token -> panel NPC ---------- */
+
+const SET_CONDS_EVENT = "partyPanel:setConditions";
+
+/** Sets the conditions of the NPC linked to a token */
+export function setPanelConditions(tokenStateId: string, conds: string[]) {
+  window.dispatchEvent(
+    new CustomEvent(SET_CONDS_EVENT, { detail: { tokenStateId, conds } })
+  );
+}
+
+export function onSetPanelConditions(
+  listener: (change: { tokenStateId: string; conds: string[] }) => void
+) {
+  const handler = (event: Event) => listener((event as CustomEvent).detail);
+  window.addEventListener(SET_CONDS_EVENT, handler);
+  return () => window.removeEventListener(SET_CONDS_EVENT, handler);
+}
+
+/**
+ * Two-way sync of a linked PF2 NPC's conditions with its token: whichever
+ * side changed since the last sync wins (the panel, if both did).
+ */
+export function reconcileConditions(
+  token: string[],
+  panel: string[],
+  last: string[] | undefined
+): { apply?: "token" | "panel"; value: string[] } {
+  const key = (list: string[]) => list.join("|");
+  if (key(token) === key(panel)) return { value: token };
+  if (last !== undefined && key(panel) === key(last)) {
+    return { apply: "panel", value: token };
+  }
+  return { apply: "token", value: panel };
 }
 
 /* ---------- 📍 locate and 5e lookups ---------- */

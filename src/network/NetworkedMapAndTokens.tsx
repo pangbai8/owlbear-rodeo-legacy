@@ -34,6 +34,8 @@ import {
   PartyLink,
   linkedStatuses,
   onPartyLinks,
+  reconcileConditions,
+  setPanelConditions,
 } from "../helpers/partyPanel";
 import { DrawingState } from "../types/Drawing";
 import { FogState } from "../types/Fog";
@@ -212,6 +214,8 @@ function NetworkedMapAndTokens({ session }: { session: Session }) {
   const currentMapStateRef = useRef(currentMapState);
   currentMapStateRef.current = currentMapState;
   const partyLinksRef = useRef<PartyLink[]>([]);
+  // PF2 conditions as last synced between each linked token and its NPC
+  const syncedConditionsRef = useRef<Record<string, string[]>>({});
   // The links listener is registered once; the user id loads later
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
@@ -228,14 +232,29 @@ function NetworkedMapAndTokens({ session }: { session: Session }) {
     const map = currentMapRef.current;
     const state = currentMapStateRef.current;
     if (!map || !state || map.owner !== userIdRef.current) return;
-    const changes: Record<string, Color[]> = {};
+    const changes: Record<string, Partial<TokenState>> = {};
     for (const link of partyLinksRef.current) {
       const token = state.tokens[link.tokenStateId];
       if (!token || link.mapId !== map.id) continue;
       const current = token.statuses || [];
       const statuses = linkedStatuses(current, link) as Color[];
       if (statuses.join() !== current.join()) {
-        changes[token.id] = statuses;
+        changes[token.id] = { statuses };
+      }
+      // PF2 NPCs: conditions both ways, whichever side changed
+      if (link.pf2) {
+        const synced = syncedConditionsRef.current;
+        const result = reconcileConditions(
+          token.conditions || [],
+          link.conds || [],
+          synced[token.id]
+        );
+        synced[token.id] = result.value;
+        if (result.apply === "token") {
+          changes[token.id] = { ...changes[token.id], conditions: result.value };
+        } else if (result.apply === "panel") {
+          setPanelConditions(token.id, result.value);
+        }
       }
     }
     if (Object.keys(changes).length === 0) return;
@@ -243,7 +262,7 @@ function NetworkedMapAndTokens({ session }: { session: Session }) {
       if (!prev || prev.mapId !== map.id) return prev;
       const tokens = { ...prev.tokens };
       for (const id in changes) {
-        if (tokens[id]) tokens[id] = { ...tokens[id], statuses: changes[id] };
+        if (tokens[id]) tokens[id] = { ...tokens[id], ...changes[id] } as TokenState;
       }
       return { ...prev, tokens };
     });
@@ -259,14 +278,20 @@ function NetworkedMapAndTokens({ session }: { session: Session }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
-  // Also when the map changes or a linked token is added after its NPC
+  // Also when the map changes, a linked token is added after its NPC, or a
+  // token's PF2 conditions change (from anyone's token menu)
   const tokenCount = currentMapState
     ? Object.keys(currentMapState.tokens).length
     : 0;
+  const conditionsKey = currentMapState
+    ? Object.values(currentMapState.tokens)
+        .map((t) => (t.conditions?.length ? `${t.id}:${t.conditions.join("|")}` : ""))
+        .join(",")
+    : "";
   useEffect(() => {
     applyPartyLinks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMap?.id, currentMapState?.mapId, tokenCount, userId]);
+  }, [currentMap?.id, currentMapState?.mapId, tokenCount, conditionsKey, userId]);
 
   async function handleMapChange(
     newMap: MapType | null,

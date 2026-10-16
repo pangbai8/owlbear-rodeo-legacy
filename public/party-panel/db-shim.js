@@ -484,6 +484,9 @@
         hp: Number(data.hp) || 0,
         maxHp: Math.max(1, Number(data.maxHp) || 1),
         turn: turns[m[1]] === m[2],
+        // PF2 NPCs: their conditions show (and are edited) on the token too
+        pf2: !!(data.monster && data.monster.system === "pf2"),
+        conds: Array.isArray(data.conds) ? data.conds.filter(function (c) { return typeof c === "string"; }) : [],
       });
     });
     try {
@@ -492,6 +495,21 @@
   }
   window.addEventListener("message", function (event) {
     if (event.origin === location.origin && event.data && event.data.type === "party-panel-links-request") postLinks();
+  });
+
+  // Conditions changed on a PF2 token: the VTT updates its linked NPC
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (event.origin !== location.origin || !data || data.type !== "party-panel-set-conds" || !ready) return;
+    if (typeof data.tokenStateId !== "string" || !Array.isArray(data.conds)) return;
+    var conds = data.conds.filter(function (c) { return typeof c === "string"; }).slice(0, 40);
+    docs.forEach(function (doc, path) {
+      if (!/^teams\/[^/]+\/members\/[^/]+$/.test(path) || !doc || !doc.token || doc.token.id !== data.tokenStateId) return;
+      if (JSON.stringify(doc.conds || []) === JSON.stringify(conds)) return;
+      var next = copy(doc);
+      next.conds = conds;
+      db.doc(path).set(next).catch(function () {});
+    });
   });
 
   // 📍 on a linked NPC: the map scrolls to its token

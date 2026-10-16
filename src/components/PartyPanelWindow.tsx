@@ -22,6 +22,7 @@ import {
   locateToken,
   autoAddMapMonsters,
   onAddMonsterToPartyPanel,
+  onSetPanelConditions,
 } from "../helpers/partyPanel";
 
 /**
@@ -122,6 +123,18 @@ function PartyPanelWindow() {
     );
     return () => window.removeEventListener("message", handleMessage);
   }, []);
+
+  // PF2 conditions changed on a linked token: the panel updates its NPC
+  useEffect(
+    () =>
+      onSetPanelConditions(({ tokenStateId, conds }) =>
+        frameRef.current?.contentWindow?.postMessage(
+          { type: "party-panel-set-conds", tokenStateId, conds },
+          window.location.origin
+        )
+      ),
+    []
+  );
 
   // A monster dropped on the map with the panel's auto-add switch on: the
   // panel adds the NPC (linked to its token) and answers with its name
