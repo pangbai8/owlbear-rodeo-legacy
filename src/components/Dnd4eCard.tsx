@@ -229,7 +229,7 @@ function WikiLink({ url }: { url: string }) {
       rel="noopener noreferrer"
       sx={{ display: "block", mt: 3, color: "primary", fontSize: 1 }}
     >
-      在 4e Wiki 打开（资料来自 leonspace.site，经站长同意镜像）
+      在 4e Wiki 打开
     </Link>
   );
 }
