@@ -241,8 +241,8 @@ function NetworkedMapAndTokens({ session }: { session: Session }) {
       if (statuses.join() !== current.join()) {
         changes[token.id] = { statuses };
       }
-      // PF2 NPCs: conditions both ways, whichever side changed
-      if (link.pf2) {
+      // Conditions both ways (5e and PF2), whichever side changed
+      if (link.conds) {
         const synced = syncedConditionsRef.current;
         const result = reconcileConditions(
           token.conditions || [],

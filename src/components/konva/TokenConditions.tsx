@@ -2,7 +2,7 @@ import Konva from "konva";
 import { useEffect, useRef, useState } from "react";
 import { Group, Rect, Text } from "react-konva";
 
-import { conditionBadge } from "../../helpers/pf2Conditions";
+import { conditionBadge } from "../../helpers/conditions";
 import { TokenState } from "../../types/TokenState";
 
 type TokenConditionsProps = {

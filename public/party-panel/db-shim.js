@@ -484,9 +484,9 @@
         hp: Number(data.hp) || 0,
         maxHp: Math.max(1, Number(data.maxHp) || 1),
         turn: turns[m[1]] === m[2],
-        // PF2 NPCs: their conditions show (and are edited) on the token too
+        // Their conditions show (and are edited) on the token too
         pf2: !!(data.monster && data.monster.system === "pf2"),
-        conds: Array.isArray(data.conds) ? data.conds.filter(function (c) { return typeof c === "string"; }) : [],
+        conds: tokenConds(data),
       });
     });
     try {
@@ -497,7 +497,18 @@
     if (event.origin === location.origin && event.data && event.data.type === "party-panel-links-request") postLinks();
   });
 
-  // Conditions changed on a PF2 token: the VTT updates its linked NPC
+  // An NPC's conditions as the token shows them: its conditions, and for a
+  // 5e NPC its exhaustion level as "力竭 N" (the panel keeps it apart)
+  function tokenConds(member) {
+    var conds = Array.isArray(member.conds)
+      ? member.conds.filter(function (c) { return typeof c === "string"; })
+      : [];
+    var pf2 = member.monster && member.monster.system === "pf2";
+    var exh = Number(member.exh) || 0;
+    return !pf2 && exh > 0 ? conds.concat("力竭 " + exh) : conds;
+  }
+
+  // Conditions changed on a token: the VTT updates its linked NPC
   window.addEventListener("message", function (event) {
     var data = event.data;
     if (event.origin !== location.origin || !data || data.type !== "party-panel-set-conds" || !ready) return;
@@ -505,9 +516,20 @@
     var conds = data.conds.filter(function (c) { return typeof c === "string"; }).slice(0, 40);
     docs.forEach(function (doc, path) {
       if (!/^teams\/[^/]+\/members\/[^/]+$/.test(path) || !doc || !doc.token || doc.token.id !== data.tokenStateId) return;
-      if (JSON.stringify(doc.conds || []) === JSON.stringify(conds)) return;
+      if (JSON.stringify(tokenConds(doc)) === JSON.stringify(conds)) return;
       var next = copy(doc);
-      next.conds = conds;
+      if (doc.monster && doc.monster.system === "pf2") {
+        next.conds = conds;
+      } else {
+        // 5e: "力竭 N" back to the exhaustion level
+        var exh = 0;
+        next.conds = conds.filter(function (c) {
+          var m = c.match(/^力竭\s*(\d+)$/);
+          if (m) exh = Math.min(6, Number(m[1]));
+          return !m;
+        });
+        next.exh = exh;
+      }
       db.doc(path).set(next).catch(function () {});
     });
   });

@@ -1,10 +1,32 @@
-// PF2 conditions for tokens and the party panel (public/party-panel/index.html
-// keeps the same list, PF2_CONDS: change both together). Names follow the
-// Chinese PF2 wiki. A condition is stored as a string: "倒地", or with its
-// value, "惊惧 1".
+// Conditions for tokens and the party panel, 5e or PF2. A condition is
+// stored as a string: "倒地", or with its value, "惊惧 1" / "力竭 2".
+// The party panel (public/party-panel/index.html) keeps the same lists,
+// CONDS (5e) and PF2_CONDS: change both together.
 
-/** [name, has a value, short rules summary]; most used first */
-export const PF2_CONDITIONS: [string, boolean, string][] = [
+/** [name, has a value, short rules summary, highest value] */
+export type ConditionTable = [string, boolean, string, number?][];
+
+/** 5e (the party panel's built-in library, plus exhaustion levels) */
+export const DND5E_CONDITIONS: ConditionTable = [
+  ["目盲", false, "看不见；攻击检定劣势，攻击你的检定有优势"],
+  ["魅惑", false, "不能攻击魅惑者；对方社交检定对你有优势"],
+  ["耳聋", false, "听不见；依赖听觉的检定自动失败"],
+  ["恐慌", false, "看得见恐惧源时，攻击与属性检定劣势，不能主动靠近"],
+  ["受擒", false, "速度为 0"],
+  ["失能", false, "不能执行动作、附赠动作或反应"],
+  ["隐形", false, "攻击检定有优势，攻击你的检定劣势"],
+  ["麻痹", false, "失能且不能移动；力量敏捷豁免自动失败，5 尺内命中即重击"],
+  ["石化", false, "化为石像，失能；对大多数伤害有抗性"],
+  ["中毒", false, "攻击检定与属性检定劣势"],
+  ["倒地", false, "只能爬行；攻击劣势；5 尺内攻击你有优势，远程攻击劣势"],
+  ["束缚", false, "速度为 0；攻击劣势，攻击你有优势，敏捷豁免劣势"],
+  ["震慑", false, "失能；力量敏捷豁免自动失败，攻击你有优势"],
+  ["昏迷", false, "失能并倒地；力量敏捷豁免失败，5 尺内命中即重击"],
+  ["力竭", true, "每级：d20 检定 −2，速度 −5 尺；6 级死亡", 6],
+];
+
+/** PF2 (names follow the Chinese PF2 wiki); most used first */
+export const PF2_CONDITIONS: ConditionTable = [
   ["惊惧", true, "所有检定和 DC 受等同数值的状态减值；每回合结束时减 1"],
   ["恶心", true, "所有检定和 DC 受状态减值；可花 1 动作进行强韧豁免来降低"],
   ["缓慢", true, "回合开始时少获得等同数值的动作"],
@@ -41,7 +63,8 @@ export const PF2_CONDITIONS: [string, boolean, string][] = [
   ["无踪", false, "对方不知道你的位置"],
 ];
 
-const BY_NAME = new Map(PF2_CONDITIONS.map((c) => [c[0], c]));
+const entry = (table: ConditionTable, name: string) =>
+  table.find((c) => c[0] === name);
 
 /** "惊惧 2" -> { name: "惊惧", value: 2 }; "倒地" -> { name, value: null } */
 export function parseCondition(text: string) {
@@ -58,8 +81,13 @@ export function conditionValue(conditions: string[], name: string) {
 }
 
 /** Sets a condition: null (or 0 for a valued one) removes it */
-export function setCondition(conditions: string[], name: string, value: number | null) {
-  const valued = BY_NAME.get(name)?.[1];
+export function setCondition(
+  conditions: string[],
+  name: string,
+  value: number | null,
+  table: ConditionTable = PF2_CONDITIONS
+) {
+  const valued = entry(table, name)?.[1];
   const remove = value === null || (valued && value <= 0);
   const text = valued ? `${name} ${value}` : name;
   // A changed value keeps its place, so the list does not jump around
@@ -71,8 +99,13 @@ export function setCondition(conditions: string[], name: string, value: number |
   return next;
 }
 
-export function conditionSummary(text: string) {
-  return BY_NAME.get(parseCondition(text).name)?.[2] || "";
+/** The highest value a condition takes (力竭 6 in 5e, else 9) */
+export function conditionMax(name: string, table: ConditionTable = PF2_CONDITIONS) {
+  return entry(table, name)?.[3] ?? 9;
+}
+
+export function conditionSummary(text: string, table: ConditionTable = PF2_CONDITIONS) {
+  return entry(table, parseCondition(text).name)?.[2] || "";
 }
 
 /** "惊惧1 · 倒地 · 恶心2 +1" for the badge under a token */
