@@ -1,10 +1,12 @@
 import {
+  DND5E_CONDITIONS,
   conditionBadge,
+  conditionMax,
   conditionSummary,
   conditionValue,
   parseCondition,
   setCondition,
-} from "./pf2Conditions";
+} from "./conditions";
 import { reconcileConditions } from "./partyPanel";
 
 test("conditions are strings, with a value for valued ones", () => {
@@ -43,4 +45,14 @@ test("sync: whichever side changed since the last sync wins", () => {
   // Both changed, or never synced: the panel wins
   expect(reconcileConditions(["目盲"], ["倒地"], ["隐形"])).toEqual({ apply: "token", value: ["倒地"] });
   expect(reconcileConditions(["目盲"], ["倒地"], undefined)).toEqual({ apply: "token", value: ["倒地"] });
+});
+
+test("5e conditions: exhaustion has levels up to 6", () => {
+  let list = setCondition(["目盲"], "力竭", 2, DND5E_CONDITIONS);
+  expect(list).toEqual(["目盲", "力竭 2"]);
+  expect(setCondition(list, "力竭", 0, DND5E_CONDITIONS)).toEqual(["目盲"]);
+  expect(setCondition(list, "倒地", 0, DND5E_CONDITIONS)).toEqual(["目盲", "力竭 2", "倒地"]);
+  expect(conditionMax("力竭", DND5E_CONDITIONS)).toBe(6);
+  expect(conditionMax("惊惧")).toBe(9);
+  expect(conditionSummary("力竭 2", DND5E_CONDITIONS)).toMatch(/速度/);
 });

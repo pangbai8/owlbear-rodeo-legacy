@@ -21,7 +21,7 @@ import { useUserId } from "../../contexts/UserIdContext";
 import { useTokenData } from "../../contexts/TokenDataContext";
 import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
 import { useRuleSystem } from "../../helpers/ruleSystem";
-import Pf2ConditionPicker from "./Pf2ConditionPicker";
+import ConditionPicker from "./ConditionPicker";
 import { openMonsterCard } from "../../helpers/fiveETools";
 
 import {
@@ -85,9 +85,9 @@ function TokenMenu({
   // Only with its rules' mode on (5e or PF2)
   const { isOpen: lookupsOn } = useFloatingWindow("quickSearch");
   const ruleSystem = useRuleSystem();
-  // PF2 mode: PF2 conditions instead of the color rings, in a wider menu
-  const pf2Mode = lookupsOn && ruleSystem === "pf2";
-  const menuWidth = pf2Mode ? 260 : 156;
+  // 5e or PF2 mode: its conditions instead of the color rings, in a wider menu
+  const conditionsMode = lookupsOn;
+  const menuWidth = conditionsMode ? 260 : 156;
   const monster =
     lookupsOn &&
     token &&
@@ -229,8 +229,9 @@ function TokenMenu({
             autoComplete="off"
           />
         </Flex>
-        {pf2Mode ? (
-          <Pf2ConditionPicker
+        {conditionsMode ? (
+          <ConditionPicker
+            system={ruleSystem}
             conditions={tokenState?.conditions || []}
             onChange={(conditions) =>
               tokenState &&

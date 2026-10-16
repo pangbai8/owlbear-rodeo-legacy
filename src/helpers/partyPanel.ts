@@ -74,9 +74,9 @@ export type PartyLink = TokenLink & {
   maxHp: number;
   /** It is this NPC's turn in its team's combat */
   turn: boolean;
-  /** A PF2 creature: its conditions sync with the token's */
+  /** A PF2 creature (else 5e) */
   pf2?: boolean;
-  /** Its conditions ("倒地", "惊惧 1"), for PF2 NPCs */
+  /** Its conditions as the token shows them ("倒地", "惊惧 1", "力竭 2") */
   conds?: string[];
 };
 
