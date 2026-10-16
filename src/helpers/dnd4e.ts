@@ -7,6 +7,13 @@ import { SearchResult, matchScore } from "./fiveETools";
 export const DND4E_WIKI = "https://leonspace.site/";
 const DND4E_BASE = `${process.env.PUBLIC_URL || ""}/dnd4e/`;
 
+/** Power colors by usage, as on the wiki's power cards */
+export const DND4E_USAGE_COLOR: Record<string, string> = {
+  随意: "#4b7d3b",
+  遭遇: "#9b2230",
+  每日: "#555555",
+};
+
 /** Where a record lives in the data chunks */
 export type Dnd4eLocation = { kind: string; chunk: number; position: number };
 
@@ -58,6 +65,8 @@ function toResult(index: Dnd4eIndex, entry: Dnd4eIndex["entries"][number]): Sear
     reprinted: false,
     modern: false,
     isMonster: false,
+    // Powers: their row in the results is colored by usage
+    accent: kind === "威能" ? DND4E_USAGE_COLOR[usage] : undefined,
     system: "4e",
     dnd4e: { kind, chunk, position },
   };

@@ -153,6 +153,8 @@ export type SearchResult = {
   pf2?: Pf2Location;
   /** Where a 4e result's record is */
   dnd4e?: Dnd4eLocation;
+  /** Color for its category label in the results (4e powers by usage) */
+  accent?: string;
 };
 
 type SearchIndex = {

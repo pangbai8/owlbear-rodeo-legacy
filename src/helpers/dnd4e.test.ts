@@ -27,11 +27,15 @@ test("search: powers first among equal matches, type and usage shown", async () 
     englishName: "Fireball",
     categoryLabel: "威能 5",
     source: "法师攻击 · 每日",
+    // A daily power: its label is colored like the wiki's daily cards
+    accent: "#555555",
     system: "4e",
     dnd4e: { kind: "威能", chunk: 51, position: 14 },
     url: "https://leonspace.site/#" + encodeURIComponent("火球术 Fireball"),
   });
   expect((await searchDnd4e("fireball"))[0].name).toBe("火球术");
+  // Not a power: no color
+  expect(results[0].accent).toBeUndefined();
 });
 
 test("links and chips: by full title; conditions open the condition table", async () => {

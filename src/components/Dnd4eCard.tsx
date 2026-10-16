@@ -2,18 +2,11 @@ import { useEffect, useState } from "react";
 import { Box, Flex, Link, Text } from "theme-ui";
 
 import { SearchResult, openFiveECard } from "../helpers/fiveETools";
-import { findDnd4eTitle, loadDnd4eRecord } from "../helpers/dnd4e";
+import { DND4E_USAGE_COLOR, findDnd4eTitle, loadDnd4eRecord } from "../helpers/dnd4e";
 import { splitRolls } from "../helpers/fiveEDice";
 import { DiceRoller, RollLog, RollableText, useDiceRoller } from "./DiceRoller";
 
 type Dnd4eCardProps = { result: SearchResult };
-
-// Power card title colors by usage, as on the wiki
-const USAGE_COLOR: Record<string, string> = {
-  随意: "#4b7d3b",
-  遭遇: "#8a1c26",
-  每日: "#3d3d3d",
-};
 
 // "label value" lines for kinds whose data is in fields
 const FIELD_LINES: [string, string][] = [
@@ -132,7 +125,7 @@ function Dnd4eCard({ result }: Dnd4eCardProps) {
 }
 
 function PowerHeader({ record }: { record: any }) {
-  const color = USAGE_COLOR[record.usage] || "#3d3d3d";
+  const color = DND4E_USAGE_COLOR[record.usage] || DND4E_USAGE_COLOR.每日;
   return (
     <Box>
       <Flex

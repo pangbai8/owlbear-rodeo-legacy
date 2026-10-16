@@ -458,8 +458,8 @@ function QuickSearch() {
                       px: 1,
                       mr: 2,
                       borderRadius: "4px",
-                      bg: result.isMonster ? "primary" : "muted",
-                      color: result.isMonster ? "background" : "text",
+                      bg: result.accent || (result.isMonster ? "primary" : "muted"),
+                      color: result.accent ? "white" : result.isMonster ? "background" : "text",
                       whiteSpace: "nowrap",
                     }}
                   >
