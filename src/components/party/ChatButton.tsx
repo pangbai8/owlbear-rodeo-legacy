@@ -1,45 +1,25 @@
 import { IconButton } from "theme-ui";
 
 import ChatIcon from "../../icons/ChatIcon";
-import DiscordIcon from "../../icons/DiscordIcon";
-import ShimoIcon from "../../icons/ShimoIcon";
-import { ChatWindowConfig, chatWindows } from "../ChatWindow";
+import { chatTabs } from "../ChatWindow";
 import { useFloatingWindow } from "../../contexts/FloatingWindowContext";
 
-function ChatWindowButton({ chat }: { chat: ChatWindowConfig }) {
-  const { isOpen, toggle } = useFloatingWindow(chat.name);
-  const label = `${isOpen ? "Hide" : "Show"} ${chat.title}${
-    chat.name === "shimo" ? "" : " Chat"
-  }`;
-
+/** Shows or hides the chat window (Boluo, Discord and Shimo as tabs) */
+function ChatButton() {
+  const { isOpen, toggle } = useFloatingWindow("chat");
+  if (chatTabs.length === 0) return null;
+  const names = chatTabs.map((tab) => tab.title).join(" / ");
   return (
     <IconButton
       m={1}
-      aria-label={label}
-      title={label}
+      aria-label={isOpen ? "Hide Chat" : "Show Chat"}
+      title={isOpen ? `收起交流窗口（${names}）` : `交流窗口：${names}`}
       aria-pressed={isOpen}
       onClick={toggle}
       sx={{ color: isOpen ? "primary" : "text" }}
     >
-      {chat.name === "discordChat" ? (
-        <DiscordIcon />
-      ) : chat.name === "shimo" ? (
-        <ShimoIcon />
-      ) : (
-        <ChatIcon />
-      )}
+      <ChatIcon />
     </IconButton>
-  );
-}
-
-/** One button per configured chat window (Boluo, Discord, Shimo) */
-function ChatButton() {
-  return (
-    <>
-      {chatWindows.map((chat) => (
-        <ChatWindowButton key={chat.name} chat={chat} />
-      ))}
-    </>
   );
 }
 
