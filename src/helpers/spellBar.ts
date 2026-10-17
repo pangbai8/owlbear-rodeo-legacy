@@ -11,9 +11,11 @@ import { SearchResult } from "./fiveETools";
 import { loadEntryCard } from "./fiveEEntries";
 import { loadPf2Record } from "./pf2";
 import { loadDnd4eRecord } from "./dnd4e";
+import { loadDnd3rRecord } from "./dnd3r";
 import {
   TextPart,
   rollExpression,
+  splitDnd3rAttacks,
   splitPf2Rolls,
   splitRolls,
 } from "./fiveEDice";
@@ -79,7 +81,7 @@ export function withSaves(
 export function defaultSaves(system: BarSystem): SpellRoll[] {
   // No rules: the user sets up whatever saves the game has
   if (system === "none") return [];
-  if (system === "pf2")
+  if (system === "pf2" || system === "3r")
     return ["强韧", "反射", "意志"].map((label) => ({ label, formula: "+0" }));
   // 4e: one save, 10 or higher succeeds
   if (system === "4e") return [{ label: "豁免", formula: "1d20" }];
@@ -254,6 +256,11 @@ export async function entryFromResult(
     } else if (result.system === "4e" && result.dnd4e) {
       const record = await loadDnd4eRecord(result.dnd4e);
       parts = recordText(record).flatMap((text) => splitRolls(text));
+    } else if (result.system === "3r" && result.dnd3r) {
+      const record = await loadDnd3rRecord(result.dnd3r);
+      parts = recordText([record.fields, record.body]).flatMap((text) =>
+        splitDnd3rAttacks(text)
+      );
     } else {
       const card = await loadEntryCard(result);
       if (card)

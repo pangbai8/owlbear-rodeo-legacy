@@ -283,3 +283,32 @@ export function splitPf2Rolls(text: string): TextPart[] {
   }
   return merged;
 }
+
+// 3R attacks: "长剑+2 近战(1d8+1/19-20)", "巨斧+6/+1 近战(1d12+3/×3)" — the
+// bonus (iterative attacks split by "/") before 近战 / 远程, then the damage
+const DND3R_ATTACK = /([+\-−]\d+(?:\/[+\-−]?\d+)*)(?=\s*(?:近战|远程|接触))/g;
+
+/** splitRolls for a 3R attack line: each attack bonus a d20, dice as damage */
+export function splitDnd3rAttacks(text: string): TextPart[] {
+  const parts: TextPart[] = [];
+  let last = 0;
+  const re = new RegExp(DND3R_ATTACK.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    parts.push(...splitRolls(text.slice(last, m.index)));
+    m[1].split("/").forEach((bonus, i) => {
+      if (i > 0) parts.push("/");
+      const signed = /^[+\-−]/.test(bonus) ? bonus : `+${bonus}`;
+      parts.push({ text: bonus, roll: { count: 1, sides: 20, modifier: toNumber(signed) }, kind: "hit" });
+    });
+    last = m.index + m[1].length;
+  }
+  parts.push(...splitRolls(text.slice(last)));
+  // Adjacent plain pieces back together
+  return parts.reduce<TextPart[]>((out, part) => {
+    const prev = out[out.length - 1];
+    if (typeof part === "string" && typeof prev === "string") out[out.length - 1] = prev + part;
+    else if (part !== "") out.push(part);
+    return out;
+  }, []);
+}

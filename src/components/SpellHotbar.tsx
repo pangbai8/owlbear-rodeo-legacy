@@ -5,6 +5,7 @@ import { Box, Flex, Input, Text, Textarea } from "theme-ui";
 import EntryCardView from "./EntryCardView";
 import Pf2Card from "./Pf2Card";
 import Dnd4eCard from "./Dnd4eCard";
+import Dnd3rCard from "./Dnd3rCard";
 import { useDiceRoller } from "./DiceRoller";
 import { describeSummary, parseFormula } from "../helpers/fiveEDice";
 import { SearchResult } from "../helpers/fiveETools";
@@ -972,6 +973,7 @@ function SourceCard({ result }: { result: SearchResult }) {
   const [noCard, setNoCard] = useState(false);
   if (result.system === "pf2") return <Pf2Card result={result} />;
   if (result.system === "4e") return <Dnd4eCard result={result} />;
+  if (result.system === "3r") return <Dnd3rCard result={result} />;
   if (noCard)
     return (
       <Box sx={{ p: 3, fontSize: 1 }}>

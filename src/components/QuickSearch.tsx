@@ -8,6 +8,8 @@ import { useFloatingWindow } from "../contexts/FloatingWindowContext";
 import EntryCardView from "./EntryCardView";
 import Pf2Card from "./Pf2Card";
 import Dnd4eCard from "./Dnd4eCard";
+import Dnd3rCard from "./Dnd3rCard";
+import { loadDnd3rIndex, searchDnd3r } from "../helpers/dnd3r";
 import { loadPf2Index, searchPf2 } from "../helpers/pf2";
 import { loadDnd4eIndex, searchDnd4e } from "../helpers/dnd4e";
 import { dataSystemOf, useRuleSystem } from "../helpers/ruleSystem";
@@ -65,7 +67,7 @@ function QuickSearch() {
   const system = useRuleSystem();
   const selectedMonster = useMemo(
     () =>
-      selected?.isMonster && selected.system !== "pf2"
+      selected?.isMonster && selected.system !== "pf2" && selected.system !== "3r"
         ? monsterRefOf(selected)
         : null,
     [selected]
@@ -92,6 +94,8 @@ function QuickSearch() {
         ? searchPf2(q)
         : system === "4e"
         ? searchDnd4e(q)
+        : system === "3r"
+        ? searchDnd3r(q)
         : searchFiveE(q, 60, system === "5r" ? "2024" : "2014")
       )
         .then((found) => {
@@ -176,6 +180,8 @@ function QuickSearch() {
       ? loadPf2Index()
       : system === "4e"
       ? loadDnd4eIndex()
+      : system === "3r"
+      ? loadDnd3rIndex()
       : loadSearchIndex()
     ).catch(() => setStatus("error"));
   }
@@ -214,11 +220,12 @@ function QuickSearch() {
   // PF2 and 4e entries always have a card (their wikis are not framed)
   const pf2Selected = selected?.system === "pf2";
   const dnd4eSelected = selected?.system === "4e";
+  const dnd3rSelected = selected?.system === "3r";
   const hasCard =
     selected !== null &&
-    (pf2Selected || dnd4eSelected || !!selectedMonster || hasEntryCard(selected));
+    (pf2Selected || dnd4eSelected || dnd3rSelected || !!selectedMonster || hasEntryCard(selected));
   const showPage =
-    selected !== null && !pf2Selected && !dnd4eSelected && (!hasCard || fullPage);
+    selected !== null && !pf2Selected && !dnd4eSelected && !dnd3rSelected && (!hasCard || fullPage);
   const openFullPage = () => {
     setPageLoading(true);
     setFullPage(true);
@@ -277,12 +284,20 @@ function QuickSearch() {
               ? "查 PF2 资料：生物、法术、专长…（Ctrl+K）"
               : system === "4e"
               ? "查 4e 资料：威能、专长、物品…（Ctrl+K）"
+              : system === "3r"
+              ? "查 3R 资料：法术、专长、怪物、状态…（Ctrl+K）"
               : system === "5r"
               ? "查 5r 资料（2024 版优先）：怪物、法术、物品…（Ctrl+K）"
               : "查 5e 资料：怪物、法术、物品…（Ctrl+K）"
           }
           aria-label={
-            system === "pf2" ? "Search PF2" : system === "4e" ? "Search 4e" : "Search 5etools"
+            system === "pf2"
+              ? "Search PF2"
+              : system === "4e"
+              ? "Search 4e"
+              : system === "3r"
+              ? "Search 3R"
+              : "Search 5etools"
           }
           sx={{
             border: "none",
@@ -410,7 +425,9 @@ function QuickSearch() {
                 </Box>
               ) : (
                 <Box sx={{ flexGrow: 1, overflowY: "auto" }}>
-                  {dnd4eSelected ? (
+                  {dnd3rSelected ? (
+                    <Dnd3rCard result={selected} />
+                  ) : dnd4eSelected ? (
                     <Dnd4eCard result={selected} />
                   ) : pf2Selected ? (
                     <Pf2Card result={selected} />
@@ -432,8 +449,8 @@ function QuickSearch() {
             <Box sx={{ maxHeight: "min(60vh, 520px)", overflowY: "auto" }}>
               {status === "error" && (
                 <Text sx={{ p: 2, fontSize: 1 }}>
-                  {system === "pf2" || system === "4e"
-                    ? `加载 ${system === "pf2" ? "PF2" : "4e"} 资料失败，请检查网络后再试。`
+                  {system === "pf2" || system === "4e" || system === "3r"
+                    ? `加载 ${system === "pf2" ? "PF2" : system === "4e" ? "4e" : "3R"} 资料失败，请检查网络后再试。`
                     : "加载 5etools 失败，请检查网络后再试。"}
                 </Text>
               )}

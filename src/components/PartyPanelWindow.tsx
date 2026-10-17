@@ -16,6 +16,7 @@ import {
 } from "../helpers/fiveETools";
 import { findPf2 } from "../helpers/pf2";
 import { findDnd4e } from "../helpers/dnd4e";
+import { findDnd3r } from "../helpers/dnd3r";
 import { RULE_SYSTEM_LABEL, getRuleSystem } from "../helpers/ruleSystem";
 import {
   PartyLink,
@@ -99,8 +100,11 @@ function PartyPanelWindow() {
           if (typeof data.name === "string" && data.name.trim()) {
             const kind = data.kind === "spell" ? "spell" : "condition";
             const rules = getRuleSystem();
-            (rules === "pf2" || rules === "4e"
-              ? (rules === "pf2" ? findPf2 : findDnd4e)(data.name.trim(), kind).then((result) => {
+            (rules === "pf2" || rules === "4e" || rules === "3r"
+              ? (rules === "pf2" ? findPf2 : rules === "4e" ? findDnd4e : findDnd3r)(
+                  data.name.trim(),
+                  kind
+                ).then((result) => {
                   if (result) openFiveECard(result);
                   return !!result;
                 })
