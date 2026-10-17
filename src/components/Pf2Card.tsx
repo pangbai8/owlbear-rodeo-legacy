@@ -1,32 +1,60 @@
 import React, { useEffect, useState } from "react";
 import { Box, Flex, Link, Text } from "theme-ui";
 
-import {
-  MONSTER_DRAG_TYPE,
-  SearchResult,
-  monsterRefOf,
-} from "../helpers/fiveETools";
-import {
-  Pf2Kind,
-  loadPf2Creature,
-  loadPf2Record,
-} from "../helpers/pf2";
+import { MONSTER_DRAG_TYPE, SearchResult, monsterRefOf } from "../helpers/fiveETools";
+import { Pf2Kind, loadPf2Creature, loadPf2Record } from "../helpers/pf2";
 import { TextPart, splitChecks, splitPf2Rolls } from "../helpers/fiveEDice";
 import { DiceRoller, RollLog, RollableText, useDiceRoller } from "./DiceRoller";
+import { FieldGrid, Section, Tile, TileRow, chipBox, tileNote, tileValue } from "./StatBlock";
 
 type Pf2CardProps = { result: SearchResult };
 
-const ACTIONS: Record<string, string> = { 1: "◆", 2: "◆◆", 3: "◆◆◆", R: "⟲", F: "◇" };
+const ACTIONS: Record<string, string> = {
+  1: "◆",
+  2: "◆◆",
+  3: "◆◆◆",
+  R: "⟲",
+  F: "◇",
+};
 const actionText = (v: unknown) =>
-  v == null ? "" : String(v).split("-").map((p) => ACTIONS[p] || p).join("～");
+  v == null
+    ? ""
+    : String(v)
+        .split("-")
+        .map((p) => ACTIONS[p] || p)
+        .join("～");
 
 // Fields shown as "label value" lines, per kind, before the description
 const LINES: Partial<Record<Pf2Kind, string[]>> = {
-  Spells: ["法术分类", "根源", "施法", "成分", "射程", "区域", "目标", "防御", "持续", "触发", "需求", "开销"],
+  Spells: [
+    "法术分类",
+    "根源",
+    "施法",
+    "成分",
+    "射程",
+    "区域",
+    "目标",
+    "防御",
+    "持续",
+    "触发",
+    "需求",
+    "开销",
+  ],
   Feats: ["专长分类", "动作", "先决条件", "前置专长", "频率", "触发", "需求", "开销"],
   Items: ["物品分类", "用法", "负载", "占手", "启动", "持续", "弹药", "基础物品", "制作需求"],
   Actions: ["动作", "需求", "触发", "频率", "开销"],
-  Rituals: ["施放", "开销", "主要检定", "次要检定", "次要施法者", "射程", "区域", "目标", "持续", "需求"],
+  Rituals: [
+    "施放",
+    "开销",
+    "主要检定",
+    "次要检定",
+    "次要施法者",
+    "射程",
+    "区域",
+    "目标",
+    "持续",
+    "需求",
+  ],
   Backgrounds: ["属性提升", "技能提升", "技能专长"],
   Traits: ["特征分类"],
 };
@@ -43,10 +71,7 @@ function Pf2Card({ result }: Pf2CardProps) {
     let cancelled = false;
     setRecord(null);
     setError("");
-    (result.pf2
-      ? loadPf2Record(result.pf2)
-      : loadPf2Creature(monsterRefOf(result))
-    )
+    (result.pf2 ? loadPf2Record(result.pf2) : loadPf2Creature(monsterRefOf(result)))
       .then((r) => !cancelled && setRecord(r))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)));
     return () => {
@@ -117,15 +142,7 @@ function Traits({ record }: { record: any }) {
 }
 
 /** Multi-line PF2 text with its rolls; label names strikes and damage */
-function Pf2Text({
-  text,
-  roller,
-  context,
-}: {
-  text: string;
-  roller: DiceRoller;
-  context: string;
-}) {
+function Pf2Text({ text, roller, context }: { text: string; roller: DiceRoller; context: string }) {
   return (
     <>
       {String(text)
@@ -135,7 +152,11 @@ function Pf2Text({
           let weapon = "";
           const label = (part: Exclude<TextPart, string>, before: string) => {
             if (part.kind === "hit") {
-              weapon = before.split(/[\s◆◇⟲，,；;：:]/).filter(Boolean).pop() || context;
+              weapon =
+                before
+                  .split(/[\s◆◇⟲，,；;：:]/)
+                  .filter(Boolean)
+                  .pop() || context;
               return `${weapon} 攻击`;
             }
             return part.kind === "damage" ? `${weapon || context} 伤害` : context;
@@ -150,7 +171,6 @@ function Pf2Text({
   );
 }
 
-const rule = { borderTop: "1px solid", borderColor: "border", my: 2 };
 const signed = (n: unknown) => {
   const v = Number(n);
   return Number.isFinite(v) ? (v < 0 ? `${v}` : `+${v}`) : String(n ?? "");
@@ -185,12 +205,32 @@ function CreatureCard({ result, record }: { result: SearchResult; record: any })
   const check = (label: string, value: unknown) => (
     <RollableText parts={splitChecks(signed(value))} label={() => label} roller={roller} />
   );
-  const line = (label: string, content: React.ReactNode) =>
-    content ? (
-      <Text sx={{ display: "block" }}>
-        <b>{label}</b> {content}
-      </Text>
-    ) : null;
+  const speed = String(record.速度 || "");
+  const firstSpeed = speed.split(/[；;，,]/)[0].trim();
+  const defenses: [string, React.ReactNode][] = [
+    ["免疫", record.Immunity],
+    ["抗性", record.Resistance],
+    ["弱点", record.Weakness],
+  ].filter(([, v]) => v) as [string, React.ReactNode][];
+  const details: [string, React.ReactNode][] = [
+    ["语言", record.语言],
+    [
+      "技能",
+      record.技能 && (
+        <RollableText
+          parts={splitChecks(record.技能)}
+          label={(_, before) =>
+            `${before
+              .split(/[，,、；;]/)
+              .pop()!
+              .trim()}检定`
+          }
+          roller={roller}
+        />
+      ),
+    ],
+    ["法术 DC", record.Spell_DC],
+  ].filter(([, v]) => v) as [string, React.ReactNode][];
 
   return (
     <Box sx={{ p: 3, fontSize: 1, lineHeight: 1.5 }}>
@@ -205,7 +245,15 @@ function CreatureCard({ result, record }: { result: SearchResult; record: any })
             src={image}
             alt=""
             draggable={false}
-            style={{ width: 56, height: 56, objectFit: "cover", objectPosition: "50% 15%", borderRadius: "50%", marginRight: 10, flexShrink: 0 }}
+            style={{
+              width: 56,
+              height: 56,
+              objectFit: "cover",
+              objectPosition: "50% 15%",
+              borderRadius: "50%",
+              marginRight: 10,
+              flexShrink: 0,
+            }}
           />
         )}
         <Box sx={{ flexGrow: 1 }}>
@@ -227,55 +275,90 @@ function CreatureCard({ result, record }: { result: SearchResult; record: any })
       <Traits record={record} />
       <RollLog roller={roller} />
 
-      {line(
-        "察觉",
-        <>
-          {check("察觉（先攻）", record.察觉)}
-          {record.感官 ? `；${record.感官}` : ""}
-        </>
-      )}
-      {line("语言", record.语言)}
-      {record.技能 &&
-        line(
-          "技能",
-          <RollableText
-            parts={splitChecks(record.技能)}
-            label={(_, before) => `${before.split(/[，,、；;]/).pop()!.trim()}检定`}
-            roller={roller}
-          />
-        )}
-      <Flex sx={{ flexWrap: "wrap", gap: "2px 10px" }}>
-        {ABILITIES.map(([key, label]) => (
-          <Text key={key}>
-            <b>{label}</b> {check(`${label}检定`, record[key])}
-          </Text>
+      {/* AC, HP, Perception (initiative), speed */}
+      <TileRow>
+        <Tile label="AC">
+          <Text sx={tileValue}>{record.AC ?? "—"}</Text>
+        </Tile>
+        <Tile label="HP">
+          <Text sx={tileValue}>{record.HP ?? "—"}</Text>
+        </Tile>
+        <Tile label="察觉（先攻）" title={record.感官 || undefined}>
+          <Text sx={tileValue}>{check("察觉（先攻）", record.察觉)}</Text>
+          {record.感官 && <Text sx={tileNote}>{record.感官}</Text>}
+        </Tile>
+        <Tile label="速度" title={speed}>
+          <Text sx={{ ...tileValue, fontSize: 2 }}>{firstSpeed || "—"}</Text>
+          <Text sx={tileNote}>{speed.slice(firstSpeed.length).replace(/^[；;，,\s]+/, "")}</Text>
+        </Tile>
+      </TileRow>
+
+      {/* Saves */}
+      <Flex sx={{ gap: 1, mt: 2, alignItems: "center", flexWrap: "wrap" }}>
+        <Text sx={{ fontSize: 0, color: "gray", fontWeight: "bold", mr: 1 }}>豁免</Text>
+        {SAVES.map(([key, label]) => (
+          <Box key={key} sx={chipBox}>
+            {label} {check(`${label}豁免`, record[key])}
+          </Box>
         ))}
+        {record.豁免附加 && <Text sx={{ fontSize: 0, color: "gray" }}>{record.豁免附加}</Text>}
       </Flex>
-      {record.被动能力 && <Pf2Text text={record.被动能力} roller={roller} context={record.中文} />}
 
-      <Box sx={rule} />
-      <Text sx={{ display: "block" }}>
-        <b>AC</b> {record.AC}；
-        {SAVES.map(([key, label], i) => (
-          <React.Fragment key={key}>
-            {i > 0 && "，"}
-            <b>{label}</b> {check(`${label}豁免`, record[key])}
-          </React.Fragment>
+      {/* Attribute modifiers */}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: "repeat(6, 1fr)",
+          gap: 1,
+          mt: 2,
+          textAlign: "center",
+        }}
+      >
+        {ABILITIES.map(([key, label]) => (
+          <Box
+            key={key}
+            sx={{
+              border: "1px solid",
+              borderColor: "border",
+              borderRadius: "4px",
+              py: 1,
+            }}
+          >
+            <Text sx={{ display: "block", fontSize: 0, color: "gray" }}>{label}</Text>
+            <Text sx={{ display: "block", fontWeight: "bold" }}>
+              {check(`${label}检定`, record[key])}
+            </Text>
+          </Box>
         ))}
-        {record.豁免附加 ? `；${record.豁免附加}` : ""}
-      </Text>
-      <Text sx={{ display: "block" }}>
-        <b>HP</b> {record.HP}
-        {record.Immunity ? `；免疫 ${record.Immunity}` : ""}
-        {record.Resistance ? `；抗性 ${record.Resistance}` : ""}
-        {record.Weakness ? `；弱点 ${record.Weakness}` : ""}
-      </Text>
-      {record.防御能力 && <Pf2Text text={record.防御能力} roller={roller} context={record.中文} />}
+      </Box>
 
-      <Box sx={rule} />
-      {line("速度", record.速度)}
-      {record.攻击能力 && <Pf2Text text={record.攻击能力} roller={roller} context={record.中文} />}
-      {record.Spell_DC && line("法术 DC", record.Spell_DC)}
+      {(details.length > 0 || record.被动能力) && (
+        <Section title="技能与能力">
+          {details.length > 0 && <FieldGrid rows={details} />}
+          {record.被动能力 && (
+            <Box sx={{ mt: details.length ? 1 : 0 }}>
+              <Pf2Text text={record.被动能力} roller={roller} context={record.中文} />
+            </Box>
+          )}
+        </Section>
+      )}
+
+      {(defenses.length > 0 || record.防御能力) && (
+        <Section title="防御">
+          {defenses.length > 0 && <FieldGrid rows={defenses} />}
+          {record.防御能力 && (
+            <Box sx={{ mt: defenses.length ? 1 : 0 }}>
+              <Pf2Text text={record.防御能力} roller={roller} context={record.中文} />
+            </Box>
+          )}
+        </Section>
+      )}
+
+      {record.攻击能力 && (
+        <Section title="攻击">
+          <Pf2Text text={record.攻击能力} roller={roller} context={record.中文} />
+        </Section>
+      )}
 
       {record.描述 && (
         <Text sx={{ display: "block", mt: 2, fontSize: 0, color: "gray" }}>{record.描述}</Text>
@@ -322,29 +405,24 @@ function EntryCard({ result, record }: { result: SearchResult; record: any }) {
       <Traits record={{ ...record, 体型: undefined }} />
       {hasRolls && <RollLog roller={roller} />}
       {lines.some((f) => record[f] != null) && (
-        <Box sx={rule}>
-          {lines
-            .filter((f) => record[f] != null)
-            .map((f) => (
-              <Text key={f} sx={{ display: "block" }}>
-                <b>{f}</b> {text(f)}
-              </Text>
-            ))}
-        </Box>
+        <Section>
+          <FieldGrid rows={lines.filter((f) => record[f] != null).map((f) => [f, text(f)])} />
+        </Section>
       )}
       {Array.isArray(record.类型数据) && record.类型数据.length > 0 && (
-        <Box sx={rule}>
-          {record.类型数据.map((t: any, i: number) => (
-            <Text key={i} sx={{ display: "block" }}>
-              <b>{t.类型 || record.中文}</b>
-              {t.等级 != null ? ` 等级 ${t.等级}` : ""}
-              {t.价格 ? `，${t.价格}` : ""}
-              {t.类型描述 ? `：${t.类型描述}` : ""}
-            </Text>
-          ))}
-        </Box>
+        <Section title="类型">
+          <FieldGrid
+            rows={record.类型数据.map((t: any, i: number) => [
+              // Untitled types are numbered, so each row has its own name
+              t.类型 || (record.类型数据.length > 1 ? `${record.中文} ${i + 1}` : record.中文),
+              [t.等级 != null ? `等级 ${t.等级}` : "", t.价格 || "", t.类型描述 || ""]
+                .filter(Boolean)
+                .join(" · "),
+            ])}
+          />
+        </Section>
       )}
-      <Box sx={rule}>
+      <Box sx={{ borderTop: "1px solid", borderColor: "border", mt: 2, pt: 2 }}>
         {record.描述 && <Pf2Text text={record.描述} roller={roller} context={record.中文} />}
         {AFTER.filter((f) => record[f]).map((f) => (
           <Box key={f} sx={{ mt: 1 }}>
