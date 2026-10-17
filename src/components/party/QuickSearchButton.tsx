@@ -116,7 +116,7 @@ function QuickSearchButton() {
           <MenuItem
             active={!isOpen}
             label="无规则"
-            description="不显示资料搜索栏和规则状态；收藏栏用无规则的那一套"
+            description="不显示资料搜索栏和规则状态"
             onClick={() => choose(null)}
           />
           {RULE_SYSTEMS.map((s) => (
