@@ -19,6 +19,8 @@ import {
   isEntryDrag,
   newId,
   placeInSlot,
+  BarSystem,
+  barLabel,
   readEntryDrag,
   savesFor,
   slotsOf,
@@ -26,7 +28,7 @@ import {
   updateGroup,
   useSpellBar,
 } from "../helpers/spellBar";
-import { RULE_SYSTEM_LABEL, RuleSystem, useRuleSystem } from "../helpers/ruleSystem";
+import { useRuleSystem } from "../helpers/ruleSystem";
 
 const VISIBLE_KEY = "spellBar.visible";
 /** The number key shown on each slot (slots 11 and 12 have none) */
@@ -47,12 +49,17 @@ type Editing = { kind: "slot"; index: number } | { kind: "saves" } | null;
  */
 function SpellHotbar() {
   const { isOpen: visible, setIsOpen } = useFloatingWindow("spellBar");
-  const system = useRuleSystem();
-  // Each rules mode has its own bar
+  // Each rules mode has its own bar; with the rules mode off (无规则), one more
+  const { isOpen: rulesOn } = useFloatingWindow("quickSearch");
+  const ruleSystem = useRuleSystem();
+  const system: BarSystem = rulesOn ? ruleSystem : "none";
   const [state, update] = useSpellBar(system);
   const roller = useDiceRoller();
   const [editing, setEditing] = useState<Editing>(null);
-  const [preview, setPreview] = useState<{ index: number; rect: DOMRect } | null>(null);
+  const [preview, setPreview] = useState<{
+    index: number;
+    rect: DOMRect;
+  } | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const [loading, setLoading] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -98,9 +105,11 @@ function SpellHotbar() {
   const [flash, setFlash] = useState<number | null>(null);
   useKeyboard((event: KeyboardEvent) => {
     if (!castRef.current || event.repeat) return;
-    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)
+      return;
     const target = event.target as HTMLElement | null;
-    if (target?.isContentEditable || target instanceof HTMLSelectElement) return;
+    if (target?.isContentEditable || target instanceof HTMLSelectElement)
+      return;
     const m = /^(?:Digit|Numpad)(\d)$/.exec(event.code);
     if (!m) return;
     const index = m[1] === "0" ? 9 : Number(m[1]) - 1;
@@ -118,13 +127,18 @@ function SpellHotbar() {
     return null;
   }
 
-  const group = state.groups.find((g) => g.id === state.current) || state.groups[0];
+  const group =
+    state.groups.find((g) => g.id === state.current) || state.groups[0];
   const groupIndex = state.groups.indexOf(group);
   const slots = slotsOf(group);
   const saves = savesFor(group, system);
 
-  function setSlots(change: (slots: (SpellEntry | null)[]) => (SpellEntry | null)[]) {
-    update((s) => updateGroup(s, group.id, (g) => ({ ...g, entries: change(slotsOf(g)) })));
+  function setSlots(
+    change: (slots: (SpellEntry | null)[]) => (SpellEntry | null)[],
+  ) {
+    update((s) =>
+      updateGroup(s, group.id, (g) => ({ ...g, entries: change(slotsOf(g)) })),
+    );
   }
 
   function rollOne(name: string, roll: SpellRoll) {
@@ -148,7 +162,10 @@ function SpellHotbar() {
     const slot = target.getBoundingClientRect();
     const bar = barRef.current?.getBoundingClientRect() || slot;
     const rect = new DOMRect(slot.left, bar.top, slot.width, slot.height);
-    hideTimer.current = window.setTimeout(() => setPreview({ index, rect }), 250);
+    hideTimer.current = window.setTimeout(
+      () => setPreview({ index, rect }),
+      250,
+    );
   }
   function hidePreview() {
     window.clearTimeout(hideTimer.current);
@@ -207,7 +224,10 @@ function SpellHotbar() {
     const name = window.prompt("新分组的名字（比如角色名）", "新分组");
     if (!name) return;
     const id = newId();
-    update((s) => ({ groups: [...s.groups, { id, name, entries: [] }], current: id }));
+    update((s) => ({
+      groups: [...s.groups, { id, name, entries: [] }],
+      current: id,
+    }));
   }
 
   function renameGroup() {
@@ -221,7 +241,8 @@ function SpellHotbar() {
     setMenuOpen(false);
     if (state.groups.length <= 1) return;
     const count = group.entries.filter(Boolean).length;
-    if (!window.confirm(`删除分组「${group.name}」和里面的 ${count} 个条目？`)) return;
+    if (!window.confirm(`删除分组「${group.name}」和里面的 ${count} 个条目？`))
+      return;
     update((s) => {
       const groups = s.groups.filter((g) => g.id !== group.id);
       return { groups, current: groups[0].id };
@@ -262,10 +283,24 @@ function SpellHotbar() {
           title="点击收起"
         >
           {roller.log.slice(0, 3).map(({ id, label, result, boluo }, i) => (
-            <Text key={id} sx={{ display: "block", opacity: i === 0 ? 1 : 0.6, fontSize: i === 0 ? 1 : 0 }}>
+            <Text
+              key={id}
+              sx={{
+                display: "block",
+                opacity: i === 0 ? 1 : 0.6,
+                fontSize: i === 0 ? 1 : 0,
+              }}
+            >
               🎲 <b>{label}</b>：{describeSummary(result)}
               {boluo && i === 0 && (
-                <Text as="span" sx={{ fontSize: 0, ml: 1, color: boluo.startsWith("未") ? "#c0392b" : "gray" }}>
+                <Text
+                  as="span"
+                  sx={{
+                    fontSize: 0,
+                    ml: 1,
+                    color: boluo.startsWith("未") ? "#c0392b" : "gray",
+                  }}
+                >
                   · {boluo}
                 </Text>
               )}
@@ -286,30 +321,66 @@ function SpellHotbar() {
         }}
       >
         {/* Group and saving throws */}
-        <Flex sx={{ alignItems: "center", gap: 1, mb: "6px", flexWrap: "wrap", position: "relative" }}>
+        <Flex
+          sx={{
+            alignItems: "center",
+            gap: 1,
+            mb: "6px",
+            flexWrap: "wrap",
+            position: "relative",
+          }}
+        >
           <Text
-            title={`${RULE_SYSTEM_LABEL[system]} 的收藏栏（每个规则模式各一套，在规则菜单切换）`}
-            sx={{ fontSize: "10px", fontWeight: "bold", px: 1, borderRadius: "3px", bg: "primary", color: "background" }}
+            title={`${barLabel(system)} 的收藏栏（每个规则模式各一套，无规则也是一套；在规则菜单切换）`}
+            sx={{
+              fontSize: "10px",
+              fontWeight: "bold",
+              px: 1,
+              borderRadius: "3px",
+              bg: "primary",
+              color: "background",
+            }}
           >
-            {RULE_SYSTEM_LABEL[system]}
+            {barLabel(system)}
           </Text>
-          <Text as="button" title="上一组" onClick={() => switchGroup(-1)} sx={tool}>
+          <Text
+            as="button"
+            title="上一组"
+            onClick={() => switchGroup(-1)}
+            sx={tool}
+          >
             ‹
           </Text>
           <Text
             as="button"
             onClick={() => setMenuOpen((open) => !open)}
             title="分组：新建、改名、删除"
-            sx={{ ...chip, bg: "muted", fontWeight: "bold", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            sx={{
+              ...chip,
+              bg: "muted",
+              fontWeight: "bold",
+              maxWidth: "120px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
           >
             {group.name}
             {state.groups.length > 1 && (
-              <Text as="span" sx={{ fontSize: 0, color: "gray", fontWeight: "normal", ml: 1 }}>
+              <Text
+                as="span"
+                sx={{ fontSize: 0, color: "gray", fontWeight: "normal", ml: 1 }}
+              >
                 {groupIndex + 1}/{state.groups.length}
               </Text>
             )}
           </Text>
-          <Text as="button" title="下一组" onClick={() => switchGroup(1)} sx={tool}>
+          <Text
+            as="button"
+            title="下一组"
+            onClick={() => switchGroup(1)}
+            sx={tool}
+          >
             ›
           </Text>
           {menuOpen && (
@@ -331,20 +402,31 @@ function SpellHotbar() {
               {[
                 ["＋ 新建分组", addGroup],
                 ["改名", renameGroup],
-                ...(state.groups.length > 1 ? [["删除这一组", deleteGroup] as const] : []),
+                ...(state.groups.length > 1
+                  ? [["删除这一组", deleteGroup] as const]
+                  : []),
               ].map(([text, action]) => (
                 <Text
                   key={text as string}
                   as="button"
                   onClick={action as () => void}
-                  sx={{ ...chip, display: "block", width: "100%", textAlign: "left", bg: "transparent", "&:hover": { bg: "highlight" } }}
+                  sx={{
+                    ...chip,
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    bg: "transparent",
+                    "&:hover": { bg: "highlight" },
+                  }}
                 >
                   {text as string}
                 </Text>
               ))}
             </Box>
           )}
-          <Box sx={{ width: "1px", alignSelf: "stretch", bg: "border", mx: 1 }} />
+          <Box
+            sx={{ width: "1px", alignSelf: "stretch", bg: "border", mx: 1 }}
+          />
           <Text sx={{ fontSize: 0, color: "gray" }}>豁免</Text>
           {saves.map((save, i) => {
             const ok = !!parseFormula(save.formula);
@@ -352,8 +434,18 @@ function SpellHotbar() {
               <Text
                 key={i}
                 as="button"
-                onClick={() => ok && rollOne(`${save.label}`, { label: "豁免", formula: save.formula })}
-                title={ok ? `掷 ${save.label} 豁免：${save.formula}` : "公式写不对，点 ✎ 修改"}
+                onClick={() =>
+                  ok &&
+                  rollOne(`${save.label}`, {
+                    label: "豁免",
+                    formula: save.formula,
+                  })
+                }
+                title={
+                  ok
+                    ? `掷 ${save.label} 豁免：${save.formula}`
+                    : "公式写不对，点 ✎ 修改"
+                }
                 sx={{
                   ...chip,
                   px: "6px",
@@ -367,7 +459,12 @@ function SpellHotbar() {
               </Text>
             );
           })}
-          <Text as="button" title="编辑豁免" onClick={() => setEditing({ kind: "saves" })} sx={tool}>
+          <Text
+            as="button"
+            title="编辑豁免"
+            onClick={() => setEditing({ kind: "saves" })}
+            sx={tool}
+          >
             ✎
           </Text>
         </Flex>
@@ -392,7 +489,9 @@ function SpellHotbar() {
               }}
               onDragLeave={() => setDropTarget((t) => (t === index ? null : t))}
               onDrop={(event) => handleDrop(event, index)}
-              onMouseEnter={(event) => entry && showPreview(index, event.currentTarget)}
+              onMouseEnter={(event) =>
+                entry && showPreview(index, event.currentTarget)
+              }
               onMouseLeave={hidePreview}
               onClick={() => {
                 if (!entry) newEntry(index);
@@ -415,16 +514,19 @@ function SpellHotbar() {
                 textAlign: "center",
                 borderRadius: "6px",
                 border: entry ? "1px solid" : "1px dashed",
-                borderColor: dropTarget === index ? "primary" : entry ? "border" : "muted",
-                borderTop: entry?.source?.accent ? `3px solid ${entry.source.accent}` : undefined,
+                borderColor:
+                  dropTarget === index ? "primary" : entry ? "border" : "muted",
+                borderTop: entry?.source?.accent
+                  ? `3px solid ${entry.source.accent}`
+                  : undefined,
                 bg:
                   flash === index
                     ? "primary"
                     : dropTarget === index
-                    ? "highlight"
-                    : entry
-                    ? "background"
-                    : "transparent",
+                      ? "highlight"
+                      : entry
+                        ? "background"
+                        : "transparent",
                 transition: "background-color 0.15s",
                 cursor: "pointer",
                 overflow: "hidden",
@@ -463,7 +565,10 @@ function SpellHotbar() {
                   {entry.name}
                 </Text>
               ) : (
-                <Text className="slot-plus" sx={{ fontSize: 3, color: "gray", opacity: 0.3 }}>
+                <Text
+                  className="slot-plus"
+                  sx={{ fontSize: 3, color: "gray", opacity: 0.3 }}
+                >
                   ＋
                 </Text>
               )}
@@ -489,7 +594,9 @@ function SpellHotbar() {
               saves={saves}
               system={system}
               onSave={(next) => {
-                update((s) => updateGroup(s, group.id, (g) => withSaves(g, system, next)));
+                update((s) =>
+                  updateGroup(s, group.id, (g) => withSaves(g, system, next)),
+                );
                 setEditing(null);
               }}
               onCancel={() => setEditing(null)}
@@ -500,13 +607,17 @@ function SpellHotbar() {
               entry={editingEntry}
               onSave={(next) => {
                 const index = editing.index;
-                setSlots((list) => list.map((e, i) => (i === index ? next : e)));
+                setSlots((list) =>
+                  list.map((e, i) => (i === index ? next : e)),
+                );
                 setEditing(null);
               }}
               onCancel={() => setEditing(null)}
               onDelete={() => {
                 const index = editing.index;
-                setSlots((list) => list.map((e, i) => (i === index ? null : e)));
+                setSlots((list) =>
+                  list.map((e, i) => (i === index ? null : e)),
+                );
                 setEditing(null);
               }}
             />
@@ -549,34 +660,52 @@ function SavesEditor({
   onCancel,
 }: {
   saves: SpellRoll[];
-  system: RuleSystem;
+  system: BarSystem;
   onSave: (saves: SpellRoll[]) => void;
   onCancel: () => void;
 }) {
   const [list, setList] = useState(saves);
   return (
-    <Box sx={{ p: 2, border: "1px solid", borderColor: "primary", borderRadius: "8px", fontSize: 1 }}>
-      <Text sx={label}>{RULE_SYSTEM_LABEL[system]} 豁免（名称和公式；+5 即 1d20+5；每个规则模式各存一套）</Text>
+    <Box
+      sx={{
+        p: 2,
+        border: "1px solid",
+        borderColor: "primary",
+        borderRadius: "8px",
+        fontSize: 1,
+      }}
+    >
+      <Text sx={label}>
+        {barLabel(system)} 豁免（名称和公式；+5 即
+        1d20+5；每个规则模式各存一套）
+      </Text>
       <RollsEditor rolls={list} onChange={setList} addLabel="＋ 加一项豁免" />
       <Flex sx={{ mt: 2, gap: 2, alignItems: "center", flexWrap: "wrap" }}>
         <Text
           as="button"
           onClick={() => onSave(list.filter((r) => r.formula.trim()))}
-          sx={{ ...chip, bg: "primary", color: "background", fontWeight: "bold" }}
+          sx={{
+            ...chip,
+            bg: "primary",
+            color: "background",
+            fontWeight: "bold",
+          }}
         >
           保存
         </Text>
         <Text as="button" onClick={onCancel} sx={{ ...chip, bg: "muted" }}>
           取消
         </Text>
-        <Text
-          as="button"
-          title="换成当前规则模式的豁免项（加值归零）"
-          onClick={() => setList(defaultSaves(system))}
-          sx={{ ...chip, bg: "transparent", color: "gray", ml: "auto" }}
-        >
-          用 {RULE_SYSTEM_LABEL[system]} 默认
-        </Text>
+        {system !== "none" && (
+          <Text
+            as="button"
+            title="换成当前规则模式的豁免项（加值归零）"
+            onClick={() => setList(defaultSaves(system))}
+            sx={{ ...chip, bg: "transparent", color: "gray", ml: "auto" }}
+          >
+            用 {barLabel(system)} 默认
+          </Text>
+        )}
       </Flex>
     </Box>
   );
@@ -600,7 +729,7 @@ function SlotPreview({
 }) {
   const left = Math.min(
     Math.max(8, rect.left + rect.width / 2 - PREVIEW_WIDTH / 2),
-    window.innerWidth - PREVIEW_WIDTH - 8
+    window.innerWidth - PREVIEW_WIDTH - 8,
   );
   const bottom = window.innerHeight - rect.top + 8;
   return ReactDOM.createPortal(
@@ -622,9 +751,23 @@ function SlotPreview({
       }}
     >
       {/* Formulas first: always in view */}
-      <Box sx={{ p: 2, borderBottom: "1px solid", borderColor: "border", position: "sticky", top: 0, bg: "background", zIndex: 2 }}>
+      <Box
+        sx={{
+          p: 2,
+          borderBottom: "1px solid",
+          borderColor: "border",
+          position: "sticky",
+          top: 0,
+          bg: "background",
+          zIndex: 2,
+        }}
+      >
         {!entry.source && (
-          <Text sx={{ display: "block", fontSize: 2, fontWeight: "bold", mb: 1 }}>{entry.name}</Text>
+          <Text
+            sx={{ display: "block", fontSize: 2, fontWeight: "bold", mb: 1 }}
+          >
+            {entry.name}
+          </Text>
         )}
         <Flex sx={{ flexWrap: "wrap", gap: 1, alignItems: "center" }}>
           {entry.rolls.map((roll, i) => {
@@ -634,7 +777,11 @@ function SlotPreview({
                 key={i}
                 as="button"
                 onClick={() => ok && onRoll(roll)}
-                title={ok ? `只掷 ${roll.label || roll.formula}` : "公式写不对，右键格子修改"}
+                title={
+                  ok
+                    ? `只掷 ${roll.label || roll.formula}`
+                    : "公式写不对，右键格子修改"
+                }
                 sx={{
                   ...chip,
                   bg: "muted",
@@ -647,7 +794,9 @@ function SlotPreview({
               </Text>
             );
           })}
-          <Text sx={{ fontSize: 0, color: "gray", ml: "auto" }}>点格子或按数字键全掷 · 右键编辑</Text>
+          <Text sx={{ fontSize: 0, color: "gray", ml: "auto" }}>
+            点格子或按数字键全掷 · 右键编辑
+          </Text>
         </Flex>
       </Box>
       {entry.source && <SourceCard result={entry.source} />}
@@ -668,7 +817,7 @@ function SlotPreview({
         </Text>
       )}
     </Box>,
-    document.body
+    document.body,
   );
 }
 
@@ -689,14 +838,36 @@ function EntryEditor({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <Box sx={{ my: 2, p: 2, border: "1px solid", borderColor: "primary", borderRadius: "6px", fontSize: 1 }}>
+    <Box
+      sx={{
+        my: 2,
+        p: 2,
+        border: "1px solid",
+        borderColor: "primary",
+        borderRadius: "6px",
+        fontSize: 1,
+      }}
+    >
       <Text sx={label}>名字</Text>
-      <Input value={name} onChange={(e) => setName(e.target.value)} sx={field} />
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        sx={field}
+      />
       <Text sx={label}>
         描述 / 备注
-        {entry.source && <Text as="span" sx={{ color: "gray" }}>（悬停时显示在资料卡下面）</Text>}
+        {entry.source && (
+          <Text as="span" sx={{ color: "gray" }}>
+            （悬停时显示在资料卡下面）
+          </Text>
+        )}
       </Text>
-      <Textarea value={note} rows={3} onChange={(e) => setNote(e.target.value)} sx={field} />
+      <Textarea
+        value={note}
+        rows={3}
+        onChange={(e) => setNote(e.target.value)}
+        sx={field}
+      />
       <Text sx={label}>公式（如 1d20+7、+7、8d6、2d6+1d8+3）</Text>
       <RollsEditor rolls={rolls} onChange={setRolls} />
       <Flex sx={{ mt: 2, gap: 2, alignItems: "center" }}>
@@ -710,7 +881,12 @@ function EntryEditor({
               rolls: rolls.filter((r) => r.formula.trim()),
             })
           }
-          sx={{ ...chip, bg: "primary", color: "background", fontWeight: "bold" }}
+          sx={{
+            ...chip,
+            bg: "primary",
+            color: "background",
+            fontWeight: "bold",
+          }}
         >
           保存
         </Text>
@@ -721,7 +897,12 @@ function EntryEditor({
           as="button"
           onClick={() => (confirmDelete ? onDelete() : setConfirmDelete(true))}
           onMouseLeave={() => setConfirmDelete(false)}
-          sx={{ ...chip, bg: confirmDelete ? "#c0392b" : "transparent", color: confirmDelete ? "white" : "gray", ml: "auto" }}
+          sx={{
+            ...chip,
+            bg: confirmDelete ? "#c0392b" : "transparent",
+            color: confirmDelete ? "white" : "gray",
+            ml: "auto",
+          }}
         >
           {confirmDelete ? "再点一下删除" : "删除条目"}
         </Text>
@@ -758,7 +939,12 @@ function RollsEditor({
               value={roll.formula}
               placeholder="+5 或 1d20+5"
               onChange={(e) => setRoll(i, { formula: e.target.value })}
-              sx={{ ...field, flexGrow: 1, mb: 0, borderColor: ok ? "border" : "#c0392b" }}
+              sx={{
+                ...field,
+                flexGrow: 1,
+                mb: 0,
+                borderColor: ok ? "border" : "#c0392b",
+              }}
             />
             <Text
               as="button"
@@ -789,7 +975,9 @@ function SourceCard({ result }: { result: SearchResult }) {
   if (noCard)
     return (
       <Box sx={{ p: 3, fontSize: 1 }}>
-        <Text sx={{ display: "block", fontSize: 3, fontWeight: "bold" }}>{result.name}</Text>
+        <Text sx={{ display: "block", fontSize: 3, fontWeight: "bold" }}>
+          {result.name}
+        </Text>
         <Text
           as="a"
           // @ts-ignore theme-ui Text as an anchor
@@ -833,7 +1021,13 @@ const tool = {
   "&:hover": { color: "primary" },
 };
 
-const label = { display: "block", fontSize: 0, color: "gray", mt: 1, mb: "2px" };
+const label = {
+  display: "block",
+  fontSize: 0,
+  color: "gray",
+  mt: 1,
+  mb: "2px",
+};
 const field = { fontSize: 1, py: 1, mb: 1 };
 
 export default SpellHotbar;

@@ -1,5 +1,5 @@
 import { splitRolls } from "./fiveEDice";
-import { loadSpellBar, placeInSlot, rollsFromParts, savesFor, withSaves } from "./spellBar";
+import { defaultSaves, loadSpellBar, placeInSlot, rollsFromParts, savesFor, withSaves } from "./spellBar";
 
 test("an entry's rolls: the first of each kind", () => {
   const parts = splitRolls(
@@ -42,4 +42,12 @@ test("each rules mode has its own bar; the old bar goes to the mode in use", () 
   expect(loadSpellBar("pf2").groups[0].name).toBe("旧");
   expect(localStorage.getItem("spellBar.v1")).toBeNull();
   expect(loadSpellBar("4e").groups[0].name).toBe("收藏");
+});
+
+test("无规则 has a bar of its own, with no saves to start", () => {
+  localStorage.clear();
+  expect(defaultSaves("none")).toEqual([]);
+  const group = { id: "g", name: "G", entries: [] };
+  expect(savesFor(withSaves(group, "none", [{ label: "理智", formula: "1d100" }]), "none")[0].label).toBe("理智");
+  expect(loadSpellBar("none").groups[0].name).toBe("收藏");
 });

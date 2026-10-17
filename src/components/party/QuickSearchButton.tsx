@@ -68,7 +68,7 @@ function QuickSearchButton() {
         aria-label="Rules Mode"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        title={isOpen ? `规则模式：${current}（点击切换）` : "规则模式：关闭（点击选择 5e / 5r / PF2 / 4e）"}
+        title={isOpen ? `规则模式：${current}（点击切换）` : "规则模式：无规则（点击选择 5e / 5r / PF2 / 4e）"}
         onClick={() => setMenuOpen((open) => !open)}
         sx={{ color: isOpen ? "primary" : "text", position: "relative" }}
       >
@@ -112,7 +112,12 @@ function QuickSearchButton() {
             zIndex: 60,
           }}
         >
-          <MenuItem active={!isOpen} label="关闭" description="不显示资料搜索栏和规则状态" onClick={() => choose(null)} />
+          <MenuItem
+            active={!isOpen}
+            label="无规则"
+            description="不显示资料搜索栏和规则状态；收藏栏用无规则的那一套"
+            onClick={() => choose(null)}
+          />
           {RULE_SYSTEMS.map((s) => (
             <MenuItem
               key={s}

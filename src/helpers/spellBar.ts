@@ -11,8 +11,20 @@ import { SearchResult } from "./fiveETools";
 import { loadEntryCard } from "./fiveEEntries";
 import { loadPf2Record } from "./pf2";
 import { loadDnd4eRecord } from "./dnd4e";
-import { TextPart, rollExpression, splitPf2Rolls, splitRolls } from "./fiveEDice";
-import { RuleSystem, getRuleSystem } from "./ruleSystem";
+import {
+  TextPart,
+  rollExpression,
+  splitPf2Rolls,
+  splitRolls,
+} from "./fiveEDice";
+import { RULE_SYSTEM_LABEL, RuleSystem, getRuleSystem } from "./ruleSystem";
+
+/** Whose bar: a rules mode's, or "none" (无规则: the rules mode is off) */
+export type BarSystem = RuleSystem | "none";
+
+export function barLabel(system: BarSystem) {
+  return system === "none" ? "无规则" : RULE_SYSTEM_LABEL[system];
+}
 
 /** Drag data type for a quick search entry (spell, power, item…) */
 export const ENTRY_DRAG_TYPE = "application/x-owlbear-entry";
@@ -40,23 +52,33 @@ export type SpellGroup = {
    * The saving throws shown above the slots, kept for each rules mode on
    * its own; unset: that mode's defaults. (An array: from before, 5e's.)
    */
-  saves?: Partial<Record<RuleSystem, SpellRoll[]>> | SpellRoll[];
+  saves?: Partial<Record<BarSystem, SpellRoll[]>> | SpellRoll[];
 };
 
 /** A group's saving throws in a rules mode */
-export function savesFor(group: SpellGroup, system: RuleSystem): SpellRoll[] {
-  const saves = Array.isArray(group.saves) ? { "5e": group.saves } : group.saves || {};
+export function savesFor(group: SpellGroup, system: BarSystem): SpellRoll[] {
+  const saves = Array.isArray(group.saves)
+    ? { "5e": group.saves }
+    : group.saves || {};
   return saves[system] || defaultSaves(system);
 }
 
 /** The group with its saving throws in one rules mode changed */
-export function withSaves(group: SpellGroup, system: RuleSystem, list: SpellRoll[]): SpellGroup {
-  const saves = Array.isArray(group.saves) ? { "5e": group.saves } : group.saves || {};
+export function withSaves(
+  group: SpellGroup,
+  system: BarSystem,
+  list: SpellRoll[],
+): SpellGroup {
+  const saves = Array.isArray(group.saves)
+    ? { "5e": group.saves }
+    : group.saves || {};
   return { ...group, saves: { ...saves, [system]: list } };
 }
 
 /** Saving throws to start from, by rules mode (the user edits the bonuses) */
-export function defaultSaves(system: RuleSystem): SpellRoll[] {
+export function defaultSaves(system: BarSystem): SpellRoll[] {
+  // No rules: the user sets up whatever saves the game has
+  if (system === "none") return [];
   if (system === "pf2")
     return ["强韧", "反射", "意志"].map((label) => ({ label, formula: "+0" }));
   // 4e: one save, 10 or higher succeeds
@@ -70,7 +92,7 @@ export function defaultSaves(system: RuleSystem): SpellRoll[] {
 export type SpellBarState = { groups: SpellGroup[]; current: string };
 
 /** Each rules mode has a bar of its own (its spells are that mode's) */
-const keyOf = (system: RuleSystem) => `spellBar.v2.${system}`;
+const keyOf = (system: BarSystem) => `spellBar.v2.${system}`;
 /** The one bar from before the bars were per rules mode */
 const OLD_KEY = "spellBar.v1";
 const CHANGE_EVENT = "spellBar:change";
@@ -95,12 +117,14 @@ function migrateOldBar() {
   } catch {}
 }
 
-export function loadSpellBar(system: RuleSystem): SpellBarState {
+export function loadSpellBar(system: BarSystem): SpellBarState {
   migrateOldBar();
   try {
     const parsed = JSON.parse(localStorage.getItem(keyOf(system)) || "null");
     if (parsed && Array.isArray(parsed.groups) && parsed.groups.length) {
-      const current = parsed.groups.some((g: SpellGroup) => g.id === parsed.current)
+      const current = parsed.groups.some(
+        (g: SpellGroup) => g.id === parsed.current,
+      )
         ? parsed.current
         : parsed.groups[0].id;
       return { groups: parsed.groups, current };
@@ -109,23 +133,30 @@ export function loadSpellBar(system: RuleSystem): SpellBarState {
   return emptyState();
 }
 
-function saveSpellBar(system: RuleSystem, state: SpellBarState) {
+function saveSpellBar(system: BarSystem, state: SpellBarState) {
   try {
     localStorage.setItem(keyOf(system), JSON.stringify(state));
   } catch {}
 }
 
 /** A rules mode's bar, kept in localStorage and in step across components */
-export function useSpellBar(system: RuleSystem) {
-  const [loaded, setLoaded] = useState(() => ({ system, state: loadSpellBar(system) }));
+export function useSpellBar(system: BarSystem) {
+  const [loaded, setLoaded] = useState(() => ({
+    system,
+    state: loadSpellBar(system),
+  }));
   // Another rules mode: its own bar
   const state = loaded.system === system ? loaded.state : loadSpellBar(system);
   useEffect(() => {
-    if (loaded.system !== system) setLoaded({ system, state: loadSpellBar(system) });
+    if (loaded.system !== system)
+      setLoaded({ system, state: loadSpellBar(system) });
   }, [system, loaded.system]);
   useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { system: RuleSystem; state: SpellBarState };
+      const detail = (event as CustomEvent).detail as {
+        system: BarSystem;
+        state: SpellBarState;
+      };
       if (detail.system === system) setLoaded(detail);
     };
     window.addEventListener(CHANGE_EVENT, handler);
@@ -135,9 +166,11 @@ export function useSpellBar(system: RuleSystem) {
     (change: (state: SpellBarState) => SpellBarState) => {
       const next = change(loadSpellBar(system));
       saveSpellBar(system, next);
-      window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { system, state: next } }));
+      window.dispatchEvent(
+        new CustomEvent(CHANGE_EVENT, { detail: { system, state: next } }),
+      );
     },
-    [system]
+    [system],
   );
   return [state, update] as const;
 }
@@ -154,7 +187,7 @@ export function slotsOf(group: SpellGroup): (SpellEntry | null)[] {
 export function placeInSlot(
   slots: (SpellEntry | null)[],
   index: number,
-  entry: SpellEntry
+  entry: SpellEntry,
 ): (SpellEntry | null)[] {
   const next = [...slots];
   const previous = next[index];
@@ -170,7 +203,7 @@ export function placeInSlot(
 export function updateGroup(
   state: SpellBarState,
   groupId: string,
-  change: (group: SpellGroup) => SpellGroup
+  change: (group: SpellGroup) => SpellGroup,
 ): SpellBarState {
   return {
     ...state,
@@ -191,7 +224,10 @@ export function rollsFromParts(parts: TextPart[]): SpellRoll[] {
   for (const part of parts) {
     if (typeof part === "string" || seen.has(part.kind)) continue;
     seen.add(part.kind);
-    rolls.push({ label: KIND_LABEL[part.kind], formula: rollExpression(part.roll) });
+    rolls.push({
+      label: KIND_LABEL[part.kind],
+      formula: rollExpression(part.roll),
+    });
   }
   const order = ["命中", "伤害", "检定"];
   return rolls.sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
@@ -201,12 +237,15 @@ export function rollsFromParts(parts: TextPart[]): SpellRoll[] {
 function recordText(value: unknown, out: string[] = []): string[] {
   if (typeof value === "string") out.push(value);
   else if (Array.isArray(value)) value.forEach((v) => recordText(v, out));
-  else if (value && typeof value === "object") Object.values(value).forEach((v) => recordText(v, out));
+  else if (value && typeof value === "object")
+    Object.values(value).forEach((v) => recordText(v, out));
   return out;
 }
 
 /** A spell bar entry for a quick search result, its rolls read from its text */
-export async function entryFromResult(result: SearchResult): Promise<SpellEntry> {
+export async function entryFromResult(
+  result: SearchResult,
+): Promise<SpellEntry> {
   let parts: TextPart[] = [];
   try {
     if (result.system === "pf2" && result.pf2) {
@@ -218,17 +257,25 @@ export async function entryFromResult(result: SearchResult): Promise<SpellEntry>
     } else {
       const card = await loadEntryCard(result);
       if (card)
-        parts = [...card.lines.map((l) => l.text), ...card.paragraphs].flatMap((text) =>
-          splitRolls(text)
+        parts = [...card.lines.map((l) => l.text), ...card.paragraphs].flatMap(
+          (text) => splitRolls(text),
         );
     }
   } catch {
     // No rolls found: the user adds them
   }
-  return { id: newId(), name: result.name, note: "", rolls: rollsFromParts(parts), source: result };
+  return {
+    id: newId(),
+    name: result.name,
+    note: "",
+    rolls: rollsFromParts(parts),
+    source: result,
+  };
 }
 
-export function readEntryDrag(dataTransfer: DataTransfer | null): SearchResult | null {
+export function readEntryDrag(
+  dataTransfer: DataTransfer | null,
+): SearchResult | null {
   const raw = dataTransfer?.getData(ENTRY_DRAG_TYPE);
   if (!raw) return null;
   try {
@@ -245,5 +292,8 @@ export const SLOT_DRAG_TYPE = "application/x-owlbear-spell-slot";
 /** An entry or a slot dragged to the hotbar (the map ignores these) */
 export function isEntryDrag(dataTransfer: DataTransfer | null) {
   const types = dataTransfer?.types;
-  return !!types && (types.includes(ENTRY_DRAG_TYPE) || types.includes(SLOT_DRAG_TYPE));
+  return (
+    !!types &&
+    (types.includes(ENTRY_DRAG_TYPE) || types.includes(SLOT_DRAG_TYPE))
+  );
 }
