@@ -125,7 +125,7 @@ function QuickSearchButton() {
           {chatUrl && (
             <Box
               as="label"
-              title="点卡片上的数值掷骰时，结果也发到 Boluo 窗口里打开的频道（怪物卡以怪物名在游戏内发言，其余以你的 Boluo 名字场外发言）"
+              title="点卡片上的数值掷骰时，结果也发到 Boluo 窗口里打开的频道（按 Boluo 窗口当前的发言状态：场内 / 场外、角色名、输入框里的 .in / .out / .as；怪物卡的掷骰会带上怪物名）"
               sx={{
                 display: "flex",
                 alignItems: "center",
@@ -149,7 +149,7 @@ function QuickSearchButton() {
                   掷骰同时发到 Boluo
                 </Text>
                 <Text sx={{ display: "block", fontSize: 0, color: "gray" }}>
-                  发到 Boluo 窗口里打开的频道
+                  按 Boluo 窗口当前的场内 / 场外和角色发言
                 </Text>
               </Box>
             </Box>

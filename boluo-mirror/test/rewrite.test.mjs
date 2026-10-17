@@ -27,3 +27,15 @@ test("dice bridge source is a self-contained script", () => {
   assert.match(src, /\["https:\/\/vtt\.pangbai\.de"\]\); \}\)\(\);$/);
   new Function(src); // parses
 });
+
+import { composeMode } from "../bridge.mjs";
+test("compose box speaker modifiers, as Boluo reads them", () => {
+  assert.deepEqual(composeMode(""), { inGame: null, as: null });
+  assert.deepEqual(composeMode("hello"), { inGame: null, as: null });
+  assert.deepEqual(composeMode(".out 你好"), { inGame: false, as: null });
+  assert.deepEqual(composeMode("。in"), { inGame: true, as: null });
+  assert.deepEqual(composeMode(".me .in 挥剑"), { inGame: true, as: null });
+  assert.deepEqual(composeMode(".out .as 地精头目; 嘿"), { inGame: true, as: "地精头目" });
+  assert.deepEqual(composeMode(".as @gob；"), { inGame: true, as: "@gob" });
+  assert.deepEqual(composeMode(".as"), { inGame: true, as: "@" });
+});

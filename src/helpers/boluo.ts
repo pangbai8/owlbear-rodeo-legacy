@@ -42,9 +42,9 @@ type Entity =
   | { type: "Text"; start: number; len: number }
   | { type: "Strong"; start: number; len: number; child: { type: "Text"; start: number; len: number } };
 
-/** "弯刀 命中：1d20+4 = 19（15+4）", the total in bold */
-export function boluoRollMessage(label: string, result: RollResult) {
-  const head = `${label}：${rollExpression(result)} = `;
+/** "地精 弯刀 命中：1d20+4 = 19（15+4）", the total in bold */
+export function boluoRollMessage(speaker: string | undefined, label: string, result: RollResult) {
+  const head = `${speaker ? speaker + " " : ""}${label}：${rollExpression(result)} = `;
   const total = String(result.total);
   const rest = describeRoll(result).slice(`${rollExpression(result)} = ${total}`.length);
   const text = head + total + rest;
@@ -64,12 +64,14 @@ export function boluoRollMessage(label: string, result: RollResult) {
 let nextId = 1;
 
 /**
- * Post a roll to the channel open in the Boluo window. speaker: the
- * monster that rolls (posted in game under its name), or out of game
- * under the user's Boluo name. Resolves, or rejects with what went wrong.
+ * Post a roll to the channel open in the Boluo window. It speaks as the
+ * Boluo window would right now: in or out of game by the channel and the
+ * compose box (.in / .out / .as), under the user's name or character.
+ * speaker: the monster that rolls, named in the text. Resolves with who
+ * spoke, or rejects with what went wrong.
  */
 export function sendRollToBoluo(speaker: string | undefined, label: string, result: RollResult) {
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<{ name: string; inGame: boolean }>((resolve, reject) => {
     const frame = document.querySelector<HTMLIFrameElement>(FRAME_SELECTOR);
     const target = frame?.contentWindow;
     if (!frame || !target) {
@@ -88,11 +90,11 @@ export function sendRollToBoluo(speaker: string | undefined, label: string, resu
       if (!data || data.type !== "boluo-roll-result" || data.id !== id) return;
       window.clearTimeout(timer);
       window.removeEventListener("message", onMessage);
-      if (data.ok) resolve();
+      if (data.ok) resolve({ name: String(data.name || ""), inGame: !!data.inGame });
       else reject(new Error(data.error || "发送失败"));
     }
     window.addEventListener("message", onMessage);
-    const { text, entities } = boluoRollMessage(label, result);
-    target.postMessage({ type: "boluo-roll", id, speaker: speaker || null, text, entities }, origin);
+    const { text, entities } = boluoRollMessage(speaker, label, result);
+    target.postMessage({ type: "boluo-roll", id, text, entities }, origin);
   });
 }

@@ -18,7 +18,7 @@ let nextRollId = 1;
 
 /**
  * Rolls from a card, kept as a short log on the card. speaker: the
- * monster whose card it is, posted under that name when rolls go to Boluo.
+ * monster whose card it is, named in the roll when it goes to Boluo.
  */
 export function useDiceRoller(speaker?: string) {
   const [log, setLog] = useState<LoggedRoll[]>([]);
@@ -34,7 +34,7 @@ export function useDiceRoller(speaker?: string) {
     const setStatus = (boluo: string) =>
       setLog((prev) => prev.map((entry) => (entry.id === id ? { ...entry, boluo } : entry)));
     sendRollToBoluo(speaker, label, result).then(
-      () => setStatus("已发到 Boluo"),
+      ({ name, inGame }) => setStatus(`已发到 Boluo（${name}，${inGame ? "场内" : "场外"}）`),
       (error) => setStatus(`未发到 Boluo：${error.message}`)
     );
   }
