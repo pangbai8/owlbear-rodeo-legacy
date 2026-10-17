@@ -379,7 +379,7 @@
       // Its stat card can be opened again from the 📖 button on the card
       monster: { name: stats.name, englishName: stats.englishName, source: stats.source, url: stats.url },
     };
-    if (stats.system === "pf2") npc.monster.system = "pf2";
+    if (stats.system === "pf2" || stats.system === "3r") npc.monster.system = stats.system;
     // Dropped on the map: the token it stands for (HP and turn show on it)
     if (link && typeof link.tokenStateId === "string") {
       npc.token = { id: link.tokenStateId, map: String(link.mapId || "") };
@@ -503,9 +503,10 @@
     var conds = Array.isArray(member.conds)
       ? member.conds.filter(function (c) { return typeof c === "string"; })
       : [];
-    var pf2 = member.monster && member.monster.system === "pf2";
+    // PF2 and 3R keep their exhaustion-like conditions in the list itself
+    var own = member.monster && (member.monster.system === "pf2" || member.monster.system === "3r");
     var exh = Number(member.exh) || 0;
-    return !pf2 && exh > 0 ? conds.concat("力竭 " + exh) : conds;
+    return !own && exh > 0 ? conds.concat("力竭 " + exh) : conds;
   }
 
   // Conditions changed on a token: the VTT updates its linked NPC
@@ -518,7 +519,7 @@
       if (!/^teams\/[^/]+\/members\/[^/]+$/.test(path) || !doc || !doc.token || doc.token.id !== data.tokenStateId) return;
       if (JSON.stringify(tokenConds(doc)) === JSON.stringify(conds)) return;
       var next = copy(doc);
-      if (doc.monster && doc.monster.system === "pf2") {
+      if (doc.monster && (doc.monster.system === "pf2" || doc.monster.system === "3r")) {
         next.conds = conds;
       } else {
         // 5e: "力竭 N" back to the exhaustion level
@@ -556,7 +557,7 @@
   function ruleSystem() {
     try {
       var value = localStorage.getItem(RULES_KEY);
-      return value === "5r" || value === "pf2" || value === "4e" ? value : "5e";
+      return value === "5r" || value === "pf2" || value === "4e" || value === "3r" ? value : "5e";
     } catch (e) {
       return "5e";
     }

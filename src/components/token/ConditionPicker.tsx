@@ -2,6 +2,7 @@ import { Box, Flex, Text } from "theme-ui";
 
 import {
   DND4E_CONDITIONS,
+  DND3R_CONDITIONS,
   DND5E_CONDITIONS,
   DND5R_CONDITIONS,
   PF2_CONDITIONS,
@@ -12,6 +13,7 @@ import {
 } from "../../helpers/conditions";
 import { findPf2 } from "../../helpers/pf2";
 import { findDnd4e } from "../../helpers/dnd4e";
+import { findDnd3r } from "../../helpers/dnd3r";
 import { lookupFiveE, openFiveECard } from "../../helpers/fiveETools";
 import { RuleSystem } from "../../helpers/ruleSystem";
 
@@ -28,6 +30,8 @@ function ConditionPicker({ conditions, onChange, system }: ConditionPickerProps)
       ? PF2_CONDITIONS
       : system === "4e"
       ? DND4E_CONDITIONS
+      : system === "3r"
+      ? DND3R_CONDITIONS
       : system === "5r"
       ? DND5R_CONDITIONS
       : DND5E_CONDITIONS;
@@ -38,7 +42,13 @@ function ConditionPicker({ conditions, onChange, system }: ConditionPickerProps)
   function lookUp(name: string) {
     // 4e: the wiki's condition table (one page for all)
     const find =
-      system === "pf2" ? findPf2(name, "condition") : system === "4e" ? findDnd4e(name, "condition") : null;
+      system === "pf2"
+        ? findPf2(name, "condition")
+        : system === "4e"
+        ? findDnd4e(name, "condition")
+        : system === "3r"
+        ? findDnd3r(name, "condition")
+        : null;
     (find
       ? find.then((result) => result && openFiveECard(result))
       : lookupFiveE(name, "condition", system === "5r" ? "2024" : "2014")

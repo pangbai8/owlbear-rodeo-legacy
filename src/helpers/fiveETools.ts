@@ -5,6 +5,8 @@
 import type { Pf2Location } from "./pf2";
 import type { Dnd4eLocation } from "./dnd4e";
 import { PF2_WIKI, loadPf2Monster } from "./pf2";
+import type { Dnd3rLocation } from "./dnd3r";
+import { DND3R_WIKI, loadDnd3rMonster } from "./dnd3r";
 
 export const FIVE_E_BASE = "https://5e.kiwee.top/";
 
@@ -147,12 +149,14 @@ export type SearchResult = {
   /** From a 5e 2024 rules book (shown dimmed; the table plays 2014) */
   modern: boolean;
   isMonster: boolean;
-  /** From the PF2 or 4e mirror (pf2.ts, dnd4e.ts) instead of 5etools */
-  system?: "pf2" | "4e";
+  /** From the PF2, 4e or 3R mirror (pf2.ts, dnd4e.ts, dnd3r.ts) instead of 5etools */
+  system?: "pf2" | "4e" | "3r";
   /** Where a PF2 result's record is */
   pf2?: Pf2Location;
   /** Where a 4e result's record is */
   dnd4e?: Dnd4eLocation;
+  /** Where a 3R result's record is */
+  dnd3r?: Dnd3rLocation;
   /** Color for its category label in the results (4e powers by usage) */
   accent?: string;
 };
@@ -302,8 +306,8 @@ export type MonsterRef = {
   englishName: string;
   source: string;
   url: string;
-  /** A PF2 creature (its url is on the PF2 wiki) */
-  system?: "pf2";
+  /** A PF2 creature or a 3R monster (its url is on that wiki) */
+  system?: "pf2" | "3r";
 };
 
 export type MonsterStats = MonsterRef & {
@@ -427,6 +431,7 @@ const statsCache = new Map<string, Promise<MonsterStats>>();
 
 export function loadMonster(ref: MonsterRef): Promise<MonsterStats> {
   if (ref.system === "pf2") return loadPf2Monster(ref);
+  if (ref.system === "3r") return loadDnd3rMonster(ref);
   const key = `${ref.source}|${ref.englishName}`;
   if (!statsCache.has(key)) {
     statsCache.set(
@@ -458,12 +463,30 @@ export function isMonsterRef(value: any): value is MonsterRef {
     typeof value.url === "string" &&
     (value.system === "pf2"
       ? value.url.startsWith(PF2_WIKI)
+      : value.system === "3r"
+      ? value.url.startsWith(DND3R_WIKI)
       : value.system === undefined && value.url.startsWith(FIVE_E_BASE))
   );
 }
 
 /** The search result a stored monster stands for, to show its card again */
 export function monsterResult(ref: MonsterRef): SearchResult {
+  if (ref.system === "3r") {
+    // Its record is found by name and page when the card opens
+    return {
+      id: -1,
+      name: ref.name,
+      englishName: ref.englishName !== ref.name ? ref.englishName : "",
+      category: 3000,
+      categoryLabel: "怪物",
+      source: ref.source,
+      url: ref.url,
+      reprinted: false,
+      modern: false,
+      isMonster: true,
+      system: "3r",
+    };
+  }
   if (ref.system === "pf2") {
     // Its record is found by name when the card opens
     return {
@@ -537,7 +560,7 @@ export function monsterRefOf(result: SearchResult): MonsterRef {
     englishName: result.englishName || result.name,
     source: result.source,
     url: result.url,
-    ...(result.system === "pf2" ? { system: "pf2" as const } : {}),
+    ...(result.system === "pf2" || result.system === "3r" ? { system: result.system } : {}),
   };
 }
 

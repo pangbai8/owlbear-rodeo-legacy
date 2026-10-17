@@ -8,6 +8,8 @@ import {
   rollDice,
   rollExpression,
   splitChecks,
+  splitDnd3rAttacks,
+  TextPart,
   splitPf2Rolls,
   splitRolls,
 } from "./fiveEDice";
@@ -117,4 +119,19 @@ test("formula rolls are summed and described like card rolls", () => {
   expect(describeSummary(summarizeFormula(nat))).toBe("1d20+5 = 25（20+5）（天然 20！）");
   const minus = rollFormula(parseFormula("1d6-1d4")!, (sides) => sides);
   expect(minus.total).toBe(2);
+});
+
+test("3R attacks: bonuses before 近战/远程, iterative ones apart, damage dice", () => {
+  const parts = splitDnd3rAttacks("长剑+6/+1 近战(1d8+1/19-20)；或轻弩+1 远程(1d8/19-20)");
+  const rolls = parts.filter((p) => typeof p !== "string") as Exclude<TextPart, string>[];
+  expect(rolls.map((r) => [r.text, r.kind, r.roll.modifier])).toEqual([
+    ["+6", "hit", 6],
+    ["+1", "hit", 1],
+    ["1d8+1", "damage", 1],
+    ["+1", "hit", 1],
+    ["1d8", "damage", 0],
+  ]);
+  expect(parts.map((p) => (typeof p === "string" ? p : p.text)).join("")).toBe(
+    "长剑+6/+1 近战(1d8+1/19-20)；或轻弩+1 远程(1d8/19-20)"
+  );
 });
