@@ -14,3 +14,16 @@ test("rewrites boluochat redirects to the mirror", () => {
   assert.equal(rewriteLocation("/zh-TW/", "https://chat.pangbai.de"), "/zh-TW/");
   assert.equal(rewriteLocation("https://github.com/x", "https://chat.pangbai.de"), "https://github.com/x");
 });
+
+import { vttOrigins } from "../worker.mjs";
+import { bridgeSource } from "../bridge.mjs";
+test("dice bridge origins default to the map site", () => {
+  assert.deepEqual(vttOrigins({}), ["https://vtt.pangbai.de"]);
+  assert.deepEqual(vttOrigins({ VTT_ORIGINS: "https://a.test, http://localhost:3000" }), ["https://a.test", "http://localhost:3000"]);
+});
+test("dice bridge source is a self-contained script", () => {
+  const src = bridgeSource(["https://vtt.pangbai.de"]);
+  assert.match(src, /\(function vttBridge\(origins\)/);
+  assert.match(src, /\["https:\/\/vtt\.pangbai\.de"\]\); \}\)\(\);$/);
+  new Function(src); // parses
+});

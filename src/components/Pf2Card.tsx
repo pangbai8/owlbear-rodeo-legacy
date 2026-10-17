@@ -174,7 +174,7 @@ const SAVES: [string, string][] = [
 
 function CreatureCard({ result, record }: { result: SearchResult; record: any }) {
   const image = record.image ? `/pf2img/${record.image}` : null;
-  const roller = useDiceRoller();
+  const roller = useDiceRoller(result.name);
 
   function handleDragStart(event: React.DragEvent) {
     event.dataTransfer.effectAllowed = "copy";

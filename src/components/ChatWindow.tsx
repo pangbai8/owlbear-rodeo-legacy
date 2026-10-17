@@ -3,6 +3,7 @@ import { IconButton } from "theme-ui";
 import FloatingWindow, { besidePartyRect } from "./FloatingWindow";
 import OpenInNewIcon from "../icons/OpenInNewIcon";
 import { FloatingWindowName } from "../contexts/FloatingWindowContext";
+import { useSendsRollsToBoluo } from "../helpers/boluo";
 
 /** Chat page shown in the window, e.g. a same-site Boluo mirror */
 export const chatUrl = process.env.REACT_APP_CHAT_URL || "";
@@ -40,9 +41,12 @@ export const chatWindows: ChatWindowConfig[] = [
 ].filter((chat) => chat.url);
 
 function ChatFrame({ chat }: { chat: ChatWindowConfig }) {
+  // Rolls sent to Boluo go through its page, so it loads before first open
+  const sendsRolls = useSendsRollsToBoluo();
   return (
     <FloatingWindow
       name={chat.name}
+      preload={chat.name === "chat" && sendsRolls}
       title={chat.title}
       storageKey={chat.storageKey}
       defaultRect={() => besidePartyRect(chat.offsetX, 440)}
@@ -59,6 +63,7 @@ function ChatFrame({ chat }: { chat: ChatWindowConfig }) {
       }
     >
       <iframe
+        data-chat={chat.name}
         src={chat.url}
         title={chat.title}
         allow="clipboard-read; clipboard-write; autoplay; fullscreen"

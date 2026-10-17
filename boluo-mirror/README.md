@@ -15,7 +15,12 @@ The Worker:
 - rewrites `Set-Cookie`: drops `Domain` (host-only cookie on the mirror) and
   forces `Secure`; rewrites `Location` redirects back to the mirror;
 - answers `/api/info/proxies` with `[]`, so the SPA never switches its API
-  base to a cross-site `proxy-N.boluo.chat`, where the cookie would not follow.
+  base to a cross-site `proxy-N.boluo.chat`, where the cookie would not follow;
+- adds `/__vtt/bridge.js` (from `bridge.mjs`) to Boluo pages: when the page
+  is embedded by the map site (`VTT_ORIGINS`, default
+  `https://vtt.pangbai.de`), the map's 「掷骰同时发到 Boluo」 switch posts card
+  dice rolls through it, with the user's own login, to the channel open in
+  the Boluo pane.
 
 Logins on the mirror are separate from boluochat.com. Passwords and sessions
 pass through this Worker, so only use it with people who trust the operator.
