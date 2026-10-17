@@ -34,6 +34,8 @@ import {
  * dragged onto the map (as a token) or into the party status panel.
  */
 const VISIBLE_KEY = "quickSearch.visible";
+// Top of the bar: under the tools' settings bar (about 48px high)
+const SEARCH_TOP = 64;
 
 function QuickSearch() {
   // The sidebar's book button turns 5e mode on or off (remembered per browser;
@@ -246,7 +248,8 @@ function QuickSearch() {
       ref={rootRef}
       sx={{
         position: "fixed",
-        top: "8px",
+        // Centred, below the drawing and fog tools' settings bar (top centre)
+        top: `${SEARCH_TOP}px`,
         left: "50%",
         transform: "translateX(-50%)",
         width: showPanel
@@ -338,7 +341,9 @@ function QuickSearch() {
             <Flex
               sx={{
                 flexDirection: "column",
-                height: showPage ? "min(85vh, 900px)" : "min(70vh, 640px)",
+                height: showPage
+                  ? `min(calc(100vh - ${SEARCH_TOP + 64}px), 900px)`
+                  : "min(70vh, 640px)",
               }}
             >
               <Flex
