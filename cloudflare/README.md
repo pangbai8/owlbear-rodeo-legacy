@@ -54,13 +54,19 @@ local configuration (`npm run dev`).
 ## Party status panel
 
 The game page has a "小队状态" window (shield button in the sidebar) with the
-GM party status panel from `public/party-panel/`. Everyone who joined the
-room with its password shares one copy of the panel's data, live, through
-`/party/ws` on this Worker (stored in the room's Durable Object, table
-`party_docs`; limits: 64 KB per document, 1000 documents / 2 MB per room).
+GM party status panel from `public/party-panel/`. Everyone in the room shares
+one copy of the panel's data, live, but it is not kept on this Worker: the
+current map's owner holds it and passes it to the other players over the
+game's WebRTC connections, and every player's browser keeps the latest copy
+(IndexedDB), so a new map owner carries on from the newest copy among the
+players online (`src/network/NetworkedPartyData.tsx`,
+`src/helpers/partyData.ts`). Without a map, or with its owner offline, the
+panel shows the local copy read-only.
 
-- Data is deleted 90 days after the panel was last opened or changed in that
-  room (Durable Object alarm). Maps and the room itself are not affected.
+- `/party/ws` (the room's Durable Object, table `party_docs`) is where the
+  data used to be kept. A map owner whose room has no copy anywhere reads it
+  from there once; nothing writes to it any more, and the Durable Object
+  alarm deletes it 90 days after its last use.
 - The window's title bar has "清空本房间的小队数据" to wipe it by hand.
 - To update the panel to a new version:
   `node scripts/update-party-panel.mjs "GM用小队状态面板 vNN.html"` (copies it

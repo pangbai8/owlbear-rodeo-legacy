@@ -1,6 +1,9 @@
 // Stands in for window.claude.use("db") — the shared store the party status
 // panel was written for as a Claude artifact — so that everyone in a game room
-// shares one copy of the panel's data through the VTT backend (/party/ws).
+// shares one copy of the panel's data. The data is held by the current map's
+// owner and passed between the players over WebRTC by the VTT page
+// (src/network/NetworkedPartyData.tsx); this panel talks to that page (its
+// parent frame, or the window that opened it) with postMessage.
 // Supports the Firestore-like subset the panel uses: collection(path).onSnapshot
 // / get, doc(path).get / set / delete. Without ?room= the panel keeps its data
 // in this browser, as before.
@@ -9,23 +12,17 @@
   var params = new URLSearchParams(location.search);
   var room = params.get("room");
   if (!room) return;
-  var broker = params.get("broker") || location.origin;
 
-  // The game password Owlbear keeps for this tab (same origin as the panel)
-  var password = "";
-  try {
-    password = sessionStorage.getItem("auth") || "";
-  } catch (e) {}
+  // The VTT page that holds the room's data
+  var vtt = window.parent !== window ? window.parent : window.opener;
 
-  var docs = new Map(); // path -> data, as last confirmed by the server
+  var docs = new Map(); // path -> data, as last confirmed by the VTT page
   var listeners = new Set(); // { collection, cb, err, primed }
   var pending = new Map(); // request id -> { msg, resolve, reject }
-  var socket = null;
   var ready = false;
   var fatal = null;
   var started = false;
   var nextId = 1;
-  var retry = 0;
   var readyWaiters = [];
 
   function parentOf(path) {
@@ -132,60 +129,43 @@
     else document.addEventListener("DOMContentLoaded", show);
   }
 
+  function onVtt(event) {
+    var m = event.data;
+    if (event.origin !== location.origin || event.source !== vtt || !m) return;
+    if (m.type === "party-data-all") {
+      var first = !ready;
+      ready = true;
+      applyAll(m.docs || {});
+      if (first) settleReady();
+    } else if (m.type === "party-data-change") {
+      applyChange(m.path, m.data);
+    } else if (m.type === "party-data-status") {
+      // e.g. the map's owner (who holds the data) is offline: read only
+      showBanner(m.status || "");
+    } else if (m.type === "party-data-ack") {
+      var p = pending.get(m.id);
+      if (!p) return;
+      pending.delete(m.id);
+      m.code ? p.reject(codeError(m.code)) : p.resolve();
+    }
+  }
+
   function connect() {
-    var url = broker.replace(/^http/, "ws") + "/party/ws?room=" + encodeURIComponent(room);
-    var ws = new WebSocket(url);
-    socket = ws;
-    ws.onopen = function () {
-      ws.send(JSON.stringify({ op: "auth", password: password }));
-    };
-    ws.onmessage = function (event) {
-      var m;
+    if (!vtt) {
+      fatal = codeError("unavailable");
+      showBanner("请在 VTT 里打开小队面板。");
+      settleReady(fatal);
+      return;
+    }
+    window.addEventListener("message", onVtt);
+    // Until the VTT page answers (it may still be loading)
+    (function hello() {
+      if (ready) return;
       try {
-        m = JSON.parse(event.data);
-      } catch (e) {
-        return;
-      }
-      if (m.t === "ready") {
-        retry = 0;
-        ready = true;
-        showBanner("");
-        applyAll(m.docs || {});
-        settleReady();
-        // Anything not yet confirmed is sent again (set/delete are idempotent)
-        pending.forEach(function (p) {
-          ws.send(JSON.stringify(p.msg));
-        });
-      } else if (m.t === "change") {
-        applyChange(m.path, m.data);
-      } else if (m.t === "reset") {
-        applyAll({});
-      } else if (m.t === "ack") {
-        var p = pending.get(m.id);
-        if (!p) return;
-        pending.delete(m.id);
-        m.code ? p.reject(codeError(m.code)) : p.resolve();
-      } else if (m.t === "error" && m.code === "permission_denied") {
-        fatal = codeError("permission_denied");
-        showBanner("无法读取这个房间的小队数据：请先用正确的密码进入游戏，再打开小队面板。");
-        settleReady(fatal);
-        listeners.forEach(function (l) {
-          if (l.err) l.err(fatal);
-        });
-        pending.forEach(function (p) {
-          p.reject(fatal);
-        });
-        pending.clear();
-      }
-    };
-    ws.onclose = function () {
-      if (socket !== ws) return;
-      socket = null;
-      ready = false;
-      if (fatal) return;
-      showBanner(retry > 1 ? "与房间的连接中断，正在重连…" : "");
-      setTimeout(connect, Math.min(15000, 500 * Math.pow(2, retry++)));
-    };
+        vtt.postMessage({ type: "party-data-hello" }, location.origin);
+      } catch (e) {}
+      setTimeout(hello, 2000);
+    })();
   }
 
   function start() {
@@ -199,7 +179,12 @@
     msg.id = nextId++;
     return new Promise(function (resolve, reject) {
       pending.set(msg.id, { msg: msg, resolve: resolve, reject: reject });
-      if (ready && socket) socket.send(JSON.stringify(msg));
+      try {
+        vtt.postMessage(Object.assign({ type: "party-data-op" }, msg), location.origin);
+      } catch (e) {
+        pending.delete(msg.id);
+        reject(codeError("unavailable"));
+      }
     });
   }
 
