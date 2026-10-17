@@ -34,8 +34,8 @@ import {
  * dragged onto the map (as a token) or into the party status panel.
  */
 const VISIBLE_KEY = "quickSearch.visible";
-// Top of the bar: just under the tools' settings bar (top 4px, about 40px high)
-const SEARCH_TOP = 52;
+// Top of the bar: right under the tools' settings bar (top 4px, 40px high)
+const SEARCH_TOP = 46;
 
 function QuickSearch() {
   // The sidebar's book button turns 5e mode on or off (remembered per browser;
