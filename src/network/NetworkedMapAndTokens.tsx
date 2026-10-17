@@ -13,6 +13,8 @@ import useNetworkedState from "../hooks/useNetworkedState";
 import useMapActions from "../hooks/useMapActions";
 
 import Session, { PeerDataEvent, PeerDataProgressEvent } from "./Session";
+import NetworkedPartyData from "./NetworkedPartyData";
+
 
 import Action from "../actions/Action";
 
@@ -50,6 +52,9 @@ import {
  * @typedef {object} NetworkedMapProps
  * @property {Session} session
  */
+
+// The party panel is shared through the room (Cloudflare backend) only
+const partyDataShared = process.env.REACT_APP_BROKER_TRANSPORT === "cloudflare";
 
 /**
  * @param {NetworkedMapProps} props
@@ -532,6 +537,8 @@ function NetworkedMapAndTokens({ session }: { session: Session }) {
         onRedo={handleRedo}
       />
       <TokenBar onMapTokensStateCreate={handleMapTokensStateCreate} />
+      {/* The party panel's data, held by this map's owner */}
+      {partyDataShared && <NetworkedPartyData session={session} map={currentMap} />}
     </GlobalImageDrop>
   );
 }
