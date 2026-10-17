@@ -2,17 +2,23 @@ import React, { useState } from "react";
 import { Box, Text } from "theme-ui";
 
 import {
+  Formula,
   Roll,
-  RollResult,
+  RollSummary,
   TextPart,
-  describeRoll,
+  describeSummary,
   rollDice,
   rollExpression,
+  rollFormula,
+  summarizeFormula,
+  summarizeRoll,
 } from "../helpers/fiveEDice";
-import { sendRollToBoluo, sendsRollsToBoluo } from "../helpers/boluo";
+import { sendRollToBoluo } from "../helpers/boluo";
+import { sendRollToDiscord } from "../helpers/discordBridge";
+import { getRollTarget } from "../helpers/rollTarget";
 
-/** boluo: where posting the roll to Boluo stands, or what went wrong */
-type LoggedRoll = { id: number; label: string; result: RollResult; boluo?: string };
+/** boluo: where posting the roll to Boluo or Discord stands, or what went wrong */
+type LoggedRoll = { id: number; label: string; result: RollSummary; boluo?: string };
 
 let nextRollId = 1;
 
@@ -24,22 +30,35 @@ export function useDiceRoller(speaker?: string) {
   const [log, setLog] = useState<LoggedRoll[]>([]);
 
   function roll(label: string, dice: Roll) {
-    const result = rollDice(dice);
-    const id = nextRollId++;
-    const toBoluo = sendsRollsToBoluo();
-    setLog((prev) =>
-      [{ id, label, result, boluo: toBoluo ? "发送中…" : undefined }, ...prev].slice(0, 4)
-    );
-    if (!toBoluo) return;
-    const setStatus = (boluo: string) =>
-      setLog((prev) => prev.map((entry) => (entry.id === id ? { ...entry, boluo } : entry)));
-    sendRollToBoluo(speaker, label, result).then(
-      ({ name, inGame }) => setStatus(`已发到 Boluo（${name}，${inGame ? "场内" : "场外"}）`),
-      (error) => setStatus(`未发到 Boluo：${error.message}`)
-    );
+    addRoll(label, summarizeRoll(rollDice(dice)));
   }
 
-  return { log, roll };
+  /** A typed formula, e.g. from the spell bar ("2d6+1d8+3") */
+  function rollTyped(label: string, formula: Formula) {
+    addRoll(label, summarizeFormula(rollFormula(formula)));
+  }
+
+  function addRoll(label: string, result: RollSummary) {
+    const id = nextRollId++;
+    const target = getRollTarget();
+    setLog((prev) =>
+      [{ id, label, result, boluo: target ? "发送中…" : undefined }, ...prev].slice(0, 4)
+    );
+    const setStatus = (boluo: string) =>
+      setLog((prev) => prev.map((entry) => (entry.id === id ? { ...entry, boluo } : entry)));
+    if (target === "boluo")
+      sendRollToBoluo(speaker, label, result).then(
+        ({ name, inGame }) => setStatus(`已发到 Boluo（${name}，${inGame ? "场内" : "场外"}）`),
+        (error) => setStatus(`未发到 Boluo：${error.message}`)
+      );
+    else if (target === "discord")
+      sendRollToDiscord(speaker, label, result).then(
+        () => setStatus("已发到 Discord"),
+        (error) => setStatus(`未发到 Discord：${error.message}`)
+      );
+  }
+
+  return { log, roll, rollTyped };
 }
 
 export type DiceRoller = ReturnType<typeof useDiceRoller>;
@@ -109,7 +128,7 @@ export function RollableText({
 }
 
 /** The latest rolls */
-export function RollLog({ roller }: { roller: DiceRoller }) {
+export function RollLog({ roller, hint = "点下划线的数值掷骰" }: { roller: DiceRoller; hint?: string }) {
   const { log } = roller;
   return (
     <Box
@@ -129,7 +148,7 @@ export function RollLog({ roller }: { roller: DiceRoller }) {
           key={id}
           sx={{ display: "block", fontSize: i === 0 ? 1 : 0, opacity: i === 0 ? 1 : 0.6 }}
         >
-          🎲 <b>{label}</b>：{describeRoll(result)}
+          🎲 <b>{label}</b>：{describeSummary(result)}
           {boluo && i === 0 && (
             <Text
               as="span"
@@ -141,7 +160,7 @@ export function RollLog({ roller }: { roller: DiceRoller }) {
         </Text>
       ))}
       {log.length === 0 && (
-        <Text sx={{ fontSize: 0, color: "gray" }}>点下划线的数值掷骰</Text>
+        <Text sx={{ fontSize: 0, color: "gray" }}>{hint}</Text>
       )}
     </Box>
   );

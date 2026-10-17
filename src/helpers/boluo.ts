@@ -1,52 +1,23 @@
 // Dice rolls from the cards posted to Boluo as well: the Boluo window's page
 // (the same-site mirror, see boluo-mirror/bridge.mjs) sends them with the
 // user's own Boluo login to the channel open there. A switch in the rules
-// mode menu turns it on; stored per browser.
+// mode menu turns it on (rollTarget.ts).
 
-import { useEffect, useState } from "react";
+import { RollSummary } from "./fiveEDice";
 
-import { RollResult, describeRoll, rollExpression } from "./fiveEDice";
-
-const KEY = "boluo.sendRolls";
-const CHANGE_EVENT = "boluo.sendRolls:change";
 /** The Boluo chat window's iframe (ChatWindow) */
 const FRAME_SELECTOR = 'iframe[data-chat="chat"]';
 const TIMEOUT = 8000;
-
-export function sendsRollsToBoluo() {
-  try {
-    return localStorage.getItem(KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-export function setSendsRollsToBoluo(on: boolean) {
-  try {
-    localStorage.setItem(KEY, String(on));
-  } catch {}
-  window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: on }));
-}
-
-export function useSendsRollsToBoluo() {
-  const [on, setOn] = useState(sendsRollsToBoluo);
-  useEffect(() => {
-    const handler = (event: Event) => setOn((event as CustomEvent).detail as boolean);
-    window.addEventListener(CHANGE_EVENT, handler);
-    return () => window.removeEventListener(CHANGE_EVENT, handler);
-  }, []);
-  return on;
-}
 
 type Entity =
   | { type: "Text"; start: number; len: number }
   | { type: "Strong"; start: number; len: number; child: { type: "Text"; start: number; len: number } };
 
 /** "地精 弯刀 命中：1d20+4 = 19（15+4）", the total in bold */
-export function boluoRollMessage(speaker: string | undefined, label: string, result: RollResult) {
-  const head = `${speaker ? speaker + " " : ""}${label}：${rollExpression(result)} = `;
-  const total = String(result.total);
-  const rest = describeRoll(result).slice(`${rollExpression(result)} = ${total}`.length);
+export function boluoRollMessage(speaker: string | undefined, label: string, roll: RollSummary) {
+  const head = `${speaker ? speaker + " " : ""}${label}：${roll.expression} = `;
+  const total = String(roll.total);
+  const rest = roll.rest;
   const text = head + total + rest;
   const span = (start: number, len: number) => ({ start, len });
   const entities: Entity[] = [
@@ -70,7 +41,7 @@ let nextId = 1;
  * speaker: the monster that rolls, named in the text. Resolves with who
  * spoke, or rejects with what went wrong.
  */
-export function sendRollToBoluo(speaker: string | undefined, label: string, result: RollResult) {
+export function sendRollToBoluo(speaker: string | undefined, label: string, roll: RollSummary) {
   return new Promise<{ name: string; inGame: boolean }>((resolve, reject) => {
     const frame = document.querySelector<HTMLIFrameElement>(FRAME_SELECTOR);
     const target = frame?.contentWindow;
@@ -94,7 +65,7 @@ export function sendRollToBoluo(speaker: string | undefined, label: string, resu
       else reject(new Error(data.error || "发送失败"));
     }
     window.addEventListener("message", onMessage);
-    const { text, entities } = boluoRollMessage(speaker, label, result);
+    const { text, entities } = boluoRollMessage(speaker, label, roll);
     target.postMessage({ type: "boluo-roll", id, text, entities }, origin);
   });
 }

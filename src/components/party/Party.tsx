@@ -14,6 +14,7 @@ import ChatButton from "./ChatButton";
 import SheetButton from "./SheetButton";
 import PartyPanelButton from "./PartyPanelButton";
 import QuickSearchButton from "./QuickSearchButton";
+import SpellBarButton from "./SpellBarButton";
 
 import useSetting from "../../hooks/useSetting";
 
@@ -190,6 +191,7 @@ function Party({
           <SheetButton />
           <PartyPanelButton />
           <QuickSearchButton />
+          <SpellBarButton />
           <SettingsButton />
         </Flex>
       </Box>

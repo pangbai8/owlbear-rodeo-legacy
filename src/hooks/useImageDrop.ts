@@ -9,6 +9,7 @@ import {
   monsterTokenFile,
   parseMonsterDrag,
 } from "../helpers/fiveETools";
+import { isEntryDrag } from "../helpers/spellBar";
 
 export type ImageDropEvent = {
   files: File[];
@@ -37,6 +38,8 @@ function useImageDrop(
   const [draggingOther, setDraggingOther] = useState(false);
   const [draggingMonster, setDraggingMonster] = useState(false);
   function onDragEnter(event: React.DragEvent<HTMLDivElement>) {
+    // Spells and other entries go to the spell bar, not on the map
+    if (isEntryDrag(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
     setDragging(true);
@@ -51,6 +54,7 @@ function useImageDrop(
   }
 
   function onDragOver(event: React.DragEvent<HTMLDivElement>) {
+    if (isEntryDrag(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.dataTransfer) {
@@ -59,6 +63,7 @@ function useImageDrop(
   }
 
   async function onDrop(event: React.DragEvent<HTMLDivElement>) {
+    if (isEntryDrag(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
     const dropPosition = new Vector2(event.clientX, event.clientY);

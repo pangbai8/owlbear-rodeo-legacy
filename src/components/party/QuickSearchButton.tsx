@@ -11,8 +11,8 @@ import {
   setRuleSystem,
   useRuleSystem,
 } from "../../helpers/ruleSystem";
-import { setSendsRollsToBoluo, useSendsRollsToBoluo } from "../../helpers/boluo";
-import { chatUrl } from "../ChatWindow";
+import { setRollTarget, useRollTarget } from "../../helpers/rollTarget";
+import { chatUrl, discordChatUrl } from "../ChatWindow";
 
 const DESCRIPTION: Record<RuleSystem, string> = {
   "5e": "5etools 资料（2014 版优先）、怪物拖入、5e 状态",
@@ -31,7 +31,7 @@ function QuickSearchButton() {
   const system = useRuleSystem();
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const sendsToBoluo = useSendsRollsToBoluo();
+  const rollTarget = useRollTarget();
 
   // A click elsewhere or Escape closes the choice
   useEffect(() => {
@@ -68,7 +68,7 @@ function QuickSearchButton() {
         aria-label="Rules Mode"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        title={isOpen ? `规则模式：${current}（点击切换）` : "规则模式：关闭（点击选择 5e / 5r / PF2 / 4e）"}
+        title={isOpen ? `规则模式：${current}（点击切换）` : "规则模式：无规则（点击选择 5e / 5r / PF2 / 4e）"}
         onClick={() => setMenuOpen((open) => !open)}
         sx={{ color: isOpen ? "primary" : "text", position: "relative" }}
       >
@@ -112,7 +112,12 @@ function QuickSearchButton() {
             zIndex: 60,
           }}
         >
-          <MenuItem active={!isOpen} label="关闭" description="不显示资料搜索栏和规则状态" onClick={() => choose(null)} />
+          <MenuItem
+            active={!isOpen}
+            label="无规则"
+            description="不显示资料搜索栏和规则状态；收藏栏用无规则的那一套"
+            onClick={() => choose(null)}
+          />
           {RULE_SYSTEMS.map((s) => (
             <MenuItem
               key={s}
@@ -122,36 +127,26 @@ function QuickSearchButton() {
               onClick={() => choose(s)}
             />
           ))}
-          {chatUrl && (
-            <Box
-              as="label"
-              title="点卡片上的数值掷骰时，结果也发到 Boluo 窗口里打开的频道（按 Boluo 窗口当前的发言状态：场内 / 场外、角色名、输入框里的 .in / .out / .as；怪物卡的掷骰会带上怪物名）"
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 2,
-                mt: 1,
-                pt: 2,
-                px: 2,
-                pb: 1,
-                borderTop: "1px solid",
-                borderColor: "border",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={sendsToBoluo}
-                onChange={(event) => setSendsRollsToBoluo(event.target.checked)}
-              />
-              <Box>
-                <Text sx={{ display: "block", fontSize: 1, fontWeight: "bold" }}>
-                  掷骰同时发到 Boluo
-                </Text>
-                <Text sx={{ display: "block", fontSize: 0, color: "gray" }}>
-                  按 Boluo 窗口当前的场内 / 场外和角色发言
-                </Text>
-              </Box>
+          {(chatUrl || discordChatUrl) && (
+            <Box sx={{ mt: 1, pt: 1, borderTop: "1px solid", borderColor: "border" }}>
+              {chatUrl && (
+                <SendSwitch
+                  checked={rollTarget === "boluo"}
+                  onChange={(on) => setRollTarget(on ? "boluo" : null)}
+                  label="掷骰同时发到 Boluo"
+                  description="按 Boluo 窗口当前的场内 / 场外和角色发言"
+                  title="点卡片、收藏栏掷骰时，结果也发到 Boluo 窗口里打开的频道（按 Boluo 窗口当前的发言状态：场内 / 场外、角色名、输入框里的 .in / .out / .as；怪物卡的掷骰会带上怪物名）"
+                />
+              )}
+              {discordChatUrl && (
+                <SendSwitch
+                  checked={rollTarget === "discord"}
+                  onChange={(on) => setRollTarget(on ? "discord" : null)}
+                  label="掷骰同时发到 Discord"
+                  description="发到 Discord 窗口里选的频道，以你登录的身份"
+                  title="点卡片、收藏栏掷骰时，结果也发到 Discord 窗口里选中的频道（和 Boluo 二选一）"
+                />
+              )}
             </Box>
           )}
           <Text sx={{ display: "block", fontSize: 0, color: "gray", px: 1, pt: 1 }}>
@@ -159,6 +154,35 @@ function QuickSearchButton() {
           </Text>
         </Box>
       )}
+    </Box>
+  );
+}
+
+/** One of the "send rolls to…" switches (Boluo, Discord: one at a time) */
+function SendSwitch({
+  checked,
+  onChange,
+  label,
+  description,
+  title,
+}: {
+  checked: boolean;
+  onChange: (on: boolean) => void;
+  label: string;
+  description: string;
+  title: string;
+}) {
+  return (
+    <Box
+      as="label"
+      title={title}
+      sx={{ display: "flex", alignItems: "center", gap: 2, px: 2, py: 1, cursor: "pointer" }}
+    >
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <Box>
+        <Text sx={{ display: "block", fontSize: 1, fontWeight: "bold" }}>{label}</Text>
+        <Text sx={{ display: "block", fontSize: 0, color: "gray" }}>{description}</Text>
+      </Box>
     </Box>
   );
 }

@@ -1,5 +1,10 @@
 import {
   describeRoll,
+  describeSummary,
+  formulaExpression,
+  parseFormula,
+  rollFormula,
+  summarizeFormula,
   rollDice,
   rollExpression,
   splitChecks,
@@ -83,4 +88,33 @@ test("PF2: trait dice like 致命d10 stay text", () => {
     "1d6",
   ]);
   expect(parts[2]).toBe("（致命d10，射程增量60尺），**伤害** ");
+});
+
+test("typed formulas: dice terms and a flat modifier", () => {
+  expect(parseFormula("1d20+7")).toEqual({ dice: [{ count: 1, sides: 20, sign: 1 }], modifier: 7 });
+  expect(parseFormula("+7")).toEqual({ dice: [{ count: 1, sides: 20, sign: 1 }], modifier: 7 });
+  expect(parseFormula("2d6 ＋ 1d8 − 1")).toEqual({
+    dice: [
+      { count: 2, sides: 6, sign: 1 },
+      { count: 1, sides: 8, sign: 1 },
+    ],
+    modifier: -1,
+  });
+  expect(parseFormula("d20")).toEqual({ dice: [{ count: 1, sides: 20, sign: 1 }], modifier: 0 });
+  expect(parseFormula("7")).toBeNull();
+  expect(parseFormula("火球")).toBeNull();
+  expect(parseFormula("1d20+")).toBeNull();
+  expect(parseFormula("")).toBeNull();
+  expect(formulaExpression(parseFormula("2d6+1d8-1")!)).toBe("2d6+1d8−1");
+});
+
+test("formula rolls are summed and described like card rolls", () => {
+  const faces = [3, 4, 5];
+  const result = rollFormula(parseFormula("2d6+1d8+3")!, () => faces.shift()!);
+  expect(result.total).toBe(15);
+  expect(describeSummary(summarizeFormula(result))).toBe("2d6+1d8+3 = 15（[3+4]+5+3）");
+  const nat = rollFormula(parseFormula("+5")!, () => 20);
+  expect(describeSummary(summarizeFormula(nat))).toBe("1d20+5 = 25（20+5）（天然 20！）");
+  const minus = rollFormula(parseFormula("1d6-1d4")!, (sides) => sides);
+  expect(minus.total).toBe(2);
 });
