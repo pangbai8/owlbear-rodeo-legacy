@@ -1,42 +1,13 @@
 // Dice rolls from the cards posted to Boluo as well: the Boluo window's page
 // (the same-site mirror, see boluo-mirror/bridge.mjs) sends them with the
 // user's own Boluo login to the channel open there. A switch in the rules
-// mode menu turns it on; stored per browser.
-
-import { useEffect, useState } from "react";
+// mode menu turns it on (rollTarget.ts).
 
 import { RollSummary } from "./fiveEDice";
 
-const KEY = "boluo.sendRolls";
-const CHANGE_EVENT = "boluo.sendRolls:change";
 /** The Boluo chat window's iframe (ChatWindow) */
 const FRAME_SELECTOR = 'iframe[data-chat="chat"]';
 const TIMEOUT = 8000;
-
-export function sendsRollsToBoluo() {
-  try {
-    return localStorage.getItem(KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-export function setSendsRollsToBoluo(on: boolean) {
-  try {
-    localStorage.setItem(KEY, String(on));
-  } catch {}
-  window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: on }));
-}
-
-export function useSendsRollsToBoluo() {
-  const [on, setOn] = useState(sendsRollsToBoluo);
-  useEffect(() => {
-    const handler = (event: Event) => setOn((event as CustomEvent).detail as boolean);
-    window.addEventListener(CHANGE_EVENT, handler);
-    return () => window.removeEventListener(CHANGE_EVENT, handler);
-  }, []);
-  return on;
-}
 
 type Entity =
   | { type: "Text"; start: number; len: number }

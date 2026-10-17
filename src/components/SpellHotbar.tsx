@@ -9,6 +9,7 @@ import { useDiceRoller } from "./DiceRoller";
 import { describeSummary, parseFormula } from "../helpers/fiveEDice";
 import { SearchResult } from "../helpers/fiveETools";
 import { useFloatingWindow } from "../contexts/FloatingWindowContext";
+import { useKeyboard } from "../contexts/KeyboardContext";
 import {
   SLOT_DRAG_TYPE,
   SpellEntry,
@@ -19,13 +20,17 @@ import {
   newId,
   placeInSlot,
   readEntryDrag,
+  savesFor,
   slotsOf,
+  withSaves,
   updateGroup,
   useSpellBar,
 } from "../helpers/spellBar";
 import { RULE_SYSTEM_LABEL, RuleSystem, useRuleSystem } from "../helpers/ruleSystem";
 
 const VISIBLE_KEY = "spellBar.visible";
+/** The number key shown on each slot (slots 11 and 12 have none) */
+const SLOT_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "", ""];
 const SLOT_SIZE = 52;
 /** How long the latest rolls stay above the bar */
 const ROLLS_SHOWN_MS = 12000;
@@ -78,12 +83,36 @@ function SpellHotbar() {
 
   useEffect(() => () => window.clearTimeout(hideTimer.current), []);
 
-  if (!visible) return null;
+  // Number keys cast slots 1–10 (1…9, 0); the map's own shortcuts are
+  // letters, and - / = zoom. Text boxes keep their keys (useKeyboard).
+  const castRef = useRef<((index: number) => void) | null>(null);
+  const [flash, setFlash] = useState<number | null>(null);
+  useKeyboard((event: KeyboardEvent) => {
+    if (!castRef.current || event.repeat) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.isContentEditable || target instanceof HTMLSelectElement) return;
+    const m = /^(?:Digit|Numpad)(\d)$/.exec(event.code);
+    if (!m) return;
+    const index = m[1] === "0" ? 9 : Number(m[1]) - 1;
+    event.preventDefault();
+    castRef.current(index);
+  });
+  useEffect(() => {
+    if (flash === null) return;
+    const timer = window.setTimeout(() => setFlash(null), 180);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
+
+  if (!visible) {
+    castRef.current = null;
+    return null;
+  }
 
   const group = state.groups.find((g) => g.id === state.current) || state.groups[0];
   const groupIndex = state.groups.indexOf(group);
   const slots = slotsOf(group);
-  const saves = group.saves || defaultSaves(system);
+  const saves = savesFor(group, system);
 
   function setSlots(change: (slots: (SpellEntry | null)[]) => (SpellEntry | null)[]) {
     update((s) => updateGroup(s, group.id, (g) => ({ ...g, entries: change(slotsOf(g)) })));
@@ -93,6 +122,16 @@ function SpellHotbar() {
     const formula = parseFormula(roll.formula);
     if (formula) roller.rollTyped(`${name} ${roll.label}`.trim(), formula);
   }
+
+  function cast(entry: SpellEntry) {
+    entry.rolls.forEach((roll) => rollOne(entry.name, roll));
+  }
+  castRef.current = (index) => {
+    const entry = slots[index];
+    if (!entry || editing) return;
+    setFlash(index);
+    cast(entry);
+  };
 
   function showPreview(index: number, target: HTMLElement) {
     window.clearTimeout(hideTimer.current);
@@ -342,7 +381,7 @@ function SpellHotbar() {
               onMouseLeave={hidePreview}
               onClick={() => {
                 if (!entry) newEntry(index);
-                else entry.rolls.forEach((roll) => rollOne(entry.name, roll));
+                else cast(entry);
               }}
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -363,7 +402,15 @@ function SpellHotbar() {
                 border: entry ? "1px solid" : "1px dashed",
                 borderColor: dropTarget === index ? "primary" : entry ? "border" : "muted",
                 borderTop: entry?.source?.accent ? `3px solid ${entry.source.accent}` : undefined,
-                bg: dropTarget === index ? "highlight" : entry ? "background" : "transparent",
+                bg:
+                  flash === index
+                    ? "primary"
+                    : dropTarget === index
+                    ? "highlight"
+                    : entry
+                    ? "background"
+                    : "transparent",
+                transition: "background-color 0.15s",
                 cursor: "pointer",
                 overflow: "hidden",
                 p: "2px",
@@ -381,7 +428,7 @@ function SpellHotbar() {
                   lineHeight: 1,
                 }}
               >
-                {index + 1}
+                {SLOT_KEYS[index]}
               </Text>
               {loading === index ? (
                 <Text sx={{ fontSize: 0, color: "gray" }}>…</Text>
@@ -427,7 +474,7 @@ function SpellHotbar() {
               saves={saves}
               system={system}
               onSave={(next) => {
-                update((s) => updateGroup(s, group.id, (g) => ({ ...g, saves: next })));
+                update((s) => updateGroup(s, group.id, (g) => withSaves(g, system, next)));
                 setEditing(null);
               }}
               onCancel={() => setEditing(null)}
@@ -494,7 +541,7 @@ function SavesEditor({
   const [list, setList] = useState(saves);
   return (
     <Box sx={{ p: 2, border: "1px solid", borderColor: "primary", borderRadius: "8px", fontSize: 1 }}>
-      <Text sx={label}>豁免（名称和公式；+5 即 1d20+5）</Text>
+      <Text sx={label}>{RULE_SYSTEM_LABEL[system]} 豁免（名称和公式；+5 即 1d20+5；每个规则模式各存一套）</Text>
       <RollsEditor rolls={list} onChange={setList} addLabel="＋ 加一项豁免" />
       <Flex sx={{ mt: 2, gap: 2, alignItems: "center", flexWrap: "wrap" }}>
         <Text
@@ -585,7 +632,7 @@ function SlotPreview({
               </Text>
             );
           })}
-          <Text sx={{ fontSize: 0, color: "gray", ml: "auto" }}>点格子全掷 · 右键编辑</Text>
+          <Text sx={{ fontSize: 0, color: "gray", ml: "auto" }}>点格子或按数字键全掷 · 右键编辑</Text>
         </Flex>
       </Box>
       {entry.source && <SourceCard result={entry.source} />}

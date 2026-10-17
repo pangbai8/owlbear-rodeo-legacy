@@ -35,9 +35,24 @@ export type SpellGroup = {
   name: string;
   /** The hotbar slots in order; null: an empty slot */
   entries: (SpellEntry | null)[];
-  /** The saving throws shown at the top; unset: the rules mode's defaults */
-  saves?: SpellRoll[];
+  /**
+   * The saving throws shown above the slots, kept for each rules mode on
+   * its own; unset: that mode's defaults. (An array: from before, 5e's.)
+   */
+  saves?: Partial<Record<RuleSystem, SpellRoll[]>> | SpellRoll[];
 };
+
+/** A group's saving throws in a rules mode */
+export function savesFor(group: SpellGroup, system: RuleSystem): SpellRoll[] {
+  const saves = Array.isArray(group.saves) ? { "5e": group.saves } : group.saves || {};
+  return saves[system] || defaultSaves(system);
+}
+
+/** The group with its saving throws in one rules mode changed */
+export function withSaves(group: SpellGroup, system: RuleSystem, list: SpellRoll[]): SpellGroup {
+  const saves = Array.isArray(group.saves) ? { "5e": group.saves } : group.saves || {};
+  return { ...group, saves: { ...saves, [system]: list } };
+}
 
 /** Saving throws to start from, by rules mode (the user edits the bonuses) */
 export function defaultSaves(system: RuleSystem): SpellRoll[] {

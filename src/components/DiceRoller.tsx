@@ -13,9 +13,11 @@ import {
   summarizeFormula,
   summarizeRoll,
 } from "../helpers/fiveEDice";
-import { sendRollToBoluo, sendsRollsToBoluo } from "../helpers/boluo";
+import { sendRollToBoluo } from "../helpers/boluo";
+import { sendRollToDiscord } from "../helpers/discordBridge";
+import { getRollTarget } from "../helpers/rollTarget";
 
-/** boluo: where posting the roll to Boluo stands, or what went wrong */
+/** boluo: where posting the roll to Boluo or Discord stands, or what went wrong */
 type LoggedRoll = { id: number; label: string; result: RollSummary; boluo?: string };
 
 let nextRollId = 1;
@@ -38,17 +40,22 @@ export function useDiceRoller(speaker?: string) {
 
   function addRoll(label: string, result: RollSummary) {
     const id = nextRollId++;
-    const toBoluo = sendsRollsToBoluo();
+    const target = getRollTarget();
     setLog((prev) =>
-      [{ id, label, result, boluo: toBoluo ? "发送中…" : undefined }, ...prev].slice(0, 4)
+      [{ id, label, result, boluo: target ? "发送中…" : undefined }, ...prev].slice(0, 4)
     );
-    if (!toBoluo) return;
     const setStatus = (boluo: string) =>
       setLog((prev) => prev.map((entry) => (entry.id === id ? { ...entry, boluo } : entry)));
-    sendRollToBoluo(speaker, label, result).then(
-      ({ name, inGame }) => setStatus(`已发到 Boluo（${name}，${inGame ? "场内" : "场外"}）`),
-      (error) => setStatus(`未发到 Boluo：${error.message}`)
-    );
+    if (target === "boluo")
+      sendRollToBoluo(speaker, label, result).then(
+        ({ name, inGame }) => setStatus(`已发到 Boluo（${name}，${inGame ? "场内" : "场外"}）`),
+        (error) => setStatus(`未发到 Boluo：${error.message}`)
+      );
+    else if (target === "discord")
+      sendRollToDiscord(speaker, label, result).then(
+        () => setStatus("已发到 Discord"),
+        (error) => setStatus(`未发到 Discord：${error.message}`)
+      );
   }
 
   return { log, roll, rollTyped };
