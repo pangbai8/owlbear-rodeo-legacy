@@ -111,20 +111,106 @@ export function rollDice(roll: Roll, random = randomInt): RollResult {
   };
 }
 
+/** A roll for the log: "1d20+4", 17 and "（13+4）（天然 20！）" */
+export type RollSummary = { expression: string; total: number; rest: string };
+
 /** "1d20+4 = 17（13+4）", noting a natural 20 or 1 */
 export function describeRoll(result: RollResult) {
+  return describeSummary(summarizeRoll(result));
+}
+
+export function describeSummary({ expression, total, rest }: RollSummary) {
+  return `${expression} = ${total}${rest}`;
+}
+
+export function summarizeRoll(result: RollResult): RollSummary {
+  return summarizeFormula({
+    dice: [{ count: result.count, sides: result.sides, sign: 1 }],
+    modifier: result.modifier,
+    rolls: [result.rolls],
+    total: result.total,
+  });
+}
+
+/** A typed formula: dice terms and a flat modifier ("2d6+1d8+3") */
+export type Formula = {
+  dice: { count: number; sides: number; sign: 1 | -1 }[];
+  modifier: number;
+};
+
+export type FormulaResult = Formula & { rolls: number[][]; total: number };
+
+/**
+ * Reads "1d20+7", "8d6", "2d6 + 1d8 − 1", "d20"; a bare bonus ("+7")
+ * is a d20 roll. Null when it is not a roll.
+ */
+export function parseFormula(text: string): Formula | null {
+  let rest = text
+    .replace(/[＋]/g, "+")
+    .replace(/[−－–]/g, "-")
+    .replace(/[Ｄ]/g, "d")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+  if (/^[+-]\d+$/.test(rest)) rest = "1d20" + rest;
+  if (!rest) return null;
+  const formula: Formula = { dice: [], modifier: 0 };
+  let first = true;
+  while (rest) {
+    const m = rest.match(first ? /^([+-]?)(?:(\d*)d(\d+)|(\d+))/ : /^([+-])(?:(\d*)d(\d+)|(\d+))/);
+    if (!m) return null;
+    const sign = m[1] === "-" ? -1 : 1;
+    if (m[3] !== undefined) {
+      const count = m[2] ? Number(m[2]) : 1;
+      const sides = Number(m[3]);
+      if (count < 1 || count > 100 || sides < 2 || sides > 1000) return null;
+      formula.dice.push({ count, sides, sign });
+    } else {
+      formula.modifier += sign * Number(m[4]);
+    }
+    rest = rest.slice(m[0].length);
+    first = false;
+  }
+  return formula.dice.length ? formula : null;
+}
+
+/** "2d6+1d8+3" */
+export function formulaExpression({ dice, modifier }: Formula) {
+  const terms = dice.map(
+    ({ count, sides, sign: s }, i) => (s < 0 ? "−" : i > 0 ? "+" : "") + `${count}d${sides}`
+  );
+  return terms.join("") + (modifier ? sign(modifier) : "");
+}
+
+export function rollFormula(formula: Formula, random = randomInt): FormulaResult {
+  const rolls = formula.dice.map(({ count, sides }) =>
+    Array.from({ length: count }, () => random(sides))
+  );
+  const total =
+    formula.dice.reduce(
+      (sum, { sign: s }, i) => sum + s * rolls[i].reduce((a, b) => a + b, 0),
+      0
+    ) + formula.modifier;
+  return { ...formula, rolls, total };
+}
+
+export function summarizeFormula(result: FormulaResult): RollSummary {
   const detail =
-    (result.rolls.length > 1 ? `[${result.rolls.join("+")}]` : `${result.rolls[0]}`) +
-    (result.modifier ? sign(result.modifier) : "");
+    result.rolls
+      .map((rolls, i) => {
+        const term = rolls.length > 1 ? `[${rolls.join("+")}]` : `${rolls[0]}`;
+        return result.dice[i].sign < 0 ? `−${term}` : i > 0 ? `+${term}` : term;
+      })
+      .join("") + (result.modifier ? sign(result.modifier) : "");
+  const only = result.dice.length === 1 ? result.dice[0] : null;
   const natural =
-    result.sides === 20 && result.count === 1
-      ? result.rolls[0] === 20
+    only && only.sides === 20 && only.count === 1 && only.sign > 0
+      ? result.rolls[0][0] === 20
         ? "（天然 20！）"
-        : result.rolls[0] === 1
+        : result.rolls[0][0] === 1
         ? "（天然 1）"
         : ""
       : "";
-  return `${rollExpression(result)} = ${result.total}（${detail}）${natural}`;
+  return { expression: formulaExpression(result), total: result.total, rest: `（${detail}）${natural}` };
 }
 
 // PF2 strikes: "斩马刀+8（触及10尺，摔绊…）" — a weapon name, its bonus,

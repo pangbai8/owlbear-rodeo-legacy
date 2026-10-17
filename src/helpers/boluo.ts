@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 
-import { RollResult, describeRoll, rollExpression } from "./fiveEDice";
+import { RollSummary } from "./fiveEDice";
 
 const KEY = "boluo.sendRolls";
 const CHANGE_EVENT = "boluo.sendRolls:change";
@@ -43,10 +43,10 @@ type Entity =
   | { type: "Strong"; start: number; len: number; child: { type: "Text"; start: number; len: number } };
 
 /** "地精 弯刀 命中：1d20+4 = 19（15+4）", the total in bold */
-export function boluoRollMessage(speaker: string | undefined, label: string, result: RollResult) {
-  const head = `${speaker ? speaker + " " : ""}${label}：${rollExpression(result)} = `;
-  const total = String(result.total);
-  const rest = describeRoll(result).slice(`${rollExpression(result)} = ${total}`.length);
+export function boluoRollMessage(speaker: string | undefined, label: string, roll: RollSummary) {
+  const head = `${speaker ? speaker + " " : ""}${label}：${roll.expression} = `;
+  const total = String(roll.total);
+  const rest = roll.rest;
   const text = head + total + rest;
   const span = (start: number, len: number) => ({ start, len });
   const entities: Entity[] = [
@@ -70,7 +70,7 @@ let nextId = 1;
  * speaker: the monster that rolls, named in the text. Resolves with who
  * spoke, or rejects with what went wrong.
  */
-export function sendRollToBoluo(speaker: string | undefined, label: string, result: RollResult) {
+export function sendRollToBoluo(speaker: string | undefined, label: string, roll: RollSummary) {
   return new Promise<{ name: string; inGame: boolean }>((resolve, reject) => {
     const frame = document.querySelector<HTMLIFrameElement>(FRAME_SELECTOR);
     const target = frame?.contentWindow;
@@ -94,7 +94,7 @@ export function sendRollToBoluo(speaker: string | undefined, label: string, resu
       else reject(new Error(data.error || "发送失败"));
     }
     window.addEventListener("message", onMessage);
-    const { text, entities } = boluoRollMessage(speaker, label, result);
+    const { text, entities } = boluoRollMessage(speaker, label, roll);
     target.postMessage({ type: "boluo-roll", id, text, entities }, origin);
   });
 }

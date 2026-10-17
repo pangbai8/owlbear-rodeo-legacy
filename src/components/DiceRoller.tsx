@@ -2,17 +2,21 @@ import React, { useState } from "react";
 import { Box, Text } from "theme-ui";
 
 import {
+  Formula,
   Roll,
-  RollResult,
+  RollSummary,
   TextPart,
-  describeRoll,
+  describeSummary,
   rollDice,
   rollExpression,
+  rollFormula,
+  summarizeFormula,
+  summarizeRoll,
 } from "../helpers/fiveEDice";
 import { sendRollToBoluo, sendsRollsToBoluo } from "../helpers/boluo";
 
 /** boluo: where posting the roll to Boluo stands, or what went wrong */
-type LoggedRoll = { id: number; label: string; result: RollResult; boluo?: string };
+type LoggedRoll = { id: number; label: string; result: RollSummary; boluo?: string };
 
 let nextRollId = 1;
 
@@ -24,7 +28,15 @@ export function useDiceRoller(speaker?: string) {
   const [log, setLog] = useState<LoggedRoll[]>([]);
 
   function roll(label: string, dice: Roll) {
-    const result = rollDice(dice);
+    addRoll(label, summarizeRoll(rollDice(dice)));
+  }
+
+  /** A typed formula, e.g. from the spell bar ("2d6+1d8+3") */
+  function rollTyped(label: string, formula: Formula) {
+    addRoll(label, summarizeFormula(rollFormula(formula)));
+  }
+
+  function addRoll(label: string, result: RollSummary) {
     const id = nextRollId++;
     const toBoluo = sendsRollsToBoluo();
     setLog((prev) =>
@@ -39,7 +51,7 @@ export function useDiceRoller(speaker?: string) {
     );
   }
 
-  return { log, roll };
+  return { log, roll, rollTyped };
 }
 
 export type DiceRoller = ReturnType<typeof useDiceRoller>;
@@ -109,7 +121,7 @@ export function RollableText({
 }
 
 /** The latest rolls */
-export function RollLog({ roller }: { roller: DiceRoller }) {
+export function RollLog({ roller, hint = "点下划线的数值掷骰" }: { roller: DiceRoller; hint?: string }) {
   const { log } = roller;
   return (
     <Box
@@ -129,7 +141,7 @@ export function RollLog({ roller }: { roller: DiceRoller }) {
           key={id}
           sx={{ display: "block", fontSize: i === 0 ? 1 : 0, opacity: i === 0 ? 1 : 0.6 }}
         >
-          🎲 <b>{label}</b>：{describeRoll(result)}
+          🎲 <b>{label}</b>：{describeSummary(result)}
           {boluo && i === 0 && (
             <Text
               as="span"
@@ -141,7 +153,7 @@ export function RollLog({ roller }: { roller: DiceRoller }) {
         </Text>
       ))}
       {log.length === 0 && (
-        <Text sx={{ fontSize: 0, color: "gray" }}>点下划线的数值掷骰</Text>
+        <Text sx={{ fontSize: 0, color: "gray" }}>{hint}</Text>
       )}
     </Box>
   );

@@ -5,7 +5,8 @@ export type FloatingWindowName =
   | "discordChat"
   | "sheets"
   | "partyPanel"
-  | "quickSearch";
+  | "quickSearch"
+  | "spellBar";
 
 type FloatingWindowContextValue = {
   open: Partial<Record<FloatingWindowName, boolean>>;

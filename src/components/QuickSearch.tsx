@@ -12,6 +12,7 @@ import { loadPf2Index, searchPf2 } from "../helpers/pf2";
 import { loadDnd4eIndex, searchDnd4e } from "../helpers/dnd4e";
 import { dataSystemOf, useRuleSystem } from "../helpers/ruleSystem";
 import { hasEntryCard } from "../helpers/fiveEEntries";
+import { ENTRY_DRAG_TYPE } from "../helpers/spellBar";
 import {
   MONSTER_DRAG_TYPE,
   SearchResult,
@@ -196,9 +197,13 @@ function QuickSearch() {
     event: React.DragEvent<HTMLDivElement>,
     result: SearchResult
   ) {
-    const ref = monsterRefOf(result);
     event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setData(MONSTER_DRAG_TYPE, JSON.stringify(ref));
+    if (result.isMonster) {
+      event.dataTransfer.setData(MONSTER_DRAG_TYPE, JSON.stringify(monsterRefOf(result)));
+    } else {
+      // Spells, powers, items…: into the spell bar
+      event.dataTransfer.setData(ENTRY_DRAG_TYPE, JSON.stringify(result));
+    }
     event.dataTransfer.setData("text/plain", result.name);
     event.dataTransfer.setData("text/uri-list", result.url);
   }
@@ -348,8 +353,18 @@ function QuickSearch() {
                 >
                   {fullPage && hasCard ? "← 详情" : "← 结果"}
                 </Text>
-                <Text sx={{ flexGrow: 1, fontSize: 1 }} title={selected.url}>
+                <Text
+                  sx={{ flexGrow: 1, fontSize: 1, cursor: selected.isMonster ? "default" : "grab" }}
+                  title={selected.isMonster ? selected.url : "拖进法术栏收藏"}
+                  draggable={!selected.isMonster}
+                  onDragStart={(e: React.DragEvent<HTMLDivElement>) => handleDragStart(e, selected)}
+                >
                   {selected.name}
+                  {!selected.isMonster && (
+                    <Text as="span" sx={{ fontSize: 0, color: "gray", ml: 1 }}>
+                      ⠿
+                    </Text>
+                  )}
                 </Text>
                 <IconButton
                   aria-label="Open in New Tab"
@@ -432,7 +447,7 @@ function QuickSearch() {
                   key={result.id}
                   role="button"
                   tabIndex={0}
-                  draggable={result.isMonster}
+                  draggable
                   onDragStart={(e) => handleDragStart(e, result)}
                   // Removing the row mid-drag can cancel it, so fold afterwards
                   onDragEnd={() => setOpen(false)}
@@ -446,13 +461,13 @@ function QuickSearch() {
                   title={
                     result.isMonster
                       ? "点击查看；拖到地图变成棋子，或拖进小队状态面板"
-                      : "点击查看"
+                      : "点击查看；拖进法术栏收藏"
                   }
                   sx={{
                     alignItems: "center",
                     px: 2,
                     py: "6px",
-                    cursor: result.isMonster ? "grab" : "pointer",
+                    cursor: "pointer",
                     opacity: result.modern || result.reprinted ? 0.5 : 1,
                     borderBottom: "1px solid",
                     borderColor: "muted",
