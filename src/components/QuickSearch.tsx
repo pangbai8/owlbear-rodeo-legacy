@@ -34,6 +34,8 @@ import {
  * dragged onto the map (as a token) or into the party status panel.
  */
 const VISIBLE_KEY = "quickSearch.visible";
+// Left edge of the bar: the party sidebar (112px) and a gap
+const SEARCH_LEFT = 124;
 
 function QuickSearch() {
   // The sidebar's book button turns 5e mode on or off (remembered per browser;
@@ -246,14 +248,15 @@ function QuickSearch() {
       ref={rootRef}
       sx={{
         position: "fixed",
+        // The map's top-left corner, beside the party sidebar: the drawing
+        // and fog tools' settings bar takes the top centre
         top: "8px",
-        left: "50%",
-        transform: "translateX(-50%)",
+        left: `${SEARCH_LEFT}px`,
         width: showPanel
           ? showPage
-            ? "min(1180px, calc(100vw - 32px))"
-            : "min(460px, calc(100vw - 32px))"
-          : "260px",
+            ? `min(1180px, calc(100vw - ${SEARCH_LEFT + 16}px))`
+            : `min(460px, calc(100vw - ${SEARCH_LEFT + 16}px))`
+          : `min(260px, calc(100vw - ${SEARCH_LEFT + 16}px))`,
         transition: "width 0.15s",
         zIndex: 50,
       }}
