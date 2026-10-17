@@ -2,6 +2,8 @@ import React, { useCallback, useContext, useState } from "react";
 
 export type FloatingWindowName =
   | "chat"
+  | "discordChat"
+  | "shimo"
   | "sheets"
   | "partyPanel"
   | "quickSearch"

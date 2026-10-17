@@ -4,9 +4,7 @@ import { Box, Button, Flex, IconButton, Input, Link, Text } from "theme-ui";
 import FloatingWindow, { besidePartyRect } from "./FloatingWindow";
 import OpenInNewIcon from "../icons/OpenInNewIcon";
 import LinkIcon from "../icons/LinkIcon";
-import ChatIcon from "../icons/ChatIcon";
-import DiscordIcon from "../icons/DiscordIcon";
-import ShimoIcon from "../icons/ShimoIcon";
+import { FloatingWindowName } from "../contexts/FloatingWindowContext";
 import { useRollTarget } from "../helpers/rollTarget";
 import { loadShimoUrl, parseShimoUrl, saveShimoUrl } from "../helpers/shimo";
 
@@ -14,52 +12,55 @@ import { loadShimoUrl, parseShimoUrl, saveShimoUrl } from "../helpers/shimo";
 export const chatUrl = process.env.REACT_APP_CHAT_URL || "";
 /** Discord chat page, e.g. the same-site discord-bridge */
 export const discordChatUrl = process.env.REACT_APP_DISCORD_CHAT_URL || "";
-/** Shimo page the Shimo tab opens until a doc link is pasted; "off" hides it */
+/** Shimo page the Shimo window opens until a doc link is pasted; "off" hides it */
 export const shimoUrl =
   process.env.REACT_APP_SHIMO_URL === "off"
     ? ""
     : process.env.REACT_APP_SHIMO_URL || "https://shimo.im/desktop";
 
-export type ChatTabName = "chat" | "discordChat" | "shimo";
-
-export type ChatTabConfig = {
-  /** Also the iframe's data-chat (the Boluo / Discord roll bridges find it by this) */
-  name: ChatTabName;
+export type ChatWindowConfig = {
+  name: FloatingWindowName;
   title: string;
   url: string;
+  storageKey: string;
   popupName: string;
+  /** Default x offset from the party sidebar, so both windows can sit side by side */
+  offsetX: number;
+  /** Default width */
+  width?: number;
   /** The page can be swapped for a pasted link, kept under this localStorage key */
   urlStorageKey?: string;
 };
 
-/** The configured pages of the chat window, one tab each */
-export const chatTabs: ChatTabConfig[] = [
-  { name: "chat" as const, title: "Boluo", url: chatUrl, popupName: "owlbear-chat" },
+/** The chat windows that are configured, each with its own sidebar button */
+export const chatWindows: ChatWindowConfig[] = [
+  {
+    name: "chat" as const,
+    title: "Boluo",
+    url: chatUrl,
+    storageKey: "chatWindow.rect",
+    popupName: "owlbear-chat",
+    offsetX: 0,
+  },
   {
     name: "discordChat" as const,
     title: "Discord",
     url: discordChatUrl,
+    storageKey: "discordChatWindow.rect",
     popupName: "owlbear-discord-chat",
+    offsetX: 448,
   },
   {
     name: "shimo" as const,
     title: "石墨",
     url: shimoUrl,
+    storageKey: "shimoWindow.rect",
     popupName: "owlbear-shimo",
+    offsetX: 0,
+    width: 640,
     urlStorageKey: "shimoWindow.url",
   },
-].filter((tab) => tab.url);
-
-const TAB_KEY = "chatWindow.tab";
-
-function loadTab(): ChatTabName {
-  try {
-    const saved = localStorage.getItem(TAB_KEY);
-    const tab = chatTabs.find((t) => t.name === saved);
-    if (tab) return tab.name;
-  } catch {}
-  return chatTabs[0]?.name || "chat";
-}
+].filter((chat) => chat.url);
 
 /** Paste box for a Shimo doc link, with why logins may not stick in the frame */
 function ShimoLinkBar({
@@ -121,75 +122,40 @@ function ShimoLinkBar({
   );
 }
 
-/** One tab's page; mounted on first visit (or preload), then kept while hidden */
-function ChatFrame({ tab, active, url }: { tab: ChatTabConfig; active: boolean; url: string }) {
-  return (
-    <iframe
-      data-chat={tab.name}
-      src={url}
-      title={tab.title}
-      allow="clipboard-read; clipboard-write; autoplay; fullscreen"
-      style={{
-        flexGrow: 1,
-        width: "100%",
-        border: "none",
-        background: "white",
-        display: active ? "block" : "none",
-      }}
-    />
-  );
-}
-
-/**
- * Boluo, Discord and Shimo in one floating window, a tab each. Pages stay
- * loaded while another tab is shown, so chats keep their place.
- */
-function ChatWindow() {
+function ChatFrame({ chat }: { chat: ChatWindowConfig }) {
   // Rolls sent to Boluo or Discord go through its page, so it loads before first open
   const rollTarget = useRollTarget();
-  const preloadTab: ChatTabName | null =
-    rollTarget === "boluo" ? "chat" : rollTarget === "discord" ? "discordChat" : null;
-  const [active, setActive] = useState<ChatTabName>(loadTab);
-  // Tabs whose page has been loaded (they stay loaded)
-  const [visited, setVisited] = useState<Set<ChatTabName>>(() => new Set([loadTab()]));
-  const [customUrl, setCustomUrl] = useState(() => loadShimoUrl("shimoWindow.url"));
+  const [customUrl, setCustomUrl] = useState(() =>
+    chat.urlStorageKey ? loadShimoUrl(chat.urlStorageKey) : "",
+  );
   const [showLinkBar, setShowLinkBar] = useState(false);
-
-  if (chatTabs.length === 0) return null;
-  const current = chatTabs.find((t) => t.name === active) || chatTabs[0];
-  const urlOf = (tab: ChatTabConfig) => (tab.urlStorageKey && customUrl) || tab.url;
-
-  function choose(name: ChatTabName) {
-    setActive(name);
-    setVisited((prev) => new Set(prev).add(name));
-    setShowLinkBar(false);
-    try {
-      localStorage.setItem(TAB_KEY, name);
-    } catch {}
-  }
+  const url = customUrl || chat.url;
 
   function openPopup() {
-    window.open(urlOf(current), current.popupName, "popup,width=960,height=760");
+    window.open(url, chat.popupName, "popup,width=960,height=760");
   }
 
   function changeUrl(next: string) {
-    saveShimoUrl("shimoWindow.url", next);
+    if (chat.urlStorageKey) saveShimoUrl(chat.urlStorageKey, next);
     setCustomUrl(next);
     setShowLinkBar(false);
   }
 
   return (
     <FloatingWindow
-      name="chat"
-      preload={preloadTab !== null}
-      title="交流"
-      storageKey="chatWindow.rect"
-      defaultRect={() => besidePartyRect(0, 520)}
+      name={chat.name}
+      preload={
+        (chat.name === "chat" && rollTarget === "boluo") ||
+        (chat.name === "discordChat" && rollTarget === "discord")
+      }
+      title={chat.title}
+      storageKey={chat.storageKey}
+      defaultRect={() => besidePartyRect(chat.offsetX, chat.width || 440)}
       headerActions={
         <>
-          {current.urlStorageKey && (
+          {chat.urlStorageKey && (
             <IconButton
-              aria-label={`Change ${current.title} Link`}
+              aria-label={`Change ${chat.title} Link`}
               title="换成别的石墨文档"
               aria-pressed={showLinkBar}
               onClick={() => setShowLinkBar((show) => !show)}
@@ -199,8 +165,8 @@ function ChatWindow() {
             </IconButton>
           )}
           <IconButton
-            aria-label={`Open ${current.title} in New Window`}
-            title={`在新窗口打开 ${current.title}`}
+            aria-label={`Open ${chat.title} in New Window`}
+            title={`Open ${chat.title} in New Window`}
             onClick={openPopup}
           >
             <OpenInNewIcon />
@@ -208,70 +174,38 @@ function ChatWindow() {
         </>
       }
     >
-      {chatTabs.length > 1 && (
-        <Flex
-          role="tablist"
-          sx={{ gap: 1, px: 2, pb: 1, borderBottom: "1px solid", borderColor: "border" }}
-        >
-          {chatTabs.map((tab) => {
-            const selected = tab.name === current.name;
-            return (
-              <Flex
-                key={tab.name}
-                as="button"
-                role="tab"
-                aria-selected={selected}
-                onClick={() => choose(tab.name)}
-                sx={{
-                  alignItems: "center",
-                  gap: 1,
-                  px: 2,
-                  py: "2px",
-                  border: "none",
-                  borderRadius: "4px",
-                  bg: selected ? "primary" : "transparent",
-                  color: selected ? "background" : "text",
-                  fontWeight: selected ? "bold" : "normal",
-                  fontSize: 1,
-                  fontFamily: "body",
-                  cursor: "pointer",
-                  "& svg": { width: 16, height: 16 },
-                  "&:hover": selected ? {} : { bg: "highlight" },
-                }}
-              >
-                {tab.name === "discordChat" ? (
-                  <DiscordIcon />
-                ) : tab.name === "shimo" ? (
-                  <ShimoIcon />
-                ) : (
-                  <ChatIcon />
-                )}
-                {tab.title}
-                {preloadTab === tab.name && (
-                  <Text as="span" title="掷骰结果会发到这里" sx={{ fontSize: 0 }}>
-                    🎲
-                  </Text>
-                )}
-              </Flex>
-            );
-          })}
-        </Flex>
+      {showLinkBar && (
+        <ShimoLinkBar
+          url={customUrl}
+          onChange={changeUrl}
+          onOpenPopup={openPopup}
+        />
       )}
-      {showLinkBar && current.urlStorageKey && (
-        <ShimoLinkBar url={customUrl} onChange={changeUrl} onOpenPopup={openPopup} />
-      )}
-      {chatTabs
-        .filter((tab) => visited.has(tab.name) || tab.name === preloadTab)
-        .map((tab) => (
-          <ChatFrame
-            // A new key reloads the frame when the link changes
-            key={`${tab.name}|${urlOf(tab)}`}
-            tab={tab}
-            active={tab.name === current.name}
-            url={urlOf(tab)}
-          />
-        ))}
+      <iframe
+        // A new key reloads the frame when the link changes
+        key={url}
+        data-chat={chat.name}
+        src={url}
+        title={chat.title}
+        allow="clipboard-read; clipboard-write; autoplay; fullscreen"
+        style={{
+          flexGrow: 1,
+          width: "100%",
+          border: "none",
+          background: "white",
+        }}
+      />
     </FloatingWindow>
+  );
+}
+
+function ChatWindow() {
+  return (
+    <>
+      {chatWindows.map((chat) => (
+        <ChatFrame key={chat.name} chat={chat} />
+      ))}
+    </>
   );
 }
 
