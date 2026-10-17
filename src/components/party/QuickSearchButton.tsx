@@ -130,7 +130,7 @@ function QuickSearchButton() {
                   onChange={(on) => setRollTarget(on ? "boluo" : null)}
                   label="掷骰同时发到 Boluo"
                   description="按 Boluo 窗口当前的场内 / 场外和角色发言"
-                  title="点卡片、法术栏掷骰时，结果也发到 Boluo 窗口里打开的频道（按 Boluo 窗口当前的发言状态：场内 / 场外、角色名、输入框里的 .in / .out / .as；怪物卡的掷骰会带上怪物名）"
+                  title="点卡片、收藏栏掷骰时，结果也发到 Boluo 窗口里打开的频道（按 Boluo 窗口当前的发言状态：场内 / 场外、角色名、输入框里的 .in / .out / .as；怪物卡的掷骰会带上怪物名）"
                 />
               )}
               {discordChatUrl && (
@@ -139,7 +139,7 @@ function QuickSearchButton() {
                   onChange={(on) => setRollTarget(on ? "discord" : null)}
                   label="掷骰同时发到 Discord"
                   description="发到 Discord 窗口里选的频道，以你登录的身份"
-                  title="点卡片、法术栏掷骰时，结果也发到 Discord 窗口里选中的频道（和 Boluo 二选一）"
+                  title="点卡片、收藏栏掷骰时，结果也发到 Discord 窗口里选中的频道（和 Boluo 二选一）"
                 />
               )}
             </Box>

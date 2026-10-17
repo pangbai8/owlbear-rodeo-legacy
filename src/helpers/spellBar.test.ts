@@ -1,5 +1,5 @@
 import { splitRolls } from "./fiveEDice";
-import { placeInSlot, rollsFromParts, savesFor, withSaves } from "./spellBar";
+import { loadSpellBar, placeInSlot, rollsFromParts, savesFor, withSaves } from "./spellBar";
 
 test("an entry's rolls: the first of each kind", () => {
   const parts = splitRolls(
@@ -31,4 +31,15 @@ test("each rules mode keeps its own saves", () => {
   const old = { ...group, saves: [{ label: "X", formula: "+1" }] };
   expect(savesFor(old, "5e")[0].label).toBe("X");
   expect(savesFor(withSaves(old, "pf2", []), "5e")[0].label).toBe("X");
+});
+
+test("each rules mode has its own bar; the old bar goes to the mode in use", () => {
+  localStorage.clear();
+  localStorage.setItem("ruleSystem", "pf2");
+  const old = { groups: [{ id: "g", name: "旧", entries: [] }], current: "g" };
+  localStorage.setItem("spellBar.v1", JSON.stringify(old));
+  expect(loadSpellBar("5e").groups[0].name).toBe("收藏");
+  expect(loadSpellBar("pf2").groups[0].name).toBe("旧");
+  expect(localStorage.getItem("spellBar.v1")).toBeNull();
+  expect(loadSpellBar("4e").groups[0].name).toBe("收藏");
 });

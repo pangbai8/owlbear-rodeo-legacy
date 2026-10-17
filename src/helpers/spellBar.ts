@@ -1,6 +1,7 @@
-// The spell bar: a hotbar of favourite spells and attacks, dragged in from
-// the quick search or written by hand, one bar per group (a character, say)
-// with that group's saving throws. Each entry has its own roll formulas; the
+// The favourites bar (收藏栏): a hotbar of favourite spells and attacks,
+// dragged in from the quick search or written by hand, one bar per rules
+// mode and per group in it (a character, say), with that group's saving
+// throws. Each entry has its own roll formulas; the
 // quick search entry it came from shows as its description. Stored per
 // browser.
 
@@ -11,7 +12,7 @@ import { loadEntryCard } from "./fiveEEntries";
 import { loadPf2Record } from "./pf2";
 import { loadDnd4eRecord } from "./dnd4e";
 import { TextPart, rollExpression, splitPf2Rolls, splitRolls } from "./fiveEDice";
-import { RuleSystem } from "./ruleSystem";
+import { RuleSystem, getRuleSystem } from "./ruleSystem";
 
 /** Drag data type for a quick search entry (spell, power, item…) */
 export const ENTRY_DRAG_TYPE = "application/x-owlbear-entry";
@@ -68,7 +69,10 @@ export function defaultSaves(system: RuleSystem): SpellRoll[] {
 
 export type SpellBarState = { groups: SpellGroup[]; current: string };
 
-const KEY = "spellBar.v1";
+/** Each rules mode has a bar of its own (its spells are that mode's) */
+const keyOf = (system: RuleSystem) => `spellBar.v2.${system}`;
+/** The one bar from before the bars were per rules mode */
+const OLD_KEY = "spellBar.v1";
 const CHANGE_EVENT = "spellBar:change";
 
 export function newId() {
@@ -80,9 +84,21 @@ function emptyState(): SpellBarState {
   return { groups: [{ id, name: "收藏", entries: [] }], current: id };
 }
 
-export function loadSpellBar(): SpellBarState {
+/** The bar from before goes to the rules mode in use when it is first read */
+function migrateOldBar() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(KEY) || "null");
+    const old = localStorage.getItem(OLD_KEY);
+    if (old === null) return;
+    const key = keyOf(getRuleSystem());
+    if (localStorage.getItem(key) === null) localStorage.setItem(key, old);
+    localStorage.removeItem(OLD_KEY);
+  } catch {}
+}
+
+export function loadSpellBar(system: RuleSystem): SpellBarState {
+  migrateOldBar();
+  try {
+    const parsed = JSON.parse(localStorage.getItem(keyOf(system)) || "null");
     if (parsed && Array.isArray(parsed.groups) && parsed.groups.length) {
       const current = parsed.groups.some((g: SpellGroup) => g.id === parsed.current)
         ? parsed.current
@@ -93,25 +109,36 @@ export function loadSpellBar(): SpellBarState {
   return emptyState();
 }
 
-function saveSpellBar(state: SpellBarState) {
+function saveSpellBar(system: RuleSystem, state: SpellBarState) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    localStorage.setItem(keyOf(system), JSON.stringify(state));
   } catch {}
 }
 
-/** The spell bar, kept in localStorage and in step across components */
-export function useSpellBar() {
-  const [state, setState] = useState(loadSpellBar);
+/** A rules mode's bar, kept in localStorage and in step across components */
+export function useSpellBar(system: RuleSystem) {
+  const [loaded, setLoaded] = useState(() => ({ system, state: loadSpellBar(system) }));
+  // Another rules mode: its own bar
+  const state = loaded.system === system ? loaded.state : loadSpellBar(system);
   useEffect(() => {
-    const handler = (event: Event) => setState((event as CustomEvent).detail);
+    if (loaded.system !== system) setLoaded({ system, state: loadSpellBar(system) });
+  }, [system, loaded.system]);
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { system: RuleSystem; state: SpellBarState };
+      if (detail.system === system) setLoaded(detail);
+    };
     window.addEventListener(CHANGE_EVENT, handler);
     return () => window.removeEventListener(CHANGE_EVENT, handler);
-  }, []);
-  const update = useCallback((change: (state: SpellBarState) => SpellBarState) => {
-    const next = change(loadSpellBar());
-    saveSpellBar(next);
-    window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: next }));
-  }, []);
+  }, [system]);
+  const update = useCallback(
+    (change: (state: SpellBarState) => SpellBarState) => {
+      const next = change(loadSpellBar(system));
+      saveSpellBar(system, next);
+      window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { system, state: next } }));
+    },
+    [system]
+  );
   return [state, update] as const;
 }
 

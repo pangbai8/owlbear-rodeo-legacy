@@ -38,7 +38,8 @@ const ROLLS_SHOWN_MS = 12000;
 type Editing = { kind: "slot"; index: number } | { kind: "saves" } | null;
 
 /**
- * The spell bar: an MMORPG-style hotbar at the bottom of the screen. Its
+ * The favourites bar (收藏栏): an MMORPG-style hotbar at the bottom of the
+ * screen, one per rules mode. Its
  * slots hold spells and attacks dragged in from the quick search or written
  * by hand; hover one for its description, click it to roll its formulas
  * (to Boluo too, when that switch is on), right-click to edit. Above the
@@ -46,8 +47,9 @@ type Editing = { kind: "slot"; index: number } | { kind: "saves" } | null;
  */
 function SpellHotbar() {
   const { isOpen: visible, setIsOpen } = useFloatingWindow("spellBar");
-  const [state, update] = useSpellBar();
   const system = useRuleSystem();
+  // Each rules mode has its own bar
+  const [state, update] = useSpellBar(system);
   const roller = useDiceRoller();
   const [editing, setEditing] = useState<Editing>(null);
   const [preview, setPreview] = useState<{ index: number; rect: DOMRect } | null>(null);
@@ -82,6 +84,13 @@ function SpellHotbar() {
   }, [latestRoll]);
 
   useEffect(() => () => window.clearTimeout(hideTimer.current), []);
+
+  // Another rules mode, another bar: nothing open stays
+  useEffect(() => {
+    setEditing(null);
+    setPreview(null);
+    setMenuOpen(false);
+  }, [system]);
 
   // Number keys cast slots 1–10 (1…9, 0); the map's own shortcuts are
   // letters, and - / = zoom. Text boxes keep their keys (useKeyboard).
@@ -278,6 +287,12 @@ function SpellHotbar() {
       >
         {/* Group and saving throws */}
         <Flex sx={{ alignItems: "center", gap: 1, mb: "6px", flexWrap: "wrap", position: "relative" }}>
+          <Text
+            title={`${RULE_SYSTEM_LABEL[system]} 的收藏栏（每个规则模式各一套，在规则菜单切换）`}
+            sx={{ fontSize: "10px", fontWeight: "bold", px: 1, borderRadius: "3px", bg: "primary", color: "background" }}
+          >
+            {RULE_SYSTEM_LABEL[system]}
+          </Text>
           <Text as="button" title="上一组" onClick={() => switchGroup(-1)} sx={tool}>
             ‹
           </Text>

@@ -355,7 +355,7 @@ function QuickSearch() {
                 </Text>
                 <Text
                   sx={{ flexGrow: 1, fontSize: 1, cursor: selected.isMonster ? "default" : "grab" }}
-                  title={selected.isMonster ? selected.url : "拖进法术栏收藏"}
+                  title={selected.isMonster ? selected.url : "拖进收藏栏收藏"}
                   draggable={!selected.isMonster}
                   onDragStart={(e: React.DragEvent<HTMLDivElement>) => handleDragStart(e, selected)}
                 >
@@ -461,7 +461,7 @@ function QuickSearch() {
                   title={
                     result.isMonster
                       ? "点击查看；拖到地图变成棋子，或拖进小队状态面板"
-                      : "点击查看；拖进法术栏收藏"
+                      : "点击查看；拖进收藏栏收藏"
                   }
                   sx={{
                     alignItems: "center",
