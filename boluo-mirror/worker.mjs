@@ -1,7 +1,19 @@
 // Same-site reverse proxy for the Boluo frontend (AGPL-3.0, https://github.com/mythal/boluo).
 // Served on a pangbai.de subdomain so the Boluo session cookie is first-party
 // when the chat is embedded in the Owlbear map page.
+import { bridgeSource } from "./bridge.mjs";
+
 const UPSTREAM = "https://app.boluochat.com";
+// Map pages that may ask the Boluo page to post dice rolls (bridge.mjs)
+const DEFAULT_VTT_ORIGINS = "https://vtt.pangbai.de";
+const BRIDGE_PATH = "/__vtt/bridge.js";
+
+export function vttOrigins(env) {
+  return String((env && env.VTT_ORIGINS) || DEFAULT_VTT_ORIGINS)
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
 
 // Drop Domain (cookie becomes host-only on the mirror) and force Secure.
 export function rewriteSetCookie(cookie) {
@@ -27,8 +39,12 @@ export function rewriteLocation(location, mirrorOrigin) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === BRIDGE_PATH)
+      return new Response(bridgeSource(vttOrigins(env)), {
+        headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-cache" },
+      });
     // The SPA probes these proxies and may switch its API base to one of them;
     // they are cross-site to the mirror, so the session cookie would not follow.
     if (url.pathname === "/api/info/proxies")
@@ -47,10 +63,20 @@ export default {
     const location = headers.get("Location");
     if (location) headers.set("Location", rewriteLocation(location, url.origin));
     headers.set("X-Boluo-Mirror", "1");
-    return new Response(response.body, {
+    const out = new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
       headers,
     });
+    // Boluo pages load the dice bridge for the map page
+    if ((headers.get("Content-Type") || "").startsWith("text/html"))
+      return new HTMLRewriter()
+        .on("body", {
+          element(body) {
+            body.append(`<script src="${BRIDGE_PATH}" defer></script>`, { html: true });
+          },
+        })
+        .transform(out);
+    return out;
   },
 };

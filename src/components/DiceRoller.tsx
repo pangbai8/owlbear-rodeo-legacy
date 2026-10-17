@@ -9,18 +9,34 @@ import {
   rollDice,
   rollExpression,
 } from "../helpers/fiveEDice";
+import { sendRollToBoluo, sendsRollsToBoluo } from "../helpers/boluo";
 
-type LoggedRoll = { id: number; label: string; result: RollResult };
+/** boluo: where posting the roll to Boluo stands, or what went wrong */
+type LoggedRoll = { id: number; label: string; result: RollResult; boluo?: string };
 
 let nextRollId = 1;
 
-/** Rolls from a 5e or PF2 card, kept as a short log on the card */
-export function useDiceRoller() {
+/**
+ * Rolls from a card, kept as a short log on the card. speaker: the
+ * monster whose card it is, named in the roll when it goes to Boluo.
+ */
+export function useDiceRoller(speaker?: string) {
   const [log, setLog] = useState<LoggedRoll[]>([]);
 
   function roll(label: string, dice: Roll) {
     const result = rollDice(dice);
-    setLog((prev) => [{ id: nextRollId++, label, result }, ...prev].slice(0, 4));
+    const id = nextRollId++;
+    const toBoluo = sendsRollsToBoluo();
+    setLog((prev) =>
+      [{ id, label, result, boluo: toBoluo ? "发送中…" : undefined }, ...prev].slice(0, 4)
+    );
+    if (!toBoluo) return;
+    const setStatus = (boluo: string) =>
+      setLog((prev) => prev.map((entry) => (entry.id === id ? { ...entry, boluo } : entry)));
+    sendRollToBoluo(speaker, label, result).then(
+      ({ name, inGame }) => setStatus(`已发到 Boluo（${name}，${inGame ? "场内" : "场外"}）`),
+      (error) => setStatus(`未发到 Boluo：${error.message}`)
+    );
   }
 
   return { log, roll };
@@ -108,12 +124,20 @@ export function RollLog({ roller }: { roller: DiceRoller }) {
         py: 1,
       }}
     >
-      {log.map(({ id, label, result }, i) => (
+      {log.map(({ id, label, result, boluo }, i) => (
         <Text
           key={id}
           sx={{ display: "block", fontSize: i === 0 ? 1 : 0, opacity: i === 0 ? 1 : 0.6 }}
         >
           🎲 <b>{label}</b>：{describeRoll(result)}
+          {boluo && i === 0 && (
+            <Text
+              as="span"
+              sx={{ fontSize: 0, ml: 1, color: boluo.startsWith("未") ? "#c0392b" : "gray" }}
+            >
+              · {boluo}
+            </Text>
+          )}
         </Text>
       ))}
       {log.length === 0 && (

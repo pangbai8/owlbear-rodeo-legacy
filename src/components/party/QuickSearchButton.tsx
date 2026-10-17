@@ -11,6 +11,8 @@ import {
   setRuleSystem,
   useRuleSystem,
 } from "../../helpers/ruleSystem";
+import { setSendsRollsToBoluo, useSendsRollsToBoluo } from "../../helpers/boluo";
+import { chatUrl } from "../ChatWindow";
 
 const DESCRIPTION: Record<RuleSystem, string> = {
   "5e": "5etools 资料（2014 版优先）、怪物拖入、5e 状态",
@@ -29,6 +31,7 @@ function QuickSearchButton() {
   const system = useRuleSystem();
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const sendsToBoluo = useSendsRollsToBoluo();
 
   // A click elsewhere or Escape closes the choice
   useEffect(() => {
@@ -119,6 +122,38 @@ function QuickSearchButton() {
               onClick={() => choose(s)}
             />
           ))}
+          {chatUrl && (
+            <Box
+              as="label"
+              title="点卡片上的数值掷骰时，结果也发到 Boluo 窗口里打开的频道（按 Boluo 窗口当前的发言状态：场内 / 场外、角色名、输入框里的 .in / .out / .as；怪物卡的掷骰会带上怪物名）"
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                mt: 1,
+                pt: 2,
+                px: 2,
+                pb: 1,
+                borderTop: "1px solid",
+                borderColor: "border",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={sendsToBoluo}
+                onChange={(event) => setSendsRollsToBoluo(event.target.checked)}
+              />
+              <Box>
+                <Text sx={{ display: "block", fontSize: 1, fontWeight: "bold" }}>
+                  掷骰同时发到 Boluo
+                </Text>
+                <Text sx={{ display: "block", fontSize: 0, color: "gray" }}>
+                  按 Boluo 窗口当前的场内 / 场外和角色发言
+                </Text>
+              </Box>
+            </Box>
+          )}
           <Text sx={{ display: "block", fontSize: 0, color: "gray", px: 1, pt: 1 }}>
             Ctrl+K 打开当前模式的搜索栏
           </Text>

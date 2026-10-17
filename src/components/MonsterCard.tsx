@@ -25,7 +25,7 @@ function MonsterCard({ monster, onOpenFullPage }: MonsterCardProps) {
   const [card, setCard] = useState<Statblock | null>(null);
   const [tokenUrl, setTokenUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const roller = useDiceRoller();
+  const roller = useDiceRoller(card?.name || monster.name);
 
   useEffect(() => {
     let cancelled = false;

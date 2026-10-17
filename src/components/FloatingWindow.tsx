@@ -211,6 +211,9 @@ function FloatingWindow({
   const { isOpen, setIsOpen, isFront, bringToFront } = useFloatingWindow(name);
   const [rect, setRect] = useState(() => loadRect(storageKey, defaultRect));
   const [hasOpened, setHasOpened] = useState(preload);
+  useEffect(() => {
+    if (preload) setHasOpened(true);
+  }, [preload]);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const bringToFrontRef = useRef(bringToFront);
