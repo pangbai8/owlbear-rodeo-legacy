@@ -51,3 +51,11 @@ test("无规则 has a bar of its own, with no saves to start", () => {
   expect(savesFor(withSaves(group, "none", [{ label: "理智", formula: "1d100" }]), "none")[0].label).toBe("理智");
   expect(loadSpellBar("none").groups[0].name).toBe("收藏");
 });
+
+test("a bar never saved keeps its group between reads, so the first change lands", () => {
+  localStorage.clear();
+  const first = loadSpellBar("5e");
+  const again = loadSpellBar("5e");
+  expect(again.current).toBe(first.current);
+  expect(again.groups.map((g) => g.id)).toEqual(first.groups.map((g) => g.id));
+});

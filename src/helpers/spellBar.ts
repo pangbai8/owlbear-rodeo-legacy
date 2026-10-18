@@ -132,7 +132,11 @@ export function loadSpellBar(system: BarSystem): SpellBarState {
       return { groups: parsed.groups, current };
     }
   } catch {}
-  return emptyState();
+  // Kept right away: a fresh group id on every read would make the first
+  // change (a drop, say) target a group the next read no longer has
+  const fresh = emptyState();
+  saveSpellBar(system, fresh);
+  return fresh;
 }
 
 function saveSpellBar(system: BarSystem, state: SpellBarState) {
