@@ -12,7 +12,7 @@
     "@react-spring/konva": "9.4.4",
     "@tensorflow/tfjs": "^3.15.0",
     "@testing-library/jest-dom": "^5.16.3",
-    "@testing-library/react": "^13.0.0",
+    "@testing-library/react": "^12.1.5",
     "@testing-library/user-event": "^14.4.3",
     "ajv": "^8.11.2",
     "ammo.js": "kripken/ammo.js#85c0614cd5338aa0843814fe7bbd2df48164ece7",
@@ -112,5 +112,13 @@
     "@types/uuid": "^8.3.4",
     "typescript": "^4.2.4",
     "worker-loader": "^3.0.8"
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!(konva|react-konva|pretty-bytes)/)"
+    ],
+    "moduleNameMapper": {
+      "^konva$": "<rootDir>/node_modules/konva/lib/index.js"
+    }
   }
 }
