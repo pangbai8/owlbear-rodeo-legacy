@@ -299,6 +299,41 @@ body.pipdoc .toasts{bottom:8px}
 .pipvid{position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0;pointer-events:none}
 .tag-custom{font-size:10px;letter-spacing:.06em;border:1px solid var(--line);border-radius:3px;padding:0 4px;color:var(--muted);margin-left:4px;vertical-align:1px}
 
+/* Shadowrun 5e teams: condition monitors instead of HP, initiative passes, Edge, dice pools */
+body.sr .dnd-only{display:none}
+.init-b.sr{width:auto;align-items:center;gap:3px}
+.init-f{font-family:var(--f-num);font-size:11px;color:var(--muted);white-space:nowrap}
+.mon{display:flex;flex-direction:column;gap:5px}
+.mon-row{display:grid;grid-template-columns:2.6em minmax(0,1fr) auto;gap:8px;align-items:center}
+.mon-row .lb{font-size:11.5px;color:var(--muted);letter-spacing:.04em}
+.mon-row .ct{font-family:var(--f-num);font-size:12px;color:var(--muted);white-space:nowrap}
+.mon-row.p{--c:var(--crit)} .mon-row.s{--c:var(--arcane)} .mon-row.o{--c:var(--ink)}
+.boxes{display:flex;flex-wrap:wrap;gap:3px}
+.box{width:16px;height:16px;border:1.5px solid var(--line);border-radius:3px;background:var(--sunk);padding:0}
+.box.g3{margin-right:5px}
+.box.on{background:var(--c);border-color:var(--c)}
+.box:hover{border-color:var(--c)}
+.hp-ctl.sr-ctl{grid-template-columns:minmax(0,1fr) auto auto auto auto}
+.hp-ctl .stunb{color:var(--arcane)}
+.srstats{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;padding:6px 8px;border-radius:6px;background:var(--sunk);align-items:center}
+.srstats span{color:var(--muted)} .srstats b{font-family:var(--f-num);color:var(--ink);font-weight:600}
+.srstats b.dn{color:var(--debuff)} .srstats b.up{color:var(--buff)}
+.srstats select{border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:1px 4px;font-size:12px}
+.srattrs{font-family:var(--f-num);font-size:11.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 10px}
+.srattrs b{color:var(--ink);font-weight:600}
+.roller{display:grid;grid-template-columns:72px auto auto auto;gap:6px;align-items:center;justify-content:start}
+.roller input{min-width:0;border:1px solid var(--line);border-radius:6px;background:var(--sunk);padding:4px 8px;font-family:var(--f-num)}
+.lastroll{font-size:12px;color:var(--muted)} .lastroll b{color:var(--ink);font-family:var(--f-num);font-size:14px}
+.lastroll .gl{color:var(--crit);font-weight:600}
+.card.srout,.mrow.srout{opacity:.6}
+.meter i.stun{background:var(--arcane)}
+.mrow .meter+.meter{margin-top:2px}
+.mi-btns.sr{display:grid;grid-template-columns:repeat(2,30px);gap:3px}
+.mi-btns.sr button{width:30px;height:24px;font-size:12px}
+body.pipdoc .mi-btns.sr button{width:28px;height:22px;font-size:11.5px}
+.attrgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+@media (max-width:520px){.hp-ctl.sr-ctl{grid-template-columns:repeat(2,minmax(0,1fr))}.hp-ctl.sr-ctl input{grid-column:1/-1}.roller{grid-template-columns:72px auto auto}}
+
 .toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:60;display:flex;flex-direction:column;gap:6px;width:min(420px,calc(100% - 32px))}
 .toast{background:var(--ink);color:var(--surface);border-radius:8px;padding:9px 12px;font-size:13px;box-shadow:var(--shadow);animation:tin .2s ease-out}
 @keyframes tin{from{transform:translateY(6px);opacity:.3}}
@@ -310,14 +345,14 @@ body.pipdoc .toasts{bottom:8px}
 
 
 <header class="bar"><div class="bar-in">
-  <h1 class="brand">冒险小队面板<small>资源追踪</small></h1>
+  <h1 class="brand"><span id="brandName">冒险小队面板</span><small>资源追踪</small></h1>
   <select id="teamSel" class="teamsel" aria-label="切换小队"></select>
   <div class="combat" id="combat"></div>
   <div class="spacer"></div>
   <div class="group" id="tools">
     <button class="btn full-only" data-act="rest" data-kind="short">短休</button>
     <button class="btn full-only" data-act="rest" data-kind="long">长休</button>
-    <button class="btn ghost full-only" data-act="classes">自定义职业</button>
+    <button class="btn ghost full-only dnd-only" data-act="classes">自定义职业</button>
     <button class="btn ghost full-only" data-act="io">导入 / 导出</button>
     <button class="btn ghost full-only" data-act="settings">设置</button>
     <button class="btn" data-act="pip" title="置顶显示在其他窗口和标签页之上">悬浮窗</button>
@@ -482,20 +517,65 @@ const R5_CONDS=[
   ["震慑",false,"失能；力量敏捷豁免自动失败；对你的攻击优势"],
   ["昏迷",false,"失能并倒地、速度为 0；力量敏捷豁免失败；对你的攻击优势，5 尺内命中即重击"]
 ];
+/* Shadowrun 5e (a team's own rules, Settings): situational conditions. The
+   defense pool counts the ones in SR_DEF; the rest are reminders. */
+const SR5_CONDS=[
+  ["倒地",false,"防御检定 −2；起身需要一个简单动作"],
+  ["奔跑",false,"防御检定 +2；自己的攻击 −2"],
+  ["全防御",false,"本战斗回合的防御检定加上意志（中断行动，先攻 −10）"],
+  ["部分掩护",false,"防御检定 +2"],
+  ["良好掩护",false,"防御检定 +4"],
+  ["连续防御",true,"本战斗回合每多防御一次 −1；新战斗回合自动清除"],
+  ["近战中遭射击",false,"身处近战时被远程攻击：防御检定 −3"],
+  ["被压制火力",false,"身处压制射击区域：不卧倒或找掩护就要进行 反应 + 极限 检定"],
+  ["目盲",false,"视觉相关检定失败；攻击视为盲射 −6"],
+  ["耳聋",false,"听觉相关检定自动失败"],
+  ["隐形",false,"未看穿的攻击者视为盲射 −6"],
+  ["被擒抱",false,"被缠住：除挣脱外的行动受限"],
+  ["着火",false,"每战斗回合承受火焰伤害，直至扑灭"],
+  ["电击",false,"先攻分数 −5，检定受减值，可能倒地"],
+  ["化学腐蚀",false,"腐蚀护甲，伤害可能持续"],
+  ["星界感知",false,"可以感知星界；同时进行物质世界的行动 −2"],
+  ["星界投射",false,"意识离体，肉身无人照看；使用星界先攻"],
+  ["链接锁定",false,"无法自行断开矩阵连接，需先挣脱锁定"],
+  ["恐惧",false,"受恐惧影响：逃离或无法接近来源"],
+  ["被控制",false,"由施法者或操控者决定行动"],
+  ["中毒",false,"毒素或药物作用中：按其效果承受伤害或减值"],
+  ["失去意识",false,"无法行动；维持中的法术结束"],
+  ["稳定",false,"伤势已经急救稳定，不再增加溢出伤害"]
+];
+const SR_DEF={倒地:-2,奔跑:2,部分掩护:2,良好掩护:4,近战中遭射击:-3,连续防御:"v",全防御:"wil"};
+const SR_FX=[
+  {name:"护甲术",kind:"buff",rounds:null,ac:4,dp:0,note:"维持法术：护甲 + 法力等级（按实际等级修改）"},
+  {name:"提升反射",kind:"buff",rounds:null,ac:0,dp:0,note:"维持法术：反应 + 等级，先攻 + 等级 D6（在角色编辑里加先攻骰）"},
+  {name:"Jazz",kind:"buff",rounds:null,ac:0,dp:0,note:"战斗药：反应 +1，先攻 +2D6；药效结束后有副作用"},
+  {name:"Kamikaze",kind:"buff",rounds:null,ac:0,dp:0,note:"战斗药：身体属性提升，先攻 +2D6（以规则书为准）"},
+  {name:"困惑术",kind:"debuff",rounds:null,ac:0,dp:-2,note:"维持法术：每个净成功使目标所有检定 −1"},
+  {name:"能见度差",kind:"debuff",rounds:null,ac:0,dp:-3,note:"环境修正：微光、中雨、烟雾等"}
+];
+const INIT_MODES={phys:"肉身 / AR",cold:"冷模拟 VR",hot:"热模拟 VR",astral:"星界"};
+const SR_ATTRS=[["bod","体质"],["agi","敏捷"],["rea","反应"],["str","力量"],["wil","意志"],["log","逻辑"],["int","直觉"],["cha","魅力"],["edg","极限"],["ess","精华"],["mag","魔力"],["res","共鸣"]];
+/* Matrix attributes (ASDF): the deck's, or a technomancer's living persona */
+const SR_MATRIX=[["atk","攻击性"],["slz","隐匿性"],["dp","数据处理"],["fw","防火墙"]];
+const SR_DEFAULT={bod:3,agi:3,rea:3,str:3,wil:3,log:3,int:3,cha:3,edg:2,ess:6,mag:0,res:0,atk:0,slz:0,dp:0,fw:0};
+const SR_ROLES=["街头武士","法师","萨满","武术家","黑客","技术者","改装师","交涉者","渗透者","杂兵","NPC"];
+const METATYPES=["人类","精灵","矮人","兽人","巨魔"];
+/* The current team plays Shadowrun 5e */
+function isSR(){return !!S.meta&&S.meta.system==="sr5"}
 /* The VTT's rules mode (same-origin localStorage): 5e, 5r, pf2 or 4e */
 function rules(){try{const v=localStorage.getItem("ruleSystem");return v==="5r"||v==="pf2"||v==="4e"||v==="3r"?v:"5e"}catch(e){return "5e"}}
-/* 5r, PF2 or 4e: their own condition table instead of the 5e library */
-function pf2Rules(){return rules()!=="5e"}
-function ruleConds(){const r=rules();return r==="4e"?D4_CONDS:r==="5r"?R5_CONDS:r==="3r"?D3_CONDS:PF2_CONDS}
+/* 5r, PF2, 4e or an SR5 team: their own condition table instead of the 5e library */
+function pf2Rules(){return isSR()||rules()!=="5e"}
+function ruleConds(){if(isSR())return SR5_CONDS;const r=rules();return r==="4e"?D4_CONDS:r==="5r"?R5_CONDS:r==="3r"?D3_CONDS:PF2_CONDS}
 const RULES_LABEL={"5r":"5r","pf2":"PF2","4e":"4e","3r":"3R"};
 function p2Parse(t){const m=String(t).trim().match(/^(.*?)\s*(\d+)$/);return m?{n:m[1],v:+m[2]}:{n:String(t).trim(),v:null}}
 function p2Entry(n){return ruleConds().find(x=>x[0]===n)}
 function p2Value(conds,n){for(const t of conds){const p=p2Parse(t);if(p.n===n)return p.v==null?0:p.v}return null}
 function p2Set(conds,n,v){const valued=(p2Entry(n)||[])[1],remove=v==null||(valued&&v<=0),text=valued?n+" "+v:n,i=conds.findIndex(t=>p2Parse(t).n===n);if(i<0)return remove?conds:conds.concat(text);const next=conds.slice();if(remove)next.splice(i,1);else next[i]=text;return next}
 function pf2CondGrid(c){
-  return `<div class="sec-h"><h3>${RULES_LABEL[rules()]||"PF2"} 状态</h3></div><div class="condgrid">${ruleConds().map(([n,valued,d])=>{const v=p2Value(c.conds,n),on=v!==null;
+  return `<div class="sec-h"><h3>${isSR()?"SR5":RULES_LABEL[rules()]||"PF2"} 状态</h3></div><div class="condgrid">${ruleConds().map(([n,valued,d])=>{const v=p2Value(c.conds,n),on=v!==null;
     return `<div class="condentry"><button class="cbtn" aria-pressed="${on}" data-p2="${esc(n)}"><b>${esc(n)}${valued&&on?" "+v:""}${acTable()[n]?`<span class="p2ac">${acTable()[n].s==="v"?"AC−X":"AC−"+((acTable()[n].c||0)+(acTable()[n].s||0))}</span>`:""}</b><small>${esc(d)}</small></button>${valued&&on?`<span class="counter p2step"><button data-p2step="${esc(n)}" data-d="-1" aria-label="${esc(n)} 减 1">−</button><b>${v}</b><button data-p2step="${esc(n)}" data-d="1" aria-label="${esc(n)} 加 1">＋</button></span>`:""}</div>`}).join("")}</div>
-    <p class="hint">带数值的状态点一下设为 1，再用 −/＋ 调整，减到 0 自动移除。和这个 NPC 关联的地图棋子会同步显示。${rules()==="4e"?"<br>标了 AC 的状态会自动计入 AC（失去意识：所有防御 −5）。":rules()==="3r"?"<br>标了 AC 的状态会自动计入 AC（各项相加；俯卧只算对近战）。失去敏捷加值的状态请自行扣除。":rules()==="pf2"?"<br>标了 AC 的状态会自动计入 AC：措手不及类（−2）只算一次，状态减值取最大的那个，两类相加。":"<br>力竭等级在下方调整。"}</p>`;
+    <p class="hint">带数值的状态点一下设为 1，再用 −/＋ 调整，减到 0 自动移除。和这个 NPC 关联的地图棋子会同步显示。${isSR()?"<br>倒地、奔跑、掩护、连续防御、近战中遭射击、全防御会自动计入卡片上的防御骰池；其他状态只作提醒，修正请自行计入。全防御和连续防御在新战斗回合自动清除。":rules()==="4e"?"<br>标了 AC 的状态会自动计入 AC（失去意识：所有防御 −5）。":rules()==="3r"?"<br>标了 AC 的状态会自动计入 AC（各项相加；俯卧只算对近战）。失去敏捷加值的状态请自行扣除。":rules()==="pf2"?"<br>标了 AC 的状态会自动计入 AC：措手不及类（−2）只算一次，状态减值取最大的那个，两类相加。":"<br>力竭等级在下方调整。"}</p>`;
 }
 const FX_PRESETS=[
   {name:"祝福",kind:"buff",rounds:10,ac:0,note:"攻击与豁免 +1d4 · 专注"},
@@ -530,7 +610,30 @@ function pactFor(l){return {lvl:Math.min(5,Math.ceil(l/2)),max:l<2?1:l<11?2:l<17
 
 function blank(){
   return {name:"新角色",cls:"",level:1,hp:10,maxHp:10,temp:0,ac:10,init:0,
-    slots:pad([]),used:pad([]),pact:{lvl:0,max:0,used:0},res:[],conds:[],exh:0,fx:[],conc:"",ds:{s:0,f:0},created:Date.now()};
+    slots:pad([]),used:pad([]),pact:{lvl:0,max:0,used:0},res:[],conds:[],exh:0,fx:[],conc:"",ds:{s:0,f:0},created:Date.now(),
+    // Shadowrun 5e (read only in SR5 teams)
+    sr:Object.assign({},SR_DEFAULT),armor:0,physBonus:0,stunBonus:0,woundIgnore:0,phys:0,stun:0,over:0,grunt:false,edgeUsed:0,
+    initMode:"phys",initExtra:0,initExtraDice:0,srInitBase:null,srInitDice:null,initSpent:0,osOn:false,os:0,metatype:"",lastRoll:null};
+}
+function normRoll(r){
+  if(!r||typeof r!=="object"||!Array.isArray(r.dice))return null;
+  return {base:int(r.base),mod:int(r.mod),n:clamp(int(r.n),0,100),edge:r.edge===true,second:r.second===true,
+    dice:r.dice.slice(0,100).map(n=>clamp(int(n,1),1,6)),hits:Math.max(0,int(r.hits)),glitch:r.glitch===true,crit:r.crit===true};
+}
+function normSR(o){
+  const sr=Object.assign({},SR_DEFAULT,o.sr&&typeof o.sr==="object"?o.sr:{});
+  for(const k of Object.keys(SR_DEFAULT))if(k!=="ess")sr[k]=clamp(int(sr[k],SR_DEFAULT[k]),0,20);
+  const ess=parseFloat(sr.ess);sr.ess=Number.isFinite(ess)?Math.round(clamp(ess,0,6)*100)/100:6;
+  o.sr=sr;
+  o.armor=clamp(int(o.armor),0,99);o.physBonus=clamp(int(o.physBonus),-8,24);o.stunBonus=clamp(int(o.stunBonus),-8,24);o.woundIgnore=clamp(int(o.woundIgnore),0,12);
+  o.grunt=o.grunt===true||o.grunt==="1";
+  o.phys=clamp(int(o.phys),0,physMax(o));o.stun=clamp(int(o.stun),0,stunMax(o));o.over=o.grunt?0:clamp(int(o.over),0,overMax(o)+1);
+  o.edgeUsed=clamp(int(o.edgeUsed),0,sr.edg);
+  o.initMode=INIT_MODES[o.initMode]?o.initMode:"phys";o.initExtra=clamp(int(o.initExtra),-10,20);o.initExtraDice=clamp(int(o.initExtraDice),0,4);
+  o.srInitBase=o.srInitBase==null||o.srInitBase===""?null:clamp(int(o.srInitBase),0,60);
+  o.srInitDice=o.srInitDice==null||o.srInitDice===""?null:clamp(int(o.srInitDice),0,5);
+  o.initSpent=clamp(int(o.initSpent),0,200);o.osOn=o.osOn===true||o.osOn==="1";o.os=clamp(int(o.os),0,40);
+  o.metatype=String(o.metatype||"").slice(0,20);o.lastRoll=normRoll(o.lastRoll);
 }
 function normalize(c){
   const b=blank();const o=Object.assign(b,c||{});
@@ -541,7 +644,7 @@ function normalize(c){
   o.spHigh=(Array.isArray(o.spHigh)?o.spHigh:[]).map(n=>int(n)).filter(n=>n>=6&&n<=9);
   o.pact=Object.assign({lvl:0,max:0,used:0},o.pact||{});o.pact.used=clamp(int(o.pact.used),0,int(o.pact.max));
   o.res=(o.res||[]).map(r=>({id:r.id||uid(),name:String(r.name||"资源"),max:Math.max(0,int(r.max)),used:clamp(int(r.used),0,Math.max(0,int(r.max))),reset:r.reset==="short"?"short":r.reset==="none"?"none":"long"}));
-  o.fx=(o.fx||[]).map(f=>({id:f.id||uid(),name:String(f.name||"效果"),kind:f.kind==="debuff"?"debuff":"buff",rounds:f.rounds==null||f.rounds===""?null:Math.max(0,int(f.rounds)),ac:int(f.ac),note:String(f.note||"")}));
+  o.fx=(o.fx||[]).map(f=>({id:f.id||uid(),name:String(f.name||"效果"),kind:f.kind==="debuff"?"debuff":"buff",rounds:f.rounds==null||f.rounds===""?null:Math.max(0,int(f.rounds)),ac:int(f.ac),dp:int(f.dp),note:String(f.note||"")}));
   o.conds=Array.isArray(o.conds)?o.conds.filter(x=>typeof x==="string"):[];
   const notes=Object.create(null);for(const n of o.conds){if(o.condNotes&&typeof o.condNotes[n]==="string")notes[n]=o.condNotes[n].slice(0,2000)}o.condNotes=notes;
   o.ds=Object.assign({s:0,f:0},o.ds||{});
@@ -551,9 +654,10 @@ function normalize(c){
   o.concMax=clamp(int(o.concMax,1),1,9);
   o.init=int(o.init);o.initBonus=clamp(int(o.initBonus),-20,30);o.initAdv=o.initAdv===true||o.initAdv==="1";o.initManual=o.initManual===true||o.initManual==="1";o.initPending=o.initPending===true;
   o.dcs=(Array.isArray(o.dcs)?o.dcs:[]).slice(0,12).map(x=>({id:x.id||uid(),name:String(x.name||"").slice(0,30),val:clamp(int(x.val,10),0,40)}));
-  o.initRoll=Array.isArray(o.initRoll)?o.initRoll.map(n=>clamp(int(n),1,20)).slice(0,2):[];
+  o.initRoll=Array.isArray(o.initRoll)?o.initRoll.map(n=>clamp(int(n),1,20)).slice(0,6):[];
   o.hp=clamp(int(o.hp),0,Math.max(1,int(o.maxHp,1)));o.maxHp=Math.max(1,int(o.maxHp,1));
   o.temp=Math.max(0,int(o.temp));o.exh=clamp(int(o.exh),0,6);
+  normSR(o);
   return o;
 }
 /* spell points variant (DMG): point pool equals the slot table's cost total */
@@ -563,7 +667,7 @@ function spTop(c){let t=0;(c.slots||[]).forEach((n,i)=>{if(n>0)t=i+1});return t}
 function usePoints(){return S.meta.spellSystem==="points"}
 /* concentration (standard: one at a time; variant: per-character limit) */
 function multiConc(){return S.meta.multiConc===true}
-function concLimit(c){return multiConc()?c.concMax:1}
+function concLimit(c){return isSR()?9:multiConc()?c.concMax:1}
 function addConc(c,name){
   name=String(name||"").trim();if(!name||c.concs.includes(name))return;
   const ended=[];while(c.concs.length>=concLimit(c))ended.push(c.concs.shift());
@@ -577,7 +681,7 @@ const P4_AC={失去意识:{s:5}};
 const P3_AC={目盲:{s:2},震慑:{s:2},畏缩:{s:2},俯卧:{s:4,t:"对近战"},压制:{s:4,t:"对擒抱者以外"},纠缠:{s:2,t:"敏捷 −4"},疲乏:{s:1,t:"敏捷 −2"},力竭:{s:3,t:"敏捷 −6"}};
 const P2_AC={措手不及:{c:2},倒地:{c:2},受擒:{c:2},束缚:{c:2},麻痹:{c:2},困惑:{c:2},失去意识:{c:2,s:4},疲乏:{s:1},超载:{s:1},笨拙:{s:"v"},惊惧:{s:"v"},恶心:{s:"v"}};
 function p2AcParts(c){
-  if(!pf2Rules())return [];
+  if(!pf2Rules()||isSR())return [];
   if(rules()==="3r")return c.conds.map(t=>{const p=p2Parse(t),d=P3_AC[p.n];return d?{t:d.t?t+"（"+d.t+"）":t,v:d.s}:null}).filter(Boolean);
   let circ=null,stat=null;
   for(const t of c.conds){
@@ -639,9 +743,96 @@ function classSummary(c){
   return bits.filter(Boolean).join(" · ");
 }
 
+/* ---------- Shadowrun 5e ---------- */
+/* Condition monitors: physical 8 + BOD/2, stun 8 + WIL/2 (round up), overflow
+   = BOD; grunts have the one (physical) track for both kinds of damage */
+function physMax(c){return Math.max(1,8+Math.ceil(c.sr.bod/2)+c.physBonus)}
+function stunMax(c){return Math.max(1,8+Math.ceil(c.sr.wil/2)+c.stunBonus)}
+function overMax(c){return c.sr.bod}
+/* −1 per 3 boxes on each track, added together (woundIgnore: boxes ignored on each) */
+function woundMod(c){const ig=c.woundIgnore,t=b=>Math.floor(Math.max(0,b-ig)/3);return 0-(t(c.phys)+(c.grunt?0:t(c.stun)))}
+/* All tests: wounds, −2 per sustained spell, effects */
+function srPoolMod(c){return woundMod(c)-2*c.concs.length+c.fx.reduce((s,f)=>s+(f.dp||0),0)}
+function srArmor(c){return Math.max(0,c.armor+c.fx.reduce((s,f)=>s+(f.ac||0),0))}
+function srLimits(c){const a=c.sr;return {p:Math.ceil((a.str*2+a.bod+a.rea)/3),m:Math.ceil((a.log*2+a.int+a.wil)/3),s:Math.ceil((a.cha*2+a.wil+a.ess)/3)}}
+/* Defense test: REA + INT, the pool modifiers and the conditions in SR_DEF */
+function srDefense(c){
+  const base=c.sr.rea+c.sr.int,parts=[];
+  const wm=woundMod(c),sus=-2*c.concs.length,fx=c.fx.reduce((s,f)=>s+(f.dp||0),0);
+  if(wm)parts.push(["伤势",wm]);if(sus)parts.push(["维持法术",sus]);if(fx)parts.push(["效果",fx]);
+  for(const t of c.conds){const p=p2Parse(t),d=SR_DEF[p.n];if(d==null)continue;parts.push([t,d==="v"?-(p.v||0):d==="wil"?c.sr.wil:d])}
+  const v=Math.max(0,base+parts.reduce((s,x)=>s+x[1],0));
+  return {v,cls:v>base?"up":v<base?"dn":"",note:"防御 反应 + 直觉 "+base+parts.map(x=>"，"+x[0]+" "+sgn(x[1])).join("")};
+}
+function srInitBase(c){if(c.srInitBase!=null)return c.srInitBase;const a=c.sr,m=c.initMode;return m==="cold"||m==="hot"?a.int+a.dp:m==="astral"?a.int*2:a.rea+a.int+c.initExtra}
+function srInitDice(c){if(c.srInitDice!=null)return c.srInitDice;const m=c.initMode;return m==="cold"?3:m==="hot"?4:m==="astral"?2:Math.min(5,1+c.initExtraDice)}
+/* What the initiative boxes show: in SR5 the current initiative score (wounds,
+   interrupts spent and −10 for each pass after the first) */
+function srInitOffset(c){return woundMod(c)-c.initSpent-(S.meta.round>0?10*((S.meta.pass||1)-1):0)}
+function shownInit(c){return isSR()?c.init+srInitOffset(c):c.init}
+function setShownInit(c,v){c.init=isSR()?v-srInitOffset(c):v}
+function srOut(c){return isSR()&&S.meta.round>0&&!c.initPending&&shownInit(c)<=0}
+function srSnap(c){return {wm:woundMod(c),ko:!c.grunt&&c.stun>=stunMax(c),dying:c.phys>=physMax(c),dead:!c.grunt&&c.over>overMax(c),over:c.over}}
+function srState(c){
+  const s=srSnap(c);
+  if(s.dead)return {label:"死亡",cls:"down",down:true};
+  if(s.dying)return {label:c.grunt?"倒下":c.conds.includes("稳定")?"已稳定":"濒死",cls:"down",down:true};
+  if(s.ko)return {label:"昏迷",cls:"down",down:true};
+  return s.wm<=-3?{label:"重伤",cls:"crit"}:s.wm<0?{label:"负伤",cls:"warn"}:{label:"健康",cls:""};
+}
+/* Messages for what a change of damage did */
+function srEvents(c,b,msgs){
+  const a=srSnap(c);
+  if(a.dead&&!b.dead)msgs.push(c.name+" 的溢出伤害超过体质，角色死亡。");
+  else if(a.dying&&!b.dying)msgs.push(c.grunt?c.name+" 倒下了。":c.name+" 物理伤害轨已满：失去意识并进入溢出，需要急救稳定。");
+  else if(a.over>b.over&&!a.dead)msgs.push(c.name+" 溢出伤害 "+a.over+"/"+overMax(c)+"。");
+  if(a.ko&&!b.ko&&!a.dying)msgs.push(c.name+" 眩晕伤害轨已满，失去意识。");
+  if((a.ko||a.dying)&&!(b.ko||b.dying)&&c.concs.length){msgs.push(c.name+" 失去意识，维持中的「"+c.concs.join("」「")+"」结束。");c.concs=[];c.conc=""}
+  if(a.wm!==b.wm&&!(a.ko||a.dying))msgs.push(c.name+" 的伤势修正变为 "+(a.wm?sgn(a.wm):"0")+(S.meta.round>0?"，先攻分数随之变化":"")+"。");
+  return msgs;
+}
+/* kind: p / s damage, hp / hs healing (grunts: one track) */
+function srApply(c,n,kind){
+  const b=srSnap(c),msgs=[];
+  const healPhys=h=>{const o=Math.min(c.over,h);c.over-=o;c.phys=Math.max(0,c.phys-(h-o))};
+  if(kind==="hp"||(kind==="hs"&&c.grunt))healPhys(n);
+  else if(kind==="hs")c.stun=Math.max(0,c.stun-n);
+  else{
+    let p=kind==="p"||c.grunt?n:0;
+    if(kind==="s"&&!c.grunt){
+      const room=stunMax(c)-c.stun;
+      if(n<=room)c.stun+=n;
+      else{c.stun=stunMax(c);const ex=n-room;p=S.meta.srOverflow==="full"?ex:Math.floor(ex/2);msgs.push(c.name+" 的眩晕伤害溢出 "+ex+" 格，"+(p?"转为 "+p+" 格物理伤害。":"不足以转为物理伤害（每 2 格转 1 格）。"))}
+    }
+    if(p){const room=physMax(c)-c.phys;if(p<=room)c.phys+=p;else{c.phys=physMax(c);if(!c.grunt)c.over=Math.min(overMax(c)+1,c.over+p-room)}}
+  }
+  return srEvents(c,b,msgs);
+}
+function d6(){try{const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%6+1}catch(e){return Math.floor(Math.random()*6)+1}}
+/* n d6: hits are 5s and 6s; a glitch is more than half the pool showing 1s;
+   explode (Push the Limit): every 6 rolls one more die */
+function srRoll(n,explode){
+  const dice=[];let left=n;
+  while(left>0&&dice.length<100){const r=d6();dice.push(r);if(!(explode&&r===6))left--}
+  return srScore(dice,n);
+}
+function srScore(dice,n){
+  const hits=dice.filter(x=>x>=5).length,ones=dice.filter(x=>x===1).length,glitch=ones>n/2;
+  return {dice,hits,glitch,crit:glitch&&hits===0};
+}
+function srRollText(r){return r.n+" 骰"+(r.mod?"（"+r.base+" "+sgn(r.mod)+"）":"")+(r.edge?" · 极限突破":"")+(r.second?" · 二次机会":"")+"："+r.hits+" 成功"+(r.crit?"，严重失误！":r.glitch?"，失误":"")}
+function srRollInit(c){
+  const b=srInitBase(c),n=srInitDice(c),d=[];for(let i=0;i<n;i++)d.push(d6());
+  c.initRoll=d;c.init=b+d.reduce((s,x)=>s+x,0);c.initPending=false;c.initSpent=0;
+  const wm=woundMod(c);
+  return c.name+" "+shownInit(c)+"（"+b+" + "+n+"D6 "+(d.join("/")||"—")+(wm?"，伤势 "+wm:"")+"）";
+}
+function fmtEss(e){return String(Math.round(e*100)/100)}
+
 /* ---------- state & storage ---------- */
 const S={chars:{},classes:{},teams:{},team:null,teamSaved:{},meta:defMeta(),ready:false};
-function defMeta(){return {round:0,turn:null,sortInit:true,spellSystem:"slots",multiConc:false}}
+/* system: "dnd" or "sr5"; pass and acted: SR5's initiative passes within a combat turn (round) */
+function defMeta(){return {round:0,turn:null,sortInit:true,spellSystem:"slots",multiConc:false,system:"dnd",srOverflow:"half",pass:1,acted:[]}}
 let db=null,mode="local",readOnly=false,unsubMembers=null;
 const LS_KEY="dnd-party-tracker-v1",TEAM_KEY="dnd-active-team";
 function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
@@ -666,7 +857,12 @@ function condLibraryModal(doc=document){
     root.querySelector("[data-import]").onclick=()=>{let next;try{next=cleanCondLibrary(JSON.parse(root.querySelector("#cl-json").value))}catch(e){toast("状态库格式无效："+e.message);return}if(saveCondLibrary(next)){render();toast("已保存状态库，共 "+next.length+" 个状态。");modalClose()}};
   },doc);
 }
-function normalizeTeam(t){t=t||{};return {name:String(t.name||"未命名小队").slice(0,40),created:t.created||Date.now(),meta:Object.assign(defMeta(),t.meta||{})}}
+function normalizeTeam(t){
+  t=t||{};const meta=Object.assign(defMeta(),t.meta||{});
+  meta.system=meta.system==="sr5"?"sr5":"dnd";meta.srOverflow=meta.srOverflow==="full"?"full":"half";
+  meta.pass=Math.max(1,int(meta.pass,1));meta.acted=Array.isArray(meta.acted)?meta.acted.filter(x=>typeof x==="string").slice(0,200):[];
+  return {name:String(t.name||"未命名小队").slice(0,40),created:t.created||Date.now(),meta};
+}
 function teamIds(){return Object.keys(S.teams).sort((a,b)=>(S.teams[a].created||0)-(S.teams[b].created||0))}
 function teamName(tid){return S.teams[tid||S.team]?S.teams[tid||S.team].name:""}
 function normChars(o){const r={};for(const[k,v]of Object.entries(o||{}))r[k]=normalize(v);return r}
@@ -680,6 +876,14 @@ function sampleParty(){
   const out={};[a,b,c,d].forEach(x=>{out["c"+uid()]=x});return out;
 }
 
+function srSampleParty(){
+  const mk=o=>normalize(Object.assign(blank(),o,{sample:true}));
+  const a=mk({name:"铬刃",clsLabel:"街头武士",metatype:"兽人",sr:{bod:6,agi:6,rea:5,str:5,wil:3,log:2,int:4,cha:2,edg:2,ess:2.1},armor:12,initExtra:2,initExtraDice:2,init:22,initRoll:[4,5,2],phys:3,res:[Object.assign(R("弹匣（阿瑞斯掠食者）",15,"none"),{used:6}),R("急救包",2,"none")],created:1});
+  const b=mk({name:"灰烬",clsLabel:"法师",metatype:"人类",sr:{bod:3,agi:3,rea:3,str:2,wil:5,log:4,int:5,cha:3,edg:3,ess:6,mag:6},armor:9,init:11,initRoll:[3],stun:4,concs:["护甲术"],fx:[{id:uid(),name:"护甲术",kind:"buff",rounds:null,ac:4,dp:0,note:"维持法术：护甲 + 法力等级"}],res:[R("精魂服务",3,"none")],created:2});
+  const c=mk({name:"零号",clsLabel:"黑客",metatype:"矮人",sr:{bod:4,agi:3,rea:4,str:3,wil:4,log:6,int:5,cha:2,edg:3,ess:5.4,atk:5,slz:4,dp:6,fw:5},armor:9,initMode:"hot",init:27,initRoll:[6,2,5,3],osOn:true,os:12,edgeUsed:1,conds:["链接锁定"],created:3});
+  const d=mk({name:"丝绒",clsLabel:"交涉者",metatype:"精灵",sr:{bod:3,agi:4,rea:3,str:2,wil:4,log:3,int:4,cha:7,edg:5,ess:6},armor:9,init:12,initRoll:[5],conds:["部分掩护"],lastRoll:{base:12,mod:0,n:12,dice:[6,5,5,3,2,1,4,6,2,3,1,5],hits:5,glitch:false,crit:false},created:4});
+  const out={};[a,b,c,d].forEach(x=>{out["c"+uid()]=x});return out;
+}
 /* local mode: everything in this browser */
 function loadLocal(){
   let data=null;
@@ -808,10 +1012,10 @@ async function initStore(){
 }
 
 /* team operations */
-function createTeam(name,chars){
+function createTeam(name,chars,system){
   if(!guard())return;
   const tid="t"+uid();
-  S.teams[tid]=normalizeTeam({name:name||"新小队",meta:{spellSystem:S.meta.spellSystem,multiConc:S.meta.multiConc,sortInit:S.meta.sortInit}});
+  S.teams[tid]=normalizeTeam({name:name||"新小队",meta:{spellSystem:S.meta.spellSystem,multiConc:S.meta.multiConc,sortInit:S.meta.sortInit,system:system||S.meta.system,srOverflow:S.meta.srOverflow}});
   if(mode==="local")S.teams[tid].chars={};
   persist("team:"+tid);
   switchTeam(tid);
@@ -847,8 +1051,11 @@ function removeChar(id){if(!guard())return;delete S.chars[id];if(S.meta.turn===i
 
 function sortedIds(){
   const ids=Object.keys(S.chars);
+  const sr=isSR();
   return ids.sort((a,b)=>{const A=S.chars[a],B=S.chars[b];
     if(S.meta.sortInit!==false&&A.initPending!==B.initPending)return A.initPending?1:-1;
+    // SR5: initiative score, then Edge, then Reaction
+    if(sr&&S.meta.sortInit!==false)return shownInit(B)-shownInit(A)||B.sr.edg-A.sr.edg||B.sr.rea-A.sr.rea||(A.created||0)-(B.created||0);
     if(S.meta.sortInit!==false&&B.init!==A.init)return B.init-A.init;
     if(S.meta.sortInit!==false&&B.initBonus!==A.initBonus)return B.initBonus-A.initBonus;
     return (A.created||0)-(B.created||0)||A.name.localeCompare(B.name)});
@@ -858,6 +1065,7 @@ function sortedIds(){
 function d20(){try{const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%20+1}catch(e){return Math.floor(Math.random()*20)+1}}
 function sgn(n){return (n>=0?"+":"−")+Math.abs(n)}
 function rollInit(c){
+  if(isSR())return srRollInit(c);
   const d=[d20()];if(c.initAdv)d.push(d20());
   c.initRoll=d;c.init=Math.max(...d)+c.initBonus;c.initPending=false;
   return c.name+" "+c.init+"（d20 "+d.join("/")+" "+sgn(c.initBonus)+"）";
@@ -886,8 +1094,53 @@ function applyDamage(c,n){
   else if(before===0&&n>0){c.ds.f=Math.min(3,c.ds.f+1);msgs.push(c.name+" 在濒死时受到伤害，记一次死亡豁免失败。")}
   return msgs;
 }
+/* SR5 combat: in each initiative pass everyone with a score above 0 acts,
+   highest first; then all scores drop by 10 for the next pass. When nobody
+   is left above 0 a new combat turn starts and initiative is rolled again.
+   Knocked-out, dying and dead characters are skipped. */
+function srActs(c){return !c.initPending&&shownInit(c)>0&&!srState(c).down}
+function srPick(){return sortedIds().find(id=>srActs(S.chars[id])&&!S.meta.acted.includes(id))||null}
+function srNext(){
+  const m=S.meta;if(!Object.keys(S.chars).length)return;
+  if(m.round<1){
+    m.round=1;m.pass=1;m.acted=[];m.turn=srPick();persist("meta");render();
+    if(!m.turn)toast("没有先攻分数大于 0 的角色：先掷先攻或填写先攻。");
+    return;
+  }
+  if(m.turn&&S.chars[m.turn]&&!m.acted.includes(m.turn))m.acted.push(m.turn);
+  let nx=srPick();
+  if(nx){m.turn=nx;persist("meta");render();return}
+  m.pass+=1;m.acted=[];nx=srPick();
+  if(nx){m.turn=nx;persist("meta");render();toast("第 "+m.pass+" 先攻轮次：所有人的先攻分数 −10。");return}
+  srNewTurn();
+}
+function srNewTurn(){
+  const m=S.meta;m.round+=1;m.pass=1;m.acted=[];
+  const expired=[],rolled=[],manual=[];
+  for(const id of Object.keys(S.chars)){
+    const c=S.chars[id];
+    c.fx=c.fx.filter(f=>{if(f.rounds==null)return true;f.rounds-=1;if(f.rounds<=0){expired.push(c.name+"的「"+f.name+"」");return false}return true});
+    c.conds=c.conds.filter(t=>{const n=p2Parse(t).n;return n!=="全防御"&&n!=="连续防御"});
+    c.initSpent=0;
+    if(c.initManual){c.initPending=true;manual.push(c.name)}else{srRollInit(c);rolled.push(c)}
+    S.chars[id]=normalize(c);persist(id);
+  }
+  m.turn=srPick();persist("meta");render();
+  toast("第 "+m.round+" 战斗回合，重新掷先攻："+(rolled.length?rolled.sort((a,b)=>shownInit(b)-shownInit(a)).map(c=>c.name+" "+shownInit(c)).join("，"):"无")+(manual.length?"。待手动填写："+manual.join("、"):"")+(expired.length?"。已结束："+expired.join("、"):""));
+}
+function srPrev(){
+  const m=S.meta;if(m.round<1)return;
+  if(m.acted.length){m.turn=m.acted.pop();persist("meta");render();return}
+  if(m.pass>1){
+    m.pass-=1;
+    const el=sortedIds().filter(id=>srActs(S.chars[id]));
+    m.turn=el[el.length-1]||null;m.acted=el.slice(0,-1);persist("meta");render();return;
+  }
+  toast("已经是本战斗回合的第一位（新战斗回合的先攻无法撤销）。");
+}
 function nextTurn(){
   if(!guard())return;
+  if(isSR())return srNext();
   const ids=sortedIds();if(!ids.length)return;
   let i=ids.indexOf(S.meta.turn);
   if(S.meta.round<1||i<0){S.meta.round=Math.max(1,S.meta.round||0);S.meta.turn=ids[0];persist("meta");render();return}
@@ -902,7 +1155,17 @@ function nextTurn(){
   S.meta.round+=1;S.meta.turn=ids[0];persist("meta");render();
   toast("进入第 "+S.meta.round+" 轮"+(expired.length?"。已结束："+expired.join("、"):""));
 }
+/* SR5: "short" refreshes Edge; "long" clears all damage too */
+function srRest(kind){
+  for(const id of Object.keys(S.chars)){
+    const c=S.chars[id];c.edgeUsed=0;
+    if(kind==="long"){c.phys=0;c.stun=0;c.over=0;c.initSpent=0;c.lastRoll=null;c.res.forEach(r=>{r.used=0});c.conds=c.conds.filter(n=>n!=="失去意识"&&n!=="稳定")}
+    persist(id);
+  }
+  render();toast(kind==="long"?"全队复原：伤害清空，极限与资源恢复。":"已刷新全队的极限。");
+}
 function rest(kind){
+  if(isSR())return srRest(kind);
   for(const id of Object.keys(S.chars)){
     const c=S.chars[id];
     c.pact.used=0;
@@ -942,7 +1205,59 @@ function spellBlock(c,compact){
   if(hasPact)h+=`<div class="slots"><div class="slot pact"><span class="lv">契约·${c.pact.lvl}环</span>${pipRow(c.pact.max,c.pact.used,"pact","")}<span class="cnt">${c.pact.max-c.pact.used}/${c.pact.max}</span></div></div>`;
   return h;
 }
+/* SR5 condition monitor: one box per point of damage; a gap every 3 (−1 each) */
+function boxRow(track,label,max,val){
+  let b="";
+  for(let i=1;i<=max;i++)b+=`<button class="box ${i<=val?"on":""} ${i%3===0&&i<max?"g3":""}" data-act="srbox" data-track="${track}" data-i="${i}" aria-label="${label}第 ${i} 格${i<=val?"（点击恢复到这一格之前）":""}"></button>`;
+  return `<div class="mon-row ${track}"><span class="lb">${label}</span><span class="boxes">${b}</span><span class="ct">${val}/${max}</span></div>`;
+}
+let poolDraft={};
+function fxChip(f){return `<span class="chip ${f.kind}" title="${esc(f.note)}"><span class="k">${f.kind==="buff"?"▲":"▼"}</span>${esc(f.name)}${f.dp?` <span class="rd">骰池${sgn(f.dp)}</span>`:""}${f.ac?` <span class="rd">${isSR()?"护甲":"AC"}${sgn(f.ac)}</span>`:""}<span class="rd">${f.rounds==null?"持续":f.rounds+(isSR()?"回合":"轮")}</span><button class="x" data-act="unfx" data-f="${f.id}" aria-label="移除${esc(f.name)}">×</button></span>`}
+function srCard(id,c){
+  const m=S.meta,turn=m.round>0&&m.turn===id,st=srState(c),def=srDefense(c),wm=woundMod(c),pm=srPoolMod(c),lim=srLimits(c),a=c.sr;
+  const sub=[c.clsLabel||"未设定职能",c.metatype,"精华 "+fmtEss(a.ess)].filter(Boolean).join(" · ");
+  const ib=srInitBase(c),idc=srInitDice(c);
+  let h=`<article class="card ${turn?"turn":""} ${st.down?"down":""} ${srOut(c)?"srout":""}" data-id="${id}">
+  <div class="head">
+    <div class="init"><label class="init-l" for="init-${id}">先攻</label><input id="init-${id}" class="init-v ${c.initPending?"pending":""}" type="number" inputmode="numeric" value="${c.initPending?"":shownInit(c)}" placeholder="?" data-fkey="init-${id}" data-act="initset" title="${c.initPending?"等待手动填写先攻":"当前先攻分数（已计入伤势"+(m.round>0&&m.pass>1?"和先攻轮次":"")+(c.initSpent?"、中断行动":"")+"），可直接修改"}"><span class="init-b sr"><span class="init-f" title="${esc(INIT_MODES[c.initMode])}${c.initRoll.length?"，上次 "+c.initRoll.join("/"):""}">${ib}+${idc}D6</span><button class="init-d" data-act="rollinit" title="掷先攻：${ib} + ${idc}D6" aria-label="为 ${esc(c.name)} 掷先攻">🎲</button></span></div>
+    <div class="who"><h2>${esc(c.name)}${turn?`<span class="turn-tag">行动中</span>`:""}</h2><p>${esc(sub)}</p></div>
+    <div class="acbox">${c.monster?qdelBtn(id,c,"iconbtn"):""}${c.token&&c.token.id?`<button class="iconbtn" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}<div class="shield ${def.cls}" title="${esc(def.note)}"><b>${def.v}</b><i>防御</i></div><button class="iconbtn" data-act="edit" aria-label="编辑 ${esc(c.name)}">⋯</button></div>
+  </div>
+  <div class="mon">
+    <div class="hp-top"><span class="srstats" style="padding:0;background:none"><span>伤势修正 <b class="${wm?"dn":""}">${wm?sgn(wm):0}</b></span><span>骰池修正 <b class="${pm<0?"dn":pm>0?"up":""}">${sgn(pm)}</b></span></span><span class="status-pill ${st.cls}">${st.label}</span></div>
+    ${boxRow("p",c.grunt?"伤势":"物理",physMax(c),c.phys)}
+    ${c.grunt?"":boxRow("s","眩晕",stunMax(c),c.stun)}
+    ${!c.grunt&&(c.phys>=physMax(c)||c.over)&&overMax(c)?boxRow("o","溢出",overMax(c),Math.min(c.over,overMax(c))):""}
+    <div class="hp-ctl sr-ctl"><input id="amt-${id}" type="number" inputmode="numeric" min="0" placeholder="伤害格数" aria-label="伤害或治疗的格数，留空按 1 格计算" title="抗伤之后剩下的伤害格数；留空按 1 格计算" data-fkey="amt-${id}" data-act="amt">
+      <button class="btn sm dmg" data-act="srdmg" data-kind="p" title="物理伤害（P）">物理</button><button class="btn sm stunb" data-act="srdmg" data-kind="s" title="${c.grunt?"杂兵的眩晕伤害记在同一条伤势轨上":"眩晕伤害（S），填满后溢出到物理轨"}">眩晕</button><button class="btn sm heal" data-act="srdmg" data-kind="hp" title="治疗物理伤害（先减溢出）">治物理</button>${c.grunt?"":`<button class="btn sm heal" data-act="srdmg" data-kind="hs" title="恢复眩晕伤害">治眩晕</button>`}</div>
+  </div>
+  <div class="srstats"><span>抗伤 体质+护甲 <b>${a.bod+srArmor(c)}</b></span><span>护甲 <b class="${srArmor(c)>c.armor?"up":srArmor(c)<c.armor?"dn":""}">${srArmor(c)}</b></span><span>上限 身<b>${lim.p}</b> 心<b>${lim.m}</b> 社<b>${lim.s}</b></span>${SR_MATRIX.some(([k])=>a[k])||a.mag||a.res||c.initMode!=="phys"?`<span>先攻模式 <select data-act="srmode" aria-label="${esc(c.name)} 的先攻模式">${Object.entries(INIT_MODES).map(([k,v])=>`<option value="${k}" ${c.initMode===k?"selected":""}>${v}</option>`).join("")}</select></span>`:""}</div>
+  <div class="srattrs">${SR_ATTRS.filter(([k])=>k!=="ess"&&(a[k]||!["mag","res"].includes(k))).map(([k,n])=>`<span>${n} <b>${a[k]}</b></span>`).join("")}</div>
+  ${SR_MATRIX.some(([k])=>a[k])?`<div class="srattrs"><span>矩阵</span>${SR_MATRIX.map(([k,n])=>`<span>${n} <b>${a[k]}</b></span>`).join("")}<span title="抵抗矩阵攻击：直觉 + 防火墙">矩阵防御 <b>${a.int+a.fw}</b></span></div>`:""}`;
+  if(m.round>0)h+=`<div class="group"><button class="btn sm ghost" data-act="srint" data-cost="5" data-n="闪避/格挡" title="中断行动：闪避、格挡、招架、扑倒、拦截（先攻 −5）">−5 闪避/格挡</button><button class="btn sm ghost" data-act="srint" data-cost="10" data-n="全防御" title="中断行动：全防御，本战斗回合防御加意志（先攻 −10）">−10 全防御</button>${c.initSpent?`<span class="hint" style="align-self:center">本回合中断已花 ${c.initSpent} 点先攻</span>`:""}</div>`;
+  const lr=c.lastRoll;
+  h+=`<section class="sec"><div class="sec-h"><h3>掷骰（自动计入骰池修正 ${sgn(pm)}）</h3></div>
+    <div class="roller"><input id="pool-${id}" type="number" inputmode="numeric" min="0" max="60" data-act="pool" data-fkey="pool-${id}" value="${esc(poolDraft[id]||"")}" placeholder="骰池" aria-label="骰池（属性 + 技能）"><button class="btn sm" data-act="srroll">🎲 掷骰</button><button class="btn sm" data-act="srroll" data-edge="1" ${c.edgeUsed>=a.edg?"disabled":""} title="极限突破：花 1 点极限，骰池 + 极限（${a.edg}），6 点爆骰，无视上限">极限突破</button>${lr&&!lr.edge&&!lr.second?`<button class="btn sm ghost" data-act="srsecond" ${c.edgeUsed>=a.edg?"disabled":""} title="二次机会：花 1 点极限，重掷上次所有未成功的骰子">二次机会</button>`:""}</div>
+    ${lr?`<div class="lastroll" title="${lr.dice.join(" ")}">上次 ${esc(lr.n+" 骰"+(lr.mod?"（"+lr.base+" "+sgn(lr.mod)+"）":"")+(lr.edge?" · 极限突破":"")+(lr.second?" · 二次机会":""))}：<b>${lr.hits}</b> 成功${lr.crit?` <span class="gl">严重失误！</span>`:lr.glitch?` <span class="gl">失误</span>`:""}　<span class="num">${lr.dice.join(" ")}</span></div>`:""}
+  </section>`;
+  h+=`<section class="sec"><div class="sec-h"><h3>极限与资源</h3></div><div class="res-list"><div class="res"><span class="nm">极限</span><span class="rs">${a.edg-c.edgeUsed}/${a.edg}</span>${a.edg?pipRow(a.edg,c.edgeUsed,"edge",""):""}</div>`;
+  if(c.osOn)h+=`<div class="res"><span class="nm">OS</span><span class="rs">${c.os>=40?"收敛！":"40 收敛"}</span><span class="counter"><button data-act="os" data-d="-1" aria-label="OS 减 1">−</button><b>${c.os}/40</b><button data-act="os" data-d="1" aria-label="OS 加 1">＋</button></span></div>`;
+  c.res.forEach(r=>{h+=`<div class="res"><span class="nm">${esc(r.name)}</span><span class="rs">${r.max-r.used}/${r.max}</span>${pipRow(r.max,r.used,"res",`data-r="${r.id}"`)}</div>`});
+  h+=`</div></section>`;
+  h+=`<section class="sec"><div class="sec-h"><h3>状态与维持法术</h3><button class="btn sm ghost" data-act="conds">管理</button></div><div class="chips">`;
+  let any=false;
+  c.concs.forEach((n,i)=>{any=true;h+=`<span class="chip conc" title="维持法术：所有检定 −2">维持：${esc(n)} <span class="rd">−2</span><button class="x" data-act="dropconc" data-i="${i}" aria-label="停止维持${esc(n)}">×</button></span>`});
+  c.conds.forEach(n=>{any=true;h+=`<span class="chip cond" title="${esc(condSummary(c,n))}">${esc(n)}<button class="x" data-act="uncond" data-n="${esc(n)}" aria-label="移除${esc(n)}">×</button></span>`});
+  if(!any)h+=`<span class="empty-line">无异常状态</span>`;
+  h+=`</div></section>`;
+  h+=`<section class="sec"><div class="sec-h"><h3>增益 / 减益</h3><button class="btn sm ghost" data-act="fx">＋ 效果</button></div><div class="chips">`;
+  if(!c.fx.length)h+=`<span class="empty-line">没有生效中的效果</span>`;
+  c.fx.forEach(f=>{h+=fxChip(f)});
+  h+=`</div></section></article>`;
+  return h;
+}
 function card(id,c){
+  if(isSR())return srCard(id,c);
   const turn=S.meta.round>0&&S.meta.turn===id;
   const pct=c.hp/c.maxHp;
   const lvlState=c.hp===0?"down":pct<=.25?"crit":pct<=.5?"warn":"";
@@ -989,11 +1304,11 @@ function card(id,c){
 }
 function renderCombat(){
   const m=S.meta,ids=sortedIds();
-  const cur=m.round>0&&S.chars[m.turn]?S.chars[m.turn].name:null;
+  const cur=m.round>0&&S.chars[m.turn]?S.chars[m.turn].name:null,sr=isSR();
   $("#combat").innerHTML=m.round>0
-    ?`<div class="round"><span>第</span><b>${m.round}</b><span>轮${cur?" · "+esc(cur):""}</span></div><button class="btn primary" data-act="next">下一位 ▸</button><button class="btn ghost" data-act="endcombat">结束战斗</button>`
+    ?`<div class="round"><span>第</span><b>${m.round}</b><span>${sr?"战斗回合 · 第 "+(m.pass||1)+" 先攻轮次":"轮"}${cur?" · "+esc(cur):""}</span></div>${sr?`<button class="btn ghost" data-act="prev" title="上一位">◂</button>`:""}<button class="btn primary" data-act="next">下一位 ▸</button><button class="btn ghost" data-act="endcombat">结束战斗</button>`
     :`<div class="round"><span>战斗外</span></div><button class="btn" data-act="next" ${ids.length?"":"disabled"}>开始战斗</button>`;
-  $("#combat").insertAdjacentHTML("beforeend",`<button class="btn" data-act="rollall" ${ids.length?"":"disabled"} title="为全队掷 1d20 + 先攻加值">🎲 掷先攻</button><button class="btn ghost sm" data-act="sort" aria-pressed="${m.sortInit!==false}">${m.sortInit!==false?"按先攻排序":"按加入顺序"}</button>`);
+  $("#combat").insertAdjacentHTML("beforeend",`<button class="btn" data-act="rollall" ${ids.length?"":"disabled"} title="${sr?"为全队掷先攻：基础值 + 先攻骰（D6）":"为全队掷 1d20 + 先攻加值"}">🎲 掷先攻</button><button class="btn ghost sm" data-act="sort" aria-pressed="${m.sortInit!==false}">${m.sortInit!==false?"按先攻排序":"按加入顺序"}</button>`);
 }
 function renderNotices(){
   const n=[];
@@ -1013,13 +1328,16 @@ function render(){
   renderTeamSel();
   if(!S.ready)return;
   const ae=document.activeElement,fk=ae&&ae.dataset?ae.dataset.fkey:null,fv=fk?ae.value:null;
-  const ids=sortedIds();
+  const ids=sortedIds(),sr=isSR();
   document.body.classList.toggle("mini",view==="mini");
+  document.body.classList.toggle("sr",sr);
+  $("#brandName").textContent=sr?"暗影狂奔小队":"冒险小队面板";
+  document.querySelectorAll('#tools [data-act="rest"]').forEach(b=>{const long=b.dataset.kind==="long";b.textContent=sr?(long?"全队复原":"刷新极限"):(long?"长休":"短休")});
   $("#pureBtn").textContent=pureModes[view]?"恢复面板":"纯先攻";$("#pureBtn").setAttribute("aria-pressed",String(pureModes[view]));
   $("#viewBtn").textContent=view==="mini"?"完整视图":"紧凑视图";
   drawPip();renderDocPip();
   $("#grid").innerHTML=ids.length?(pureModes[view]?initiativeList(ids):view==="mini"?miniList(ids):ids.map(id=>card(id,S.chars[id])).join("")):
-    `<div class="empty"><h2>小队还没有成员</h2><p>添加角色后，生命、法术位、职业资源和状态会显示在这里，所有打开这个页面的人看到的是同一份数据。</p><div class="group"><button class="btn primary" data-act="add">＋ 添加角色</button><button class="btn" data-act="loadsample">载入示例小队</button></div></div>`;
+    `<div class="empty"><h2>小队还没有成员</h2><p>${sr?"添加角色后，物理 / 眩晕伤害轨、伤势修正、先攻轮次、极限和状态会显示在这里":"添加角色后，生命、法术位、职业资源和状态会显示在这里"}，所有打开这个页面的人看到的是同一份数据。</p><div class="group"><button class="btn primary" data-act="add">＋ 添加角色</button><button class="btn" data-act="loadsample">载入示例小队</button></div></div>`;
   renderCombat();renderNotices();
   if(fk){const el=document.querySelector(`[data-fkey="${fk}"]`);if(el){if(fv!=null&&!(ae.classList.contains("mi-init")&&ae.readOnly))el.value=fv;el.focus()}}
 }
@@ -1028,8 +1346,8 @@ function render(){
 let view="full",miniAmt="";
 let pureModes={full:false,mini:false,pip:false};try{const p=JSON.parse(lsGet("dnd-pure-modes")||"{}");for(const k of Object.keys(pureModes))pureModes[k]=p[k]===true}catch(e){}
 function pureToggle(doc){const k=dp&&doc===dp.document?"pip":view;pureModes[k]=!pureModes[k];lsSet("dnd-pure-modes",JSON.stringify(pureModes));render()}
-function miniInit(c,id){return `<span class="init-handle" draggable="true" data-initdrag="${id}" title="拖动调整顺序；双击修改先攻"><input class="mi-init ${c.initPending?"pending":""}" type="number" inputmode="numeric" readonly value="${c.initPending?"":c.init}" placeholder="?" data-act="initset" data-fkey="minit-${id}" aria-label="${esc(c.name)} 的先攻" title="双击修改先攻；Enter 保存，Esc 取消"></span>`}
-function initiativeList(ids){return `<div class="mini initiative-list">${ids.map(id=>{const c=S.chars[id],ac=effAC(c);return `<div class="mrow initiative-row ${S.meta.round>0&&S.meta.turn===id?"turn":""}" data-id="${id}">${miniInit(c,id)}<b class="initiative-name">${esc(c.name)}</b><div class="mi-ac">AC<b class="${ac>c.ac?"up":ac<c.ac?"dn":""}">${ac}</b></div></div>`}).join("")}</div>`}
+function miniInit(c,id){return `<span class="init-handle" draggable="true" data-initdrag="${id}" title="拖动调整顺序；双击修改先攻"><input class="mi-init ${c.initPending?"pending":""}" type="number" inputmode="numeric" readonly value="${c.initPending?"":shownInit(c)}" placeholder="?" data-act="initset" data-fkey="minit-${id}" aria-label="${esc(c.name)} 的先攻" title="双击修改先攻；Enter 保存，Esc 取消"></span>`}
+function initiativeList(ids){return `<div class="mini initiative-list">${ids.map(id=>{const c=S.chars[id],ac=effAC(c),d=isSR()?srDefense(c):null;return `<div class="mrow initiative-row ${S.meta.round>0&&S.meta.turn===id?"turn":""} ${srOut(c)?"srout":""}" data-id="${id}">${miniInit(c,id)}<b class="initiative-name">${esc(c.name)}</b>${d?`<div class="mi-ac">防御<b class="${d.cls}">${d.v}</b></div>`:`<div class="mi-ac">AC<b class="${ac>c.ac?"up":ac<c.ac?"dn":""}">${ac}</b></div>`}</div>`}).join("")}</div>`}
 function startInitEdit(e){const h=e.target.closest(".init-handle"),t=e.target.closest(".mi-init")||(h&&h.querySelector(".mi-init"));if(!t)return;if(h)h.draggable=false;t.readOnly=false;t.dataset.before=t.value;t.focus();t.select()}
 function finishInitEdit(e){const t=e.target;if(!t.classList||!t.classList.contains("mi-init")||t.readOnly)return;t.readOnly=true;const h=t.closest(".init-handle");if(h)h.draggable=true;onChange({target:t})}
 document.addEventListener("dblclick",startInitEdit);document.addEventListener("focusout",finishInitEdit);
@@ -1039,7 +1357,7 @@ function initDropTarget(e){const row=e.target.closest(".mrow"),doc=e.target.owne
 function bindInitDrag(doc){
   doc.addEventListener("dragstart",e=>{const h=e.target.closest(".init-handle");if(!h)return;const t=h.querySelector(".mi-init");if(!t.readOnly||readOnly){e.preventDefault();return}initDrag={id:h.dataset.initdrag,team:S.team};h.closest(".mrow").classList.add("init-dragging");if(e.dataTransfer){e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",initDrag.id);e.dataTransfer.setDragImage(h.closest(".mrow"),12,12)}});
   doc.addEventListener("dragover",e=>{const p=initDropTarget(e);clearInitDrag(doc);if(!p)return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect="move";p.row.classList.add(p.after?"init-drop-after":"init-drop-before")});
-  doc.addEventListener("drop",e=>{const p=initDropTarget(e),drag=initDrag;initDrag=null;clearInitDrag(doc);if(!p||!drag)return;e.preventDefault();if(p.row.dataset.id===drag.id||!guard()||!S.chars[drag.id])return;let value;if(p.below){const below=S.chars[p.below.dataset.id];if(!below)return;value=below.init+1}else{const last=p.rows.filter(r=>r.dataset.id!==drag.id).pop();if(!last)return;value=S.chars[last.dataset.id].init-1}const c=S.chars[drag.id];c.init=value;c.initPending=false;c.initRoll=[];S.chars[drag.id]=normalize(c);persist(drag.id);if(S.meta.sortInit===false){S.meta.sortInit=true;persist("meta")}render()});
+  doc.addEventListener("drop",e=>{const p=initDropTarget(e),drag=initDrag;initDrag=null;clearInitDrag(doc);if(!p||!drag)return;e.preventDefault();if(p.row.dataset.id===drag.id||!guard()||!S.chars[drag.id])return;let value;if(p.below){const below=S.chars[p.below.dataset.id];if(!below)return;value=shownInit(below)+1}else{const last=p.rows.filter(r=>r.dataset.id!==drag.id).pop();if(!last)return;value=shownInit(S.chars[last.dataset.id])-1}const c=S.chars[drag.id];setShownInit(c,value);c.initPending=false;c.initRoll=[];S.chars[drag.id]=normalize(c);persist(drag.id);if(S.meta.sortInit===false){S.meta.sortInit=true;persist("meta")}render()});
   doc.addEventListener("dragend",()=>{initDrag=null;clearInitDrag(doc)});
   doc.addEventListener("dragleave",e=>{const r=e.target.closest(".mrow");if(r&&(!e.relatedTarget||!r.contains(e.relatedTarget)))r.classList.remove("init-drop-before","init-drop-after")});
 }
@@ -1048,7 +1366,22 @@ try{view=location.hash==="#mini"?"mini":(localStorage.getItem("dnd-view")==="min
 function setView(v){view=v;try{localStorage.setItem("dnd-view",v)}catch(e){}render()}
 window.addEventListener("hashchange",()=>{if(location.hash==="#mini"&&view!=="mini")setView("mini")});
 
+function srTagBits(c,withSpells){
+  const t=[];
+  // the "resource" tags come first (the PiP window splits them off)
+  if(withSpells){
+    t.push(["m","极限 "+(c.sr.edg-c.edgeUsed)+"/"+c.sr.edg]);
+    if(c.osOn)t.push(["m","OS "+c.os]);
+    c.res.forEach(r=>t.push(["m",r.name+" "+(r.max-r.used)+"/"+r.max]));
+  }
+  const wm=woundMod(c);if(wm)t.push(["d","伤势"+sgn(wm)]);
+  c.concs.forEach(n=>t.push(["k","维持·"+n]));
+  c.conds.forEach(n=>t.push(["c",n]));
+  c.fx.forEach(f=>t.push([f.kind==="buff"?"b":"d",(f.kind==="buff"?"▲":"▼")+f.name+(f.rounds==null?"":" "+f.rounds)]));
+  return t;
+}
 function tagBits(c,withSpells){
+  if(isSR())return srTagBits(c,withSpells);
   const t=[];
   if(withSpells){
     c.dcs.forEach(x=>t.push(["m",(x.name?x.name+" ":"")+"DC"+x.val]));
@@ -1068,9 +1401,25 @@ function tagBits(c,withSpells){
 let qdelArm=null,qdelT=null;
 function qdelBtn(id,c,cls){const on=qdelArm===id;return `<button class="${cls} ${on?"qdel-armed":""}" data-act="qdel" aria-label="删除 ${esc(c.name)}" title="删除这个怪物（点两次确认）">${on?"确认":"✕"}</button>`}
 function hpState(c){const p=c.hp/c.maxHp;return c.hp===0?"down":p<=.25?"crit":p<=.5?"warn":""}
+function srMiniRow(id,c,inPip){
+  const turn=S.meta.round>0&&S.meta.turn===id,st=srState(c),pm=physMax(c),sm=stunMax(c),d=srDefense(c),tags=srTagBits(c);
+  const pc=st.down?"crit":st.cls;
+  return `<div class="mrow ${turn?"turn":""} ${st.down?"down":""} ${srOut(c)?"srout":""}" data-id="${id}">
+      ${miniInit(c,id)}
+      <div class="mi-main"><div class="mi-top">${inPip?`<b>${esc(c.name)}</b>`:`<b data-act="conds" role="button" tabindex="0">${esc(c.name)}</b>`}<span class="mi-hp" title="剩余格数：物理${c.grunt?"":" / 眩晕"}">${c.grunt?"伤":"物"} ${pm-c.phys}/${pm}${c.grunt?"":` · 晕 ${sm-c.stun}/${sm}`}${c.over?` <em>溢出 ${c.over}</em>`:""}</span></div>
+        <div class="meter"><i class="${pc}" style="width:${((pm-c.phys)/pm*100).toFixed(1)}%"></i></div>${c.grunt?"":`<div class="meter"><i class="stun" style="width:${((sm-c.stun)/sm*100).toFixed(1)}%"></i></div>`}
+        ${tags.length?`<div class="mi-tags">${tags.map(([k,s])=>`<span class="${k}">${esc(s)}</span>`).join("")}</div>`:""}
+        <div class="mi-dc"><span>极限 <b>${c.sr.edg-c.edgeUsed}/${c.sr.edg}</b></span><span>骰池修正 <b>${sgn(srPoolMod(c))}</b></span><span>抗伤 <b>${c.sr.bod+srArmor(c)}</b></span>${c.osOn?`<span>OS <b>${c.os}</b></span>`:""}</div>
+        ${inPip?`<div class="group" style="margin-top:4px"><button class="pbtn" data-act="conds" aria-label="管理${esc(c.name)}的状态和效果">状态 / 效果</button><button class="pbtn" data-act="fx">＋ 效果</button></div>`:""}</div>
+      <div class="mi-ac" title="${esc(d.note)}">防御<b class="${d.cls}">${d.v}</b></div>
+      <div class="mi-btns sr"><button class="m" data-act="srm" data-kind="p" aria-label="${esc(c.name)} 受到物理伤害" title="物理伤害">P−</button><button class="m" data-act="srm" data-kind="s" aria-label="${esc(c.name)} 受到眩晕伤害" title="眩晕伤害">S−</button><button class="p" data-act="srm" data-kind="hp" aria-label="${esc(c.name)} 治疗物理伤害" title="治疗物理">P+</button><button class="p" data-act="srm" data-kind="hs" aria-label="${esc(c.name)} 恢复眩晕伤害" title="恢复眩晕">S+</button>${c.token&&c.token.id&&!inPip?`<button class="d" data-act="locate" data-token="${esc(c.token.id)}" aria-label="在地图上找到 ${esc(c.name)}" title="在地图上找到这个棋子">📍</button>`:""}${c.monster?qdelBtn(id,c,"d"):""}</div>
+    </div>`;
+}
 function miniList(ids,inPip){
-  let h=inPip?`<div class="mini">`:`<div class="mini"><div class="mini-amt"><label for="mini-amt">伤害/治疗量</label><input id="mini-amt" data-fkey="mini-amt" type="number" inputmode="numeric" min="0" value="${esc(miniAmt)}" placeholder="默认 1" title="每次点 − / ＋ 改变的生命值；留空按 1 点计算"><span class="hint">${inPip?"点 − 扣血、＋ 治疗，数值留空时每次 1 点；点圆点消耗或恢复法术位。":"点 − 扣血（先扣临时生命），点 ＋ 治疗；不填时每次 1 点。点名字管理状态。"}</span></div>`;
+  const sr=isSR();
+  let h=inPip?`<div class="mini">`:`<div class="mini"><div class="mini-amt"><label for="mini-amt">${sr?"伤害/治疗格数":"伤害/治疗量"}</label><input id="mini-amt" data-fkey="mini-amt" type="number" inputmode="numeric" min="0" value="${esc(miniAmt)}" placeholder="默认 1" title="${sr?"每次点 P / S 改变的格数；留空按 1 格计算":"每次点 − / ＋ 改变的生命值；留空按 1 点计算"}"><span class="hint">${sr?"点 P− / S− 记录物理 / 眩晕伤害，P+ / S+ 治疗；不填时每次 1 格。点名字管理状态。":"点 − 扣血（先扣临时生命），点 ＋ 治疗；不填时每次 1 点。点名字管理状态。"}</span></div>`;
   for(const id of ids){
+    if(sr){h+=srMiniRow(id,S.chars[id],inPip);continue}
     const c=S.chars[id],turn=S.meta.round>0&&S.meta.turn===id,st=hpState(c),total=c.maxHp+c.temp;
     const ac=effAC(c),acc=ac>c.ac?"up":ac<c.ac?"dn":"";
     const tags=tagBits(c);
@@ -1090,6 +1439,7 @@ function miniList(ids,inPip){
 }
 function prevTurn(){
   if(!guard())return;
+  if(isSR())return srPrev();
   const ids=sortedIds();if(!ids.length||S.meta.round<1)return;
   const i=ids.indexOf(S.meta.turn);
   if(i>0)S.meta.turn=ids[i-1];
@@ -1116,21 +1466,24 @@ function drawPip(){
   if(cur){const off=12+x.measureText(rt).width+10;x.fillStyle=PC.accent;x.fillText(fitText(x,"▶ "+cur.name,W-off-12),off,22)}
   if(!ids.length){x.fillStyle=PC.muted;x.font=`13px ${PF.body}`;x.fillText("小队还没有成员",12,64)}
   ids.forEach((id,i)=>{
-    const c=S.chars[id],y=head+i*rowH,turn=cur&&m.turn===id,st=hpState(c);
+    const c=S.chars[id],y=head+i*rowH,turn=cur&&m.turn===id,sr=isSR();
+    // what the row shows: HP and AC, or (SR5) the physical track and the defense pool
+    const v=sr?(()=>{const s=srState(c),pm=physMax(c),sm=stunMax(c),d=srDefense(c);return {st:s.down?"down":s.cls,hp:pm-c.phys,total:pm,temp:0,hs:(c.grunt?"":"晕"+(sm-c.stun)+"/"+sm+" ")+(c.grunt?"伤":"物")+(pm-c.phys)+"/"+pm,ac:d.v,base:c.sr.rea+c.sr.int,acl:"防御",down:s.label}})()
+      :{st:hpState(c),hp:c.hp,total:c.maxHp+c.temp,temp:c.temp,hs:c.hp+"/"+c.maxHp,ac:effAC(c),base:c.ac,acl:"AC",down:`濒死 ✓${c.ds.s} ✗${c.ds.f}`},st=v.st;
     rrect(x,6,y,W-12,rowH-6,7);x.fillStyle=turn?PC.turn:PC.row;x.fill();
     if(turn){x.strokeStyle=PC.accent;x.lineWidth=1.5;x.stroke()}
-    x.textAlign="center";x.font=`600 13px ${PF.num}`;x.fillStyle=PC.muted;x.fillText(c.initPending?"?":String(c.init),26,y+20);
-    if(pureModes.pip){x.textAlign="left";x.font=`600 15px ${PF.disp}`;x.fillStyle=PC.ink;x.fillText(fitText(x,c.name,W-122),44,y+23);x.textAlign="right";x.font=`600 14px ${PF.num}`;x.fillText("AC "+effAC(c),W-16,y+23);return}
+    x.textAlign="center";x.font=`600 13px ${PF.num}`;x.fillStyle=PC.muted;x.fillText(c.initPending?"?":String(shownInit(c)),26,y+20);
+    if(pureModes.pip){x.textAlign="left";x.font=`600 15px ${PF.disp}`;x.fillStyle=PC.ink;x.fillText(fitText(x,c.name,W-122),44,y+23);x.textAlign="right";x.font=`600 14px ${PF.num}`;x.fillText(v.acl+" "+v.ac,W-16,y+23);return}
     // hp text
     x.textAlign="right";const hx=W-62;let tx=hx;
-    if(c.temp){x.font=`500 12px ${PF.num}`;x.fillStyle=PC.arcane;const t=" +"+c.temp;x.fillText(t,tx,y+20);tx-=x.measureText(t).width}
-    x.font=`600 14px ${PF.num}`;x.fillStyle=st==="down"||st==="crit"?PC.crit:st==="warn"?PC.warn:PC.ink;const hs=c.hp+"/"+c.maxHp;x.fillText(hs,tx,y+20);tx-=x.measureText(hs).width;
+    if(v.temp){x.font=`500 12px ${PF.num}`;x.fillStyle=PC.arcane;const t=" +"+v.temp;x.fillText(t,tx,y+20);tx-=x.measureText(t).width}
+    x.font=`600 14px ${PF.num}`;x.fillStyle=st==="down"||st==="crit"?PC.crit:st==="warn"?PC.warn:PC.ink;const hs=v.hs;x.fillText(hs,tx,y+20);tx-=x.measureText(hs).width;
     // name
     x.textAlign="left";x.font=`700 15px ${PF.disp}`;x.fillStyle=PC.ink;x.fillText(fitText(x,c.name,tx-44-10),44,y+20);
     // bar
-    const bx=44,bw=hx-44,total=c.maxHp+c.temp;
+    const bx=44,bw=hx-44,total=v.total;
     rrect(x,bx,y+26,bw,5,2.5);x.fillStyle=PC.line;x.fill();
-    const hw=bw*c.hp/total,tw=bw*c.temp/total;
+    const hw=bw*v.hp/total,tw=bw*v.temp/total;
     if(hw>0){rrect(x,bx,y+26,hw,5,2.5);x.fillStyle=st==="crit"||st==="down"?PC.crit:st==="warn"?PC.warn:PC.good;x.fill()}
     if(tw>0){x.fillStyle=PC.arcane;x.globalAlpha=.6;x.fillRect(bx+hw,y+26,tw,5);x.globalAlpha=1}
     // tags
@@ -1144,11 +1497,11 @@ function drawPip(){
         x.fillStyle=col;x.fillText(s,px,ly);px+=w+9;
       }
     });
-    if(st==="down"){x.fillStyle=PC.crit;x.font=`600 11.5px ${PF.body}`;x.textAlign="right";x.fillText(`濒死 ✓${c.ds.s} ✗${c.ds.f}`,W-14,y+60)}
+    if(st==="down"){x.fillStyle=PC.crit;x.font=`600 11.5px ${PF.body}`;x.textAlign="right";x.fillText(v.down,W-14,y+60)}
     // AC shield
-    const ac=effAC(c),sx=W-34,sy=y+7,sw=30,sh=34;
+    const ac=v.ac,sx=W-34,sy=y+7,sw=30,sh=34;
     x.beginPath();x.moveTo(sx,sy);x.lineTo(sx+sw/2,sy+sh*.13);x.lineTo(sx+sw/2,sy+sh*.56);x.lineTo(sx,sy+sh);x.lineTo(sx-sw/2,sy+sh*.56);x.lineTo(sx-sw/2,sy+sh*.13);x.closePath();
-    x.fillStyle=ac>c.ac?PC.buff:ac<c.ac?PC.debuff:PC.ink;x.fill();
+    x.fillStyle=ac>v.base?PC.buff:ac<v.base?PC.debuff:PC.ink;x.fill();
     x.textAlign="center";x.fillStyle=PC.bg;x.font=`600 14px ${PF.num}`;x.fillText(String(ac),sx,sy+20);
   });
 }
@@ -1180,9 +1533,10 @@ function renderDocPip(){
   const d=dp.document,root=d.getElementById("pip");if(!root)return;
   const ae=d.activeElement,fk=ae&&ae.dataset?ae.dataset.fkey:null,fv=fk?ae.value:null;
   const m=S.meta,cur=m.round>0&&S.chars[m.turn]?S.chars[m.turn].name:null,ids=sortedIds();
-  const rb=k=>`<button class="pbtn ${pipArm===k?"armed":""}" data-act="piprest" data-kind="${k}" title="${k==="long"?"全队长休：生命回满，法术位与资源恢复（点两次确认）":"全队短休：契约法术位与短休资源恢复（点两次确认）"}">${pipArm===k?"确认?":(k==="long"?"长休":"短休")}</button>`;
+  const sr=isSR();
+  const rb=k=>`<button class="pbtn ${pipArm===k?"armed":""}" data-act="piprest" data-kind="${k}" title="${sr?(k==="long"?"全队复原：清空伤害，极限与资源恢复（点两次确认）":"刷新全队的极限（点两次确认）"):k==="long"?"全队长休：生命回满，法术位与资源恢复（点两次确认）":"全队短休：契约法术位与短休资源恢复（点两次确认）"}">${pipArm===k?"确认?":sr?(k==="long"?"复原":"极限"):(k==="long"?"长休":"短休")}</button>`;
   d.title=(teamName()||"小队")+" · 悬浮窗";
-  root.innerHTML=`<div class="pip-bar"><span class="pip-round" title="${esc(teamName())}">${m.round>0?`<b>${m.round}</b>轮${cur?" · "+esc(cur):""}`:"战斗外"}</span>${m.round>0?`<button class="pbtn" data-act="prev" aria-label="上一位" title="上一位">◀</button>`:""}<button class="pbtn" data-act="next" ${ids.length?"":"disabled"} aria-label="${m.round>0?"下一位":"开始战斗"}" title="${m.round>0?"下一位":"开始战斗"}">${m.round>0?"▶":"开战"}</button>${m.round>0?`<button class="pbtn ${pipArm==="end"?"armed":""}" data-act="pipend" title="结束战斗：轮数清零，效果保留（点两次确认）">${pipArm==="end"?"确认?":"结束"}</button>`:""}<input id="mini-amt" class="pip-amt" data-fkey="mini-amt" type="number" inputmode="numeric" min="0" value="${esc(miniAmt)}" placeholder="±HP" aria-label="伤害或治疗的生命值，留空按 1 点计算" title="伤害/治疗量：每次点 − / ＋ 改变的生命值；留空按 1 点计算"><button class="pbtn ${pipArm==="init"?"armed":""}" data-act="pipinit" ${ids.length?"":"disabled"} title="全队掷先攻 1d20 + 加值（点两次确认）" aria-label="全队掷先攻">${pipArm==="init"?"确认?":"🎲"}</button>${rb("short")}${rb("long")}</div>`+`<div class="group" style="margin-bottom:6px"><button class="pbtn" data-act="pure" aria-pressed="${pureModes.pip}">${pureModes.pip?"恢复面板":"纯先攻"}</button><button class="pbtn" data-act="npc">＋ NPC</button><span class="hint">拖动先攻调整顺序 · 双击修改</span></div>`+(ids.length?(pureModes.pip?initiativeList(ids):miniList(ids,true)):`<p class="hint">小队还没有成员。</p>`);
+  root.innerHTML=`<div class="pip-bar"><span class="pip-round" title="${esc(teamName())}">${m.round>0?`<b>${m.round}</b>${sr?"回合 "+(m.pass||1)+"轮次":"轮"}${cur?" · "+esc(cur):""}`:"战斗外"}</span>${m.round>0?`<button class="pbtn" data-act="prev" aria-label="上一位" title="上一位">◀</button>`:""}<button class="pbtn" data-act="next" ${ids.length?"":"disabled"} aria-label="${m.round>0?"下一位":"开始战斗"}" title="${m.round>0?"下一位":"开始战斗"}">${m.round>0?"▶":"开战"}</button>${m.round>0?`<button class="pbtn ${pipArm==="end"?"armed":""}" data-act="pipend" title="结束战斗：轮数清零，效果保留（点两次确认）">${pipArm==="end"?"确认?":"结束"}</button>`:""}<input id="mini-amt" class="pip-amt" data-fkey="mini-amt" type="number" inputmode="numeric" min="0" value="${esc(miniAmt)}" placeholder="${sr?"±格":"±HP"}" aria-label="伤害或治疗的数值，留空按 1 计算" title="伤害/治疗量：每次点 − / ＋ 改变的生命值；留空按 1 点计算"><button class="pbtn ${pipArm==="init"?"armed":""}" data-act="pipinit" ${ids.length?"":"disabled"} title="${sr?"全队掷先攻：基础值 + 先攻骰":"全队掷先攻 1d20 + 加值"}（点两次确认）" aria-label="全队掷先攻">${pipArm==="init"?"确认?":"🎲"}</button>${rb("short")}${rb("long")}</div>`+`<div class="group" style="margin-bottom:6px"><button class="pbtn" data-act="pure" aria-pressed="${pureModes.pip}">${pureModes.pip?"恢复面板":"纯先攻"}</button><button class="pbtn" data-act="npc">＋ NPC</button><span class="hint">拖动先攻调整顺序 · 双击修改</span></div>`+(ids.length?(pureModes.pip?initiativeList(ids):miniList(ids,true)):`<p class="hint">小队还没有成员。</p>`);
   root.querySelector(".pip-amt").hidden=pureModes.pip;
   if(fk){const el=d.querySelector(`[data-fkey="${fk}"]`);if(el){if(fv!=null&&!(ae.classList.contains("mi-init")&&ae.readOnly))el.value=fv;el.focus()}}
 }
@@ -1267,8 +1621,99 @@ function confirmModal(title,body,okLabel,onOk,danger){
   });
 }
 
+/* SR5 quick NPC: a grunt by default (one damage track), initiative rolled at once */
+function srNpcModal(doc=document){
+  openModal(`<h2>快速加入 NPC</h2><p class="sub">只需名字，其他项目可留空；之后可在角色编辑中补充属性。</p><form id="npc-form"><div class="fields"><div class="field wide"><label for="npc-name">名字 *</label><input id="npc-name" required maxlength="80" placeholder="例如 公司保安 1"></div><div class="field"><label for="npc-pr">专业等级（可选）</label><input id="npc-pr" type="number" min="0" max="12" placeholder="0–6"></div><div class="field"><label for="npc-ib">先攻基础值</label><input id="npc-ib" type="number" min="0" max="60" placeholder="反应 + 直觉"></div><div class="field"><label for="npc-id">先攻骰</label><input id="npc-id" type="number" min="1" max="5" placeholder="1"></div><div class="field"><label for="npc-bod">体质</label><input id="npc-bod" type="number" min="1" max="20" placeholder="3"></div><div class="field"><label for="npc-wil">意志</label><input id="npc-wil" type="number" min="1" max="20" placeholder="3"></div><div class="field"><label for="npc-arm">护甲</label><input id="npc-arm" type="number" min="0" max="99" placeholder="0"></div><div class="field"><label for="npc-rea">反应 + 直觉（防御）</label><input id="npc-rea" type="number" min="0" max="40" placeholder="6"></div></div><label class="check" style="margin-top:8px"><input type="checkbox" id="npc-grunt" checked>杂兵：只有一条伤势轨，物理和眩晕伤害记在一起</label><div class="mfoot"><button class="btn ghost" type="button" data-x>取消</button><button class="btn primary" type="submit">加入 NPC</button></div></form>`,root=>{
+    root.querySelector("[data-x]").onclick=modalClose;
+    root.querySelector("form").onsubmit=e=>{
+      e.preventDefault();if(!guard())return;
+      const val=k=>root.querySelector("#npc-"+k).value.trim(),name=val("name");
+      if(!name){root.querySelector("#npc-name").focus();toast("请填写 NPC 名字。");return}
+      const c=normalize(blank());c.name=name;c.grunt=root.querySelector("#npc-grunt").checked;
+      const pr=val("pr");c.clsLabel=(c.grunt?"杂兵":"NPC")+(pr?" · 专业等级 "+clamp(int(pr),0,12):"");
+      if(val("bod"))c.sr.bod=clamp(int(val("bod")),1,20);if(val("wil"))c.sr.wil=clamp(int(val("wil")),1,20);
+      if(val("arm"))c.armor=clamp(int(val("arm")),0,99);
+      // defense only needs REA + INT: split it between the two
+      if(val("rea")){const t=clamp(int(val("rea")),0,40);c.sr.rea=Math.ceil(t/2);c.sr.int=Math.floor(t/2)}
+      if(val("ib"))c.srInitBase=clamp(int(val("ib")),0,60);if(val("id"))c.srInitDice=clamp(int(val("id")),1,5);
+      srRollInit(c);
+      const id="c"+uid();S.chars[id]=normalize(c);persist(id);modalClose();render();toast("已加入「"+name+"」，先攻 "+shownInit(S.chars[id])+"。");
+    };
+  },doc);
+}
+/* SR5 character sheet */
+function srEditModal(id,restore){
+  const isNew=!id;
+  if(!isNew&&!S.chars[id])return;
+  const d=normalize(clone(restore||(isNew?blank():S.chars[id])));
+  let delArm=false;
+  const num=(k,label,attrs)=>`<div class="field"><label for="s-${k}">${label}</label><input id="s-${k}" type="number" ${attrs||""} data-k="${k}" data-n value="${d[k]}"></div>`;
+  const opt=(k,label)=>`<div class="field"><label for="s-${k}">${label}</label><input id="s-${k}" type="number" min="0" data-k="${k}" data-null value="${d[k]==null?"":d[k]}" placeholder="自动 ${k==="srInitBase"?srInitBase(Object.assign({},d,{srInitBase:null})):srInitDice(Object.assign({},d,{srInitDice:null}))}"></div>`;
+  const yesno=(k,label,no,yes)=>`<div class="field"><label for="s-${k}">${label}</label><select id="s-${k}" data-k="${k}"><option value="" ${d[k]?"":"selected"}>${no}</option><option value="1" ${d[k]?"selected":""}>${yes}</option></select></div>`;
+  const preview=()=>{const c=normalize(clone(d)),l=srLimits(c);return `物理轨 ${physMax(c)} 格${c.grunt?"（杂兵：唯一伤势轨）":" · 眩晕轨 "+stunMax(c)+" 格 · 溢出 "+overMax(c)+" 格"} · 先攻 ${srInitBase(c)} + ${srInitDice(c)}D6（${INIT_MODES[c.initMode]}） · 防御 ${c.sr.rea+c.sr.int} · 抗伤 ${c.sr.bod+c.armor} · 上限 身 ${l.p} / 心 ${l.m} / 社 ${l.s}`};
+  const draw=root=>{
+    root.innerHTML=`<h2>${isNew?"添加角色":"编辑角色"}</h2>
+    <div class="fields">
+      <div class="field wide"><label for="s-name">名字</label><input id="s-name" data-k="name" value="${esc(d.name)}"></div>
+      <div class="field"><label for="s-cls">职能</label><input id="s-cls" data-k="clsLabel" list="sr-roles" value="${esc(d.clsLabel||"")}" placeholder="如 街头武士"><datalist id="sr-roles">${SR_ROLES.map(r=>`<option value="${r}">`).join("")}</datalist></div>
+      <div class="field"><label for="s-meta">种族</label><input id="s-meta" data-k="metatype" list="sr-metas" value="${esc(d.metatype)}" placeholder="如 人类"><datalist id="sr-metas">${METATYPES.map(r=>`<option value="${r}">`).join("")}</datalist></div>
+      ${yesno("grunt","伤势轨","物理 + 眩晕（角色）","只有一条（杂兵）")}
+    </div>
+    <div class="sec"><div class="sec-h"><h3>属性</h3></div>
+      <div class="attrgrid">${SR_ATTRS.map(([k,n])=>`<div class="field"><label for="a-${k}">${n}</label><input id="a-${k}" type="number" min="0" ${k==="ess"?'max="6" step="0.1"':'max="20"'} data-a="${k}" value="${d.sr[k]}"></div>`).join("")}</div>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>伤势与护甲</h3></div>
+      <div class="fields">${num("armor","护甲",'min="0" max="99"')}${num("phys","物理伤害",'min="0"')}${d.grunt?"":num("stun","眩晕伤害",'min="0"')+num("over","溢出伤害",'min="0"')}${num("physBonus","物理轨额外格",'min="-8" max="24"')}${d.grunt?"":num("stunBonus","眩晕轨额外格",'min="-8" max="24"')}${num("woundIgnore","忽略伤势格数",'min="0" max="12"')}</div>
+      <p class="hint">额外格：如 Toughness 等特质、生化改造。忽略伤势格数：高痛阈、损伤补偿器等，每条轨计算伤势修正前先扣除。</p>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>先攻</h3></div>
+      <div class="fields"><div class="field"><label for="s-mode">先攻模式</label><select id="s-mode" data-k="initMode">${Object.entries(INIT_MODES).map(([k,v])=>`<option value="${k}" ${d.initMode===k?"selected":""}>${v}</option>`).join("")}</select></div>${num("initExtra","额外先攻值",'min="-10" max="20"')}${num("initExtraDice","额外先攻骰",'min="0" max="4"')}${opt("srInitBase","先攻基础值")}${opt("srInitDice","先攻骰数")}
+      <div class="field"><label for="s-im">全队掷先攻时</label><select id="s-im" data-k="initManual"><option value="" ${d.initManual?"":"selected"}>自动掷骰</option><option value="1" ${d.initManual?"selected":""}>由玩家自己掷，手动填写</option></select></div></div>
+      <p class="hint">肉身 / AR：反应 + 直觉 + 1D6，额外先攻值和先攻骰（如反射增强、Jazz）只对肉身生效，总骰数最多 5。冷模拟 VR：直觉 + 数据处理 + 3D6；热模拟：+4D6；星界：直觉 × 2 + 2D6。基础值和骰数留空时自动计算。</p>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>矩阵</h3></div>
+      <div class="attrgrid">${SR_MATRIX.map(([k,n])=>`<div class="field"><label for="a-${k}">${n}</label><input id="a-${k}" type="number" min="0" max="20" data-a="${k}" value="${d.sr[k]}"></div>`).join("")}</div>
+      <div class="fields" style="margin-top:6px">${yesno("osOn","OS","不追踪","追踪（黑客 / 技术者）")}${d.osOn?num("os","当前 OS",'min="0" max="40"'):""}</div>
+      <p class="hint">填黑客网络板或技术者生物网络的攻击性、隐匿性、数据处理、防火墙。数据处理用于矩阵先攻（冷 / 热模拟 VR）；卡片会显示矩阵防御（直觉 + 防火墙）。</p>
+    </div>
+    <div class="sec"><div class="sec-h"><h3>资源</h3><button class="btn sm" data-addres>＋ 资源</button></div>
+      <div class="reslist">${d.res.length?d.res.map((r,i)=>`<div class="resrow dcrow">${moveCtl(i,d.res.length)}<input aria-label="资源名称" data-res="${i}" data-rk="name" value="${esc(r.name)}"><input aria-label="上限" type="number" min="0" data-res="${i}" data-rk="max" value="${r.max}"><button class="iconbtn" data-delres="${i}" aria-label="删除资源">×</button></div>`).join(""):`<p class="hint">例如：弹匣、精魂服务次数、急救包、药剂、无人机电量。全队复原时恢复。</p>`}</div>
+    </div>
+    <div class="preview"><b>预览</b><p class="hint" data-pv>${esc(preview())}</p></div>
+    <div class="mfoot">${isNew?"":`<button class="btn danger left" data-del>${delArm?"再点一次确认删除":"删除角色"}</button>`}<button class="btn ghost" data-x>取消</button><button class="btn primary" data-save>${isNew?"添加":"保存"}</button></div>`;
+  };
+  openModal("",root=>{
+    draw(root);
+    bindReorder(root,()=>d.res,()=>draw(root));
+    const pv=()=>{const el=root.querySelector("[data-pv]");if(el)el.textContent=preview()};
+    root.addEventListener("input",e=>{
+      const t=e.target;
+      if(t.dataset.k){d[t.dataset.k]=t.hasAttribute("data-null")?(t.value===""?null:int(t.value)):t.hasAttribute("data-n")?int(t.value):t.value}
+      else if(t.dataset.a){d.sr[t.dataset.a]=t.dataset.a==="ess"?parseFloat(t.value):int(t.value)}
+      else if(t.dataset.res!=null){const r=d.res[+t.dataset.res];r[t.dataset.rk]=t.dataset.rk==="max"?Math.max(0,int(t.value)):t.value}
+      pv();
+    });
+    root.addEventListener("change",e=>{const k=e.target.dataset.k;if(k==="grunt"||k==="osOn"){d[k]=e.target.value==="1";draw(root)}});
+    root.addEventListener("click",e=>{
+      const t=e.target.closest("button");if(!t)return;
+      if(t.hasAttribute("data-x"))modalClose();
+      else if(t.hasAttribute("data-addres")){d.res.push(R("新资源",1,"none"));draw(root);const ins=root.querySelectorAll('[data-rk="name"]');ins[ins.length-1].select()}
+      else if(t.dataset.delres!=null){d.res.splice(+t.dataset.delres,1);draw(root)}
+      else if(t.hasAttribute("data-del")){if(!delArm){delArm=true;draw(root)}else{modalClose();const n=S.chars[id].name;removeChar(id);toast("已删除 "+n)}}
+      else if(t.hasAttribute("data-save")){
+        if(!guard())return;
+        if(!d.name.trim())d.name="无名角色";
+        const c=normalize(d);
+        if(isNew){const nid="c"+uid();c.created=Date.now();srRollInit(c);S.chars[nid]=c;persist(nid)}
+        else{S.chars[id]=c;persist(id)}
+        modalClose();render();
+      }
+    });
+  });
+}
 /* quick NPC */
 function npcModal(doc=document){
+  if(isSR())return srNpcModal(doc);
   openModal(`<h2>快速加入 NPC</h2><p class="sub">只需名字，其他项目可留空；之后可在角色编辑中补充。</p><form id="npc-form"><div class="fields"><div class="field wide"><label for="npc-name">名字 *</label><input id="npc-name" name="name" required maxlength="80" placeholder="例如 哥布林 1"></div><div class="field"><label for="npc-init">先攻（可选）</label><input id="npc-init" name="init" type="number" min="-20" max="60" placeholder="待填写"></div><div class="field"><label for="npc-hp">生命（可选）</label><input id="npc-hp" name="hp" type="number" min="1" placeholder="默认 10"></div><div class="field"><label for="npc-ac">AC（可选）</label><input id="npc-ac" name="ac" type="number" min="0" placeholder="默认 10"></div><div class="field"><label for="npc-dc">DC（可选）</label><input id="npc-dc" name="dc" type="number" min="0" max="40" placeholder="留空不设置"></div></div><div class="mfoot"><button class="btn ghost" type="button" data-x>取消</button><button class="btn primary" type="submit">加入 NPC</button></div></form>`,root=>{
     root.querySelector("[data-x]").onclick=modalClose;
     root.querySelector("form").onsubmit=e=>{e.preventDefault();if(!guard())return;const val=k=>root.querySelector("#npc-"+k).value.trim(),name=val("name");if(!name){root.querySelector("#npc-name").focus();toast("请填写 NPC 名字。");return}const c=normalize(blank());c.name=name;c.clsLabel="NPC";const hp=val("hp"),ac=val("ac"),init=val("init"),dc=val("dc");if(dc)c.dcs.push({id:uid(),name:"",val:clamp(int(dc),0,40)});if(hp)c.hp=c.maxHp=Math.max(1,int(hp));if(ac)c.ac=Math.max(0,int(ac));c.init=init?clamp(int(init),-20,60):0;c.initPending=!init;c.initManual=!init;const id="c"+uid();S.chars[id]=c;persist(id);modalClose();render();toast("已加入「"+name+"」。")};
@@ -1276,6 +1721,7 @@ function npcModal(doc=document){
 }
 /* edit character */
 function editModal(id,restore){
+  if(isSR())return srEditModal(id,restore);
   const isNew=!id;
   if(!isNew&&!S.chars[id])return;
   const d=normalize(clone(restore||(isNew?blank():S.chars[id])));
@@ -1520,18 +1966,18 @@ function classEditModal(cid,onSave,onCancel){
 
 /* saved parties */
 function teamsModal(focusNew){
-  let renaming=null,delArm=null,newName="";
+  let renaming=null,delArm=null,newName="",newSys=S.meta.system;
   const fmt=t=>{try{return new Date(t).toLocaleDateString("zh-CN")}catch(e){return ""}};
   const draw=root=>{
     const ids=teamIds();
-    root.innerHTML=`<h2>小队</h2><p class="sub">每个小队有自己的角色、回合进度和规则设置（法术点、多重专注）。自定义职业所有小队共用。切换只影响你自己的视图，队友各自选择要看的小队。</p>
+    root.innerHTML=`<h2>小队</h2><p class="sub">每个小队有自己的角色、回合进度和规则设置（D&amp;D 或 Shadowrun 5e、法术点、多重专注）。自定义职业所有小队共用。切换只影响你自己的视图，队友各自选择要看的小队。</p>
     <div class="tlist">${ids.map(t=>{const T=S.teams[t],cur=t===S.team;
       return `<div class="trow ${cur?"cur":""}">${renaming===t
         ?`<input id="t-ren" value="${esc(T.name)}" aria-label="小队名称"><span class="group"><button class="btn sm primary" data-rensave="${esc(t)}">保存</button><button class="btn sm ghost" data-rencancel>取消</button></span>`
-        :`<div><b>${esc(T.name)}</b><p>${cur?"当前小队 · ":""}${T.meta.round>0?"战斗中，第 "+T.meta.round+" 轮":"战斗外"}${T.meta.spellSystem==="points"?" · 法术点":""}${T.meta.multiConc?" · 多重专注":""} · 建于 ${fmt(T.created)}</p></div>
+        :`<div><b>${esc(T.name)}</b><p>${cur?"当前小队 · ":""}${T.meta.system==="sr5"?"Shadowrun 5e · ":""}${T.meta.round>0?"战斗中，第 "+T.meta.round+(T.meta.system==="sr5"?" 战斗回合":" 轮"):"战斗外"}${T.meta.system!=="sr5"&&T.meta.spellSystem==="points"?" · 法术点":""}${T.meta.system!=="sr5"&&T.meta.multiConc?" · 多重专注":""} · 建于 ${fmt(T.created)}</p></div>
           <span class="group">${cur?"":`<button class="btn sm primary" data-sw="${esc(t)}">切换</button>`}<button class="btn sm" data-ren="${esc(t)}">重命名</button><button class="btn sm ghost danger" data-del="${esc(t)}" ${ids.length<2?"disabled":""}>${delArm===t?"确认删除":"删除"}</button></span>`}</div>`}).join("")}</div>
     <div class="sec"><div class="sec-h"><h3>新建小队</h3></div>
-      <div class="newteam"><input id="t-new" value="${esc(newName)}" placeholder="如 周五团·深水城" aria-label="新小队名称"><button class="btn primary" data-new>新建空小队</button><button class="btn" data-copy>复制当前小队</button></div>
+      <div class="newteam"><input id="t-new" value="${esc(newName)}" placeholder="如 周五团·深水城" aria-label="新小队名称"><select id="t-sys" class="teamsel" aria-label="新小队的规则"><option value="dnd" ${newSys==="dnd"?"selected":""}>D&amp;D 等</option><option value="sr5" ${newSys==="sr5"?"selected":""}>Shadowrun 5e</option></select><button class="btn primary" data-new>新建空小队</button><button class="btn" data-copy>复制当前小队</button></div>
       <p class="hint">复制会带上当前小队的全部角色（含当前生命、资源与状态）和规则设置，回合进度从头开始。</p>
     </div>
     <div class="mfoot"><button class="btn ghost" data-x>关闭</button></div>`;
@@ -1540,6 +1986,7 @@ function teamsModal(focusNew){
     draw(root);
     if(focusNew){const el=root.querySelector("#t-new");el&&el.focus()}
     root.addEventListener("input",e=>{if(e.target.id==="t-new")newName=e.target.value});
+    root.addEventListener("change",e=>{if(e.target.id==="t-sys")newSys=e.target.value==="sr5"?"sr5":"dnd"});
     root.addEventListener("keydown",e=>{
       if(e.key!=="Enter")return;
       if(e.target.id==="t-new"){e.preventDefault();root.querySelector("[data-new]").click()}
@@ -1559,8 +2006,8 @@ function teamsModal(focusNew){
         const name=newName.trim()||(copy?teamName()+" 副本":"新小队");
         const chars=copy?Object.values(S.chars).map(c=>clone(c)):null;
         const meta=copy?clone(S.meta):null;
-        const tid=createTeam(name,chars);
-        if(meta&&tid){Object.assign(S.teams[tid].meta,{spellSystem:meta.spellSystem,multiConc:meta.multiConc,sortInit:meta.sortInit});persist("team:"+tid)}
+        const tid=createTeam(name,chars,copy?meta.system:newSys);
+        if(meta&&tid){Object.assign(S.teams[tid].meta,{spellSystem:meta.spellSystem,multiConc:meta.multiConc,sortInit:meta.sortInit,system:meta.system,srOverflow:meta.srOverflow});persist("team:"+tid)}
         modalClose();toast("已新建并切换到「"+name+"」。");
       }
     });
@@ -1570,9 +2017,18 @@ function teamsModal(focusNew){
 /* settings */
 function settingsModal(){
   const draw=root=>{
-    const pts=usePoints();
+    const pts=usePoints(),sr=isSR();
     root.innerHTML=`<h2>设置</h2><p class="sub">这些规则只对当前小队「${esc(teamName())}」生效，查看这个小队的所有人看到的都一样。其他小队可以各自设置。</p>
-    <div class="sec"><div class="sec-h"><h3>施法资源</h3></div>
+    <div class="sec"><div class="sec-h"><h3>规则系统</h3></div>
+      <span class="seg wide"><button class="b" aria-pressed="${!sr}" data-rs="dnd">D&amp;D（5e / 5r / PF2 / 4e / 3R）</button><button class="b" aria-pressed="${sr}" data-rs="sr5">Shadowrun 5e</button></span>
+      <p class="hint">${sr
+        ?"暗影狂奔 5 版：物理 / 眩晕伤害轨（8 + 体质或意志的一半，向上取整），每 3 格伤害 −1 伤势修正，同时扣先攻分数和骰池；先攻为基础值 + 1–5D6，每个先攻轮次后所有人 −10，没人剩下时进入新战斗回合并重新掷先攻；极限、极限突破和二次机会；维持法术每个 −2；黑客的矩阵属性和 OS。切换回 D&amp;D 时角色的 SR 数据保留。"
+        :"切换到 Shadowrun 5e 后，卡片换成伤害轨、先攻轮次、极限和骰池掷骰。角色的 D&amp;D 数据保留，切换回来即可继续使用。"}</p>
+    </div>
+    ${sr?`<div class="sec"><div class="sec-h"><h3>眩晕溢出</h3></div>
+      <span class="seg wide"><button class="b" aria-pressed="${S.meta.srOverflow!=="full"}" data-ov="half">每 2 格眩晕 → 1 格物理</button><button class="b" aria-pressed="${S.meta.srOverflow==="full"}" data-ov="full">1 格眩晕 → 1 格物理</button></span>
+      <p class="hint">眩晕伤害轨填满之后，多出来的眩晕伤害如何转入物理伤害轨。按你们团采用的规则选择。</p>
+    </div>`:`<div class="sec"><div class="sec-h"><h3>施法资源</h3></div>
       <span class="seg wide"><button class="b" aria-pressed="${!pts}" data-sys="slots">法术位（标准规则）</button><button class="b" aria-pressed="${pts}" data-sys="points">法术点（变体规则）</button></span>
       <p class="hint">${pts
         ?"使用城主指南的法术点变体：每名施法者的法术点上限等于其法术位表换算后的总点数（1–9 环依次消耗 2、3、5、6、7、9、10、11、13 点），最高可施放的环阶取决于原本拥有的最高环位。6 环及以上的法术每次长休各只能施放一次。长休恢复全部法术点。邪术师的契约法术位不受影响。"
@@ -1583,7 +2039,7 @@ function settingsModal(){
       <p class="hint">${multiConc()
         ?"已开启：在角色编辑或状态面板里为每个角色设定可同时维持的专注数（1–9）。专注数达到上限后再开始新的专注，最早的那个会结束。受到伤害时会列出所有需要维持的专注；生命降到 0 时全部专注结束。"
         :"开启后，可以为每个角色单独设定同时维持几个专注，适合特殊职业能力、魔法物品或自制规则。关闭时已有的专注会保留，之后开始新的专注会按标准规则只保留 1 个。"}</p>
-    </div>
+    </div>`}
     <div class="sec"><div class="sec-h"><h3>悬浮窗</h3></div>
       <p class="hint">${canDocPip()?"当前页面支持可编辑的置顶悬浮窗。":"这个页面嵌在 Claude 的框架里，浏览器只允许只读的置顶悬浮窗。需要在悬浮窗里直接编辑时，请使用离线版文件（在 Chrome 或 Edge 里直接打开），或把紧凑视图开在一个小窗口里配合系统的置顶功能使用。"}</p>
     </div>
@@ -1594,6 +2050,8 @@ function settingsModal(){
     root.addEventListener("click",e=>{
       const t=e.target.closest("button");if(!t)return;
       if(t.hasAttribute("data-x"))modalClose();
+      else if(t.dataset.rs){const want=t.dataset.rs;if(want!==S.meta.system){setMeta({system:want,round:0,turn:null,pass:1,acted:[]});toast(want==="sr5"?"「"+teamName()+"」改用 Shadowrun 5e 规则。":"「"+teamName()+"」改用 D&D 规则。")}draw(root)}
+      else if(t.dataset.ov){if(t.dataset.ov!==S.meta.srOverflow)setMeta({srOverflow:t.dataset.ov});draw(root)}
       else if(t.dataset.mc){const on=t.dataset.mc==="1";if(on!==multiConc()){setMeta({multiConc:on});toast(on?"已开启多重专注变体。":"已恢复标准专注规则。")}draw(root)}
       else if(t.dataset.sys){const want=t.dataset.sys;if((want==="points")!==usePoints()){setMeta({spellSystem:want});toast(want==="points"?"已切换到法术点变体规则。":"已切换回标准法术位。")}draw(root)}
     });
@@ -1617,13 +2075,13 @@ function condModal(id,doc=document){
     <div class="sec"><div class="sec-h"><h3>角色当前状态</h3></div><div class="chips">${c.conds.length?c.conds.map(n=>`<span class="chip cond" title="${esc(condSummary(c,n))}">${esc(n)}${condLibrary.some(x=>x[0]===n)?"":`<button class="btn sm ghost" data-editcond="${esc(n)}" title="补充摘要并保存到状态库">存入库</button>`}<button class="x" data-custom-remove="${esc(n)}" aria-label="从角色移除${esc(n)}">×</button></span>`).join(""):`<span class="empty-line">无异常状态</span>`}</div></div>
     <div class="sec"><div class="sec-h"><h3>增益 / 减益</h3><button class="btn sm" data-addfx>＋ 效果</button></div><div class="chips">${c.fx.length?c.fx.map(f=>`<span class="chip ${f.kind}">${esc(f.name)}${f.rounds==null?"":" · "+f.rounds+"轮"}<button class="x" data-removefx="${esc(f.id)}" aria-label="移除${esc(f.name)}">×</button></span>`).join(""):`<span class="empty-line">没有增益或减益</span>`}</div></div>
     <div class="fields">
-      ${pf2Rules()&&rules()!=="5r"?"":`<div class="field"><label>力竭等级（0–6）</label><span class="counter"><button data-exh="-1" aria-label="减少力竭">−</button><b>${c.exh}</b><button data-exh="1" aria-label="增加力竭">＋</button></span></div>`}
-      ${multi?`<div class="field"><label>可同时专注</label><span class="counter"><button data-cm="-1" aria-label="减少专注上限">−</button><b>${c.concMax} 个</b><button data-cm="1" aria-label="增加专注上限">＋</button></span></div>`:""}
+      ${isSR()||pf2Rules()&&rules()!=="5r"?"":`<div class="field"><label>力竭等级（0–6）</label><span class="counter"><button data-exh="-1" aria-label="减少力竭">−</button><b>${c.exh}</b><button data-exh="1" aria-label="增加力竭">＋</button></span></div>`}
+      ${multi&&!isSR()?`<div class="field"><label>可同时专注</label><span class="counter"><button data-cm="-1" aria-label="减少专注上限">−</button><b>${c.concMax} 个</b><button data-cm="1" aria-label="增加专注上限">＋</button></span></div>`:""}
     </div>
-    <div class="sec"><div class="sec-h"><h3>专注 ${c.concs.length}/${lim}</h3></div>
-      <div class="chips">${c.concs.length?c.concs.map((n,i)=>`<span class="chip conc">${esc(n)}<button class="x" data-dc="${i}" aria-label="结束专注${esc(n)}">×</button></span>`).join(""):`<span class="empty-line">没有正在维持的专注</span>`}</div>
-      <div class="concadd"><input id="m-conc" value="${esc(pending)}" placeholder="法术名，如 祝福" aria-label="开始专注的法术"><button class="btn sm" data-addconc>开始专注</button></div>
-      <p class="hint">${multi?`多重专注已开启：${esc(c.name)} 最多同时维持 ${lim} 个专注，再开始新的专注时最早的那个结束。`:"标准规则：开始新的专注会结束原来的专注。"}</p>
+    <div class="sec"><div class="sec-h"><h3>${isSR()?"维持法术 "+c.concs.length:"专注 "+c.concs.length+"/"+lim}</h3></div>
+      <div class="chips">${c.concs.length?c.concs.map((n,i)=>`<span class="chip conc">${esc(n)}<button class="x" data-dc="${i}" aria-label="结束${isSR()?"维持":"专注"}${esc(n)}">×</button></span>`).join(""):`<span class="empty-line">${isSR()?"没有正在维持的法术":"没有正在维持的专注"}</span>`}</div>
+      <div class="concadd"><input id="m-conc" value="${esc(pending)}" placeholder="${isSR()?"法术名，如 护甲术":"法术名，如 祝福"}" aria-label="${isSR()?"开始维持的法术":"开始专注的法术"}"><button class="btn sm" data-addconc>${isSR()?"开始维持":"开始专注"}</button></div>
+      <p class="hint">${isSR()?"每个维持中的法术使所有检定 −2（卡片上的骰池修正已计入）。失去意识时全部结束。":multi?`多重专注已开启：${esc(c.name)} 最多同时维持 ${lim} 个专注，再开始新的专注时最早的那个结束。`:"标准规则：开始新的专注会结束原来的专注。"}</p>
     </div>
     <div class="mfoot"><button class="btn primary" data-x>完成</button></div>`;
   };
@@ -1663,17 +2121,18 @@ function condModal(id,doc=document){
 
 /* effect modal */
 function fxModal(id,doc=document){
-  const f={name:"",kind:"buff",rounds:10,ac:0,note:""};
+  const sr=isSR(),f={name:"",kind:"buff",rounds:sr?null:10,ac:0,dp:0,note:""},presets=sr?SR_FX:FX_PRESETS;
   const targets=new Set([id]);
   const ids=sortedIds();
   const draw=root=>{
-    root.innerHTML=`<h2>添加增益 / 减益</h2><p class="sub">点常用法术快速填入，或自己写。每到新一轮，持续轮数自动 −1，归零时移除。</p>
-    <div class="presets">${FX_PRESETS.map((p,i)=>`<button class="chip ${p.kind}" data-pre="${i}"><span class="k">${p.kind==="buff"?"▲":"▼"}</span>${p.name}</button>`).join("")}</div>
+    root.innerHTML=`<h2>添加增益 / 减益</h2><p class="sub">点常用${sr?"法术或药物":"法术"}快速填入，或自己写。每到${sr?"新的战斗回合，持续回合数":"新一轮，持续轮数"}自动 −1，归零时移除。</p>
+    <div class="presets">${presets.map((p,i)=>`<button class="chip ${p.kind}" data-pre="${i}"><span class="k">${p.kind==="buff"?"▲":"▼"}</span>${p.name}</button>`).join("")}</div>
     <div class="fields">
       <div class="field wide"><label for="f-name">名称</label><input id="f-name" data-f="name" value="${esc(f.name)}" placeholder="如 祝福、虚弱射线"></div>
       <div class="field"><label>类型</label><span class="seg"><button class="b" aria-pressed="${f.kind==="buff"}" data-kind="buff">增益</button><button class="d" aria-pressed="${f.kind==="debuff"}" data-kind="debuff">减益</button></span></div>
-      <div class="field"><label for="f-r">持续轮数</label><input id="f-r" type="number" min="0" data-f="rounds" value="${f.rounds??""}" placeholder="留空 = 持续"></div>
-      <div class="field"><label for="f-ac">AC 调整</label><input id="f-ac" type="number" data-f="ac" value="${f.ac}"></div>
+      <div class="field"><label for="f-r">${sr?"持续战斗回合":"持续轮数"}</label><input id="f-r" type="number" min="0" data-f="rounds" value="${f.rounds??""}" placeholder="留空 = 持续"></div>
+      <div class="field"><label for="f-ac">${sr?"护甲调整":"AC 调整"}</label><input id="f-ac" type="number" data-f="ac" value="${f.ac}"></div>
+      ${sr?`<div class="field"><label for="f-dp">骰池调整</label><input id="f-dp" type="number" data-f="dp" value="${f.dp}" title="计入所有检定和防御"></div>`:""}
       <div class="field wide"><label for="f-note">备注</label><input id="f-note" data-f="note" value="${esc(f.note)}" placeholder="效果说明，悬停可见"></div>
     </div>
     <div class="sec"><div class="sec-h"><h3>作用于</h3></div><div class="targets">${ids.map(i=>`<label><input type="checkbox" data-t="${i}" ${targets.has(i)?"checked":""}>${esc(S.chars[i].name)}</label>`).join("")}</div></div>
@@ -1681,12 +2140,12 @@ function fxModal(id,doc=document){
   };
   openModal("",root=>{
     draw(root);
-    root.addEventListener("input",e=>{const k=e.target.dataset.f;if(k)f[k]=k==="rounds"?(e.target.value===""?null:Math.max(0,int(e.target.value))):k==="ac"?int(e.target.value):e.target.value});
+    root.addEventListener("input",e=>{const k=e.target.dataset.f;if(k)f[k]=k==="rounds"?(e.target.value===""?null:Math.max(0,int(e.target.value))):k==="ac"||k==="dp"?int(e.target.value):e.target.value});
     root.addEventListener("change",e=>{const t=e.target.dataset.t;if(t){e.target.checked?targets.add(t):targets.delete(t)}});
     root.addEventListener("click",e=>{
       const t=e.target.closest("button");if(!t)return;
       if(t.hasAttribute("data-x"))modalClose();
-      else if(t.dataset.pre!=null){Object.assign(f,FX_PRESETS[+t.dataset.pre]);draw(root)}
+      else if(t.dataset.pre!=null){Object.assign(f,{dp:0},presets[+t.dataset.pre]);draw(root)}
       else if(t.dataset.kind){f.kind=t.dataset.kind;draw(root)}
       else if(t.hasAttribute("data-add")){
         if(!f.name.trim()){root.querySelector("#f-name").focus();toast("先给效果起个名字。");return}
@@ -1701,7 +2160,7 @@ function fxModal(id,doc=document){
 
 /* import / export */
 function ioModal(){
-  const data=JSON.stringify({version:3,name:teamName(),rules:{spellSystem:S.meta.spellSystem,multiConc:S.meta.multiConc},classes:S.classes,conditionLibrary:condLibrary,chars:Object.values(S.chars).map(c=>{const o=clone(c);delete o.sample;return o})},null,1);
+  const data=JSON.stringify({version:3,name:teamName(),rules:{system:S.meta.system,srOverflow:S.meta.srOverflow,spellSystem:S.meta.spellSystem,multiConc:S.meta.multiConc},classes:S.classes,conditionLibrary:condLibrary,chars:Object.values(S.chars).map(c=>{const o=clone(c);delete o.sample;return o})},null,1);
   openModal(`<h2>导入 / 导出</h2><p class="sub">下面是小队「${esc(teamName())}」的备份，复制保存即可。把备份粘贴回来后，可以替换当前小队，也可以导入成一个新的小队。备份里的自定义职业会按名称编号合并进来；备份包含状态库时会替换本浏览器的状态库。</p>
     <div class="field"><label for="io-t">小队数据（JSON）</label><textarea id="io-t" class="json">${esc(data)}</textarea></div>
     <div class="mfoot"><button class="btn left" data-copy>复制</button><button class="btn ghost" data-x>关闭</button><button class="btn" data-impnew>导入为新小队</button><button class="btn primary" data-imp>替换当前小队</button></div>`,root=>{
@@ -1721,7 +2180,7 @@ function ioModal(){
       }
       return {parsed,list};
     };
-    const applyRules=(p)=>{if(p.conditionLibrary!=null){try{saveCondLibrary(cleanCondLibrary(p.conditionLibrary))}catch(e){toast("备份中的状态库格式无效，保留当前状态库。")}}const r=p.rules||{};if(r.spellSystem)S.meta.spellSystem=r.spellSystem==="points"?"points":"slots";if(typeof r.multiConc==="boolean")S.meta.multiConc=r.multiConc};
+    const applyRules=(p)=>{if(p.conditionLibrary!=null){try{saveCondLibrary(cleanCondLibrary(p.conditionLibrary))}catch(e){toast("备份中的状态库格式无效，保留当前状态库。")}}const r=p.rules||{};if(r.spellSystem)S.meta.spellSystem=r.spellSystem==="points"?"points":"slots";if(typeof r.multiConc==="boolean")S.meta.multiConc=r.multiConc;if(r.system)S.meta.system=r.system==="sr5"?"sr5":"dnd";if(r.srOverflow)S.meta.srOverflow=r.srOverflow==="full"?"full":"half"};
     root.querySelector("[data-imp]").onclick=()=>{
       const r=parse();if(!r)return;
       for(const k of Object.keys(S.chars)){delete S.chars[k];persist(k)}
@@ -1732,7 +2191,7 @@ function ioModal(){
     root.querySelector("[data-impnew]").onclick=()=>{
       const r=parse();if(!r)return;
       const name=String(r.parsed.name||"导入的小队").slice(0,40);
-      const tid=createTeam(name,r.list);
+      const tid=createTeam(name,r.list,r.parsed.rules&&r.parsed.rules.system==="sr5"?"sr5":"dnd");
       if(tid){applyRules(r.parsed);persist("meta")}
       modalClose();render();toast("已导入为新小队「"+name+"」，共 "+r.list.length+" 名角色。");
     };
@@ -1769,15 +2228,68 @@ function onClick(e){
       mutate(id,c=>{if(t.dataset.kind==="dmg")msgs=applyDamage(c,n);else{if(c.hp===0)c.ds={s:0,f:0};c.hp=Math.min(c.maxHp,c.hp+n)}});
       msgs.forEach(toast);return;
     }
+    case "srdmg":{
+      const inp=cardEl.querySelector('[data-act="amt"]');const raw=String(inp.value||"").trim();
+      const n=raw===""?1:Math.abs(int(raw,NaN));
+      if(!Number.isFinite(n)||n===0){inp.focus();toast("请输入大于 0 的格数，留空则按 1 格计算。");return}
+      let msgs=[];mutate(id,c=>{msgs=srApply(c,n,t.dataset.kind)});
+      const el=document.querySelector(`#amt-${id}`);if(el)el.value="";
+      msgs.forEach(toast);return;
+    }
+    case "srm":{
+      const raw=String(miniAmt||"").trim();
+      const n=raw===""?1:Math.abs(int(raw,NaN));
+      if(!Number.isFinite(n)||!n){toast("请输入大于 0 的格数，留空则按 1 格计算。");return}
+      let msgs=[];mutate(id,c=>{msgs=srApply(c,n,t.dataset.kind)});msgs.forEach(toast);return;
+    }
+    case "srbox":{
+      const key={p:"phys",s:"stun",o:"over"}[t.dataset.track],i=int(t.dataset.i);if(!key)return;
+      let msgs=[];mutate(id,c=>{const b=srSnap(c);c[key]=i<=c[key]?i-1:i;msgs=srEvents(c,b,[])});msgs.forEach(toast);return;
+    }
+    case "edge":return mutate(id,c=>{c.edgeUsed=clamp(c.edgeUsed+int(t.dataset.d),0,c.sr.edg)});
+    case "os":return mutate(id,c=>{c.os=clamp(c.os+int(t.dataset.d),0,40);if(c.os===40&&int(t.dataset.d)>0)toast(c.name+" 的 OS 达到 40：收敛！GOD 锁定，设备被格式化、物理位置暴露。")});
+    case "srint":{
+      const cost=int(t.dataset.cost),c=S.chars[id];if(!c)return;
+      if(shownInit(c)<cost){toast(c.name+" 的先攻分数只有 "+shownInit(c)+"，不够进行需要 "+cost+" 点的中断行动。");return}
+      mutate(id,c=>{c.initSpent+=cost;if(t.dataset.n==="全防御"&&!c.conds.includes("全防御"))c.conds.push("全防御")});
+      toast(c.name+" 进行中断行动「"+t.dataset.n+"」，先攻 −"+cost+"。");return;
+    }
+    case "srroll":{
+      const inp=cardEl.querySelector('[data-act="pool"]'),base=int(String(inp.value).trim(),NaN);
+      if(!Number.isFinite(base)||base<0){inp.focus();toast("先填写骰池（属性 + 技能）。");return}
+      const edge=t.dataset.edge==="1";let msg="";
+      mutate(id,c=>{
+        if(edge&&c.edgeUsed>=c.sr.edg){msg=c.name+" 没有剩余的极限。";return}
+        const mod=srPoolMod(c),n=Math.max(0,base+mod+(edge?c.sr.edg:0));
+        if(!n){msg=c.name+" 的骰池降到 0（修正 "+sgn(mod)+"）。";return}
+        if(edge)c.edgeUsed+=1;
+        const r=srRoll(n,edge);c.lastRoll=Object.assign({base,mod,n,edge,second:false},r);
+        msg=c.name+" 掷 "+srRollText(c.lastRoll);
+      });
+      if(msg)toast(msg);return;
+    }
+    case "srsecond":{
+      let msg="";
+      mutate(id,c=>{
+        const r=c.lastRoll;if(!r||r.edge||r.second)return;
+        if(c.edgeUsed>=c.sr.edg){msg=c.name+" 没有剩余的极限。";return}
+        c.edgeUsed+=1;
+        const dice=r.dice.map(x=>x>=5?x:d6());
+        c.lastRoll=Object.assign({},r,srScore(dice,r.n),{second:true});
+        msg=c.name+" 二次机会："+srRollText(c.lastRoll);
+      });
+      if(msg)toast(msg);return;
+    }
     case "next":return nextTurn();
     case "sort":return setMeta({sortInit:S.meta.sortInit===false});
-    case "endcombat":return confirmModal("结束战斗","轮数清零，行动指示移除。角色身上的效果保持不变，可以手动移除。","结束战斗",()=>setMeta({round:0,turn:null}));
+    case "endcombat":return confirmModal("结束战斗","轮数清零，行动指示移除。角色身上的效果保持不变，可以手动移除。","结束战斗",()=>setMeta({round:0,turn:null,pass:1,acted:[]}));
     case "rest":{
       if(!guard())return;
       const long=t.dataset.kind==="long";
+      if(isSR())return confirmModal(long?"全队复原":"刷新极限",long?"全员的物理、眩晕和溢出伤害清空，极限与资源恢复。维持法术和效果保留。":"全员的极限恢复到上限。","确定",()=>rest(long?"long":"short"));
       return confirmModal(long?"全队长休":"全队短休",long?"全员生命回满、临时生命清零、所有法术位与资源恢复、力竭降低 1 级、死亡豁免重置。":"恢复契约法术位和标为「短休」的资源。生命骰治疗请用每张卡上的「治疗」录入。",long?"开始长休":"开始短休",()=>rest(long?"long":"short"));
     }
-    case "loadsample":{if(!guard())return;const s=sampleParty();for(const[k,v]of Object.entries(s)){S.chars[k]=v;persist(k)}render();return}
+    case "loadsample":{if(!guard())return;const s=isSR()?srSampleParty():sampleParty();for(const[k,v]of Object.entries(s)){S.chars[k]=v;persist(k)}render();return}
     case "clearsample":return confirmModal("清空示例角色","会删除所有标记为示例的角色，你添加的角色不受影响。","清空示例",()=>{for(const[k,v]of Object.entries(S.chars))if(v.sample){delete S.chars[k];persist(k)}if(!S.chars[S.meta.turn])S.meta.turn=null,S.meta.round=0,persist("meta");render()},true);
     case "hp":{
       const inp=cardEl.querySelector('[data-act="amt"]');const raw=String(inp.value||"").trim();
@@ -1811,7 +2323,7 @@ function onClick(e){
       clearTimeout(pipArmT);
       if(pipArm!=="end"){pipArm="end";pipArmT=setTimeout(()=>{pipArm=null;renderDocPip()},4000);renderDocPip();return}
       pipArm=null;if(!guard()){renderDocPip();return}
-      setMeta({round:0,turn:null});toast("战斗结束，轮数已清零。");return;
+      setMeta({round:0,turn:null,pass:1,acted:[]});toast("战斗结束，轮数已清零。");return;
     }
     case "piprest":{
       const k=t.dataset.kind==="long"?"long":"short";
@@ -1848,13 +2360,14 @@ function onChange(e){
     if(raw===""||!S.chars[id])return;
     const v=clamp(int(raw),-20,60);
     if(t.classList.contains("mi-init")){t.readOnly=true;const h=t.closest(".init-handle");if(h)h.draggable=true}
-    mutate(id,c=>{c.init=v;c.initPending=false;c.initRoll=[]});return;
+    mutate(id,c=>{setShownInit(c,v);c.initPending=false;if(!isSR())c.initRoll=[]});return;
   }
+  if(t.dataset.act==="srmode"){const id=t.closest("[data-id]").dataset.id;if(S.chars[id])mutate(id,c=>{c.initMode=INIT_MODES[t.value]?t.value:"phys"});return}
   if(t.dataset.act!=="initb")return;
   const id=t.closest("[data-id]").dataset.id;const v=clamp(int(t.value),-20,30);
   if(S.chars[id]&&S.chars[id].initBonus!==v)mutate(id,c=>{c.initBonus=v});
 }
-function onInput(e){if(e.target.id==="mini-amt")miniAmt=e.target.value}
+function onInput(e){if(e.target.id==="mini-amt")miniAmt=e.target.value;if(e.target.dataset&&e.target.dataset.act==="pool"){const r=e.target.closest("[data-id]");if(r)poolDraft[r.dataset.id]=e.target.value}}
 document.addEventListener("input",onInput);
 document.addEventListener("keydown",onKey);
 function onKey(e){
@@ -1864,8 +2377,9 @@ function onKey(e){
     if(e.key==="Escape"&&!t.readOnly){e.preventDefault();t.value=t.dataset.before||"";t.readOnly=true;const h=t.closest(".init-handle");if(h)h.draggable=true;t.blur();return}
   }
   if((e.key==="Enter"||e.key===" ")&&t.getAttribute&&t.getAttribute("role")==="button"){e.preventDefault();t.click();return}
+  if(e.key==="Enter"&&t.dataset&&t.dataset.act==="pool"){e.preventDefault();t.closest(".card").querySelector('[data-act="srroll"]').click();return}
   if(e.key!=="Enter"||!t.dataset||t.dataset.act!=="amt")return;
-  e.preventDefault();t.closest(".card").querySelector('[data-kind="dmg"]').click();
+  e.preventDefault();t.closest(".card").querySelector('[data-kind="dmg"],[data-kind="p"]').click();
 }
 
 initStore();

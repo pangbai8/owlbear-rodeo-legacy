@@ -454,20 +454,23 @@
     var target = vttWindow();
     if (!target || !ready) return;
     var turns = {};
+    var sr5 = {};
     docs.forEach(function (data, path) {
       var m = path.match(/^teams\/([^/]+)$/);
       if (m && data && data.meta && data.meta.round > 0 && data.meta.turn) turns[m[1]] = data.meta.turn;
+      if (m && data && data.meta && data.meta.system === "sr5") sr5[m[1]] = true;
     });
     var links = [];
     docs.forEach(function (data, path) {
       var m = path.match(/^teams\/([^/]+)\/members\/([^/]+)$/);
       if (!m || !data || !data.token || typeof data.token.id !== "string") return;
+      var hp = sr5[m[1]] ? srTrack(data) : { hp: Number(data.hp) || 0, maxHp: Math.max(1, Number(data.maxHp) || 1) };
       links.push({
         tokenStateId: data.token.id,
         mapId: String(data.token.map || ""),
         name: String(data.name || ""),
-        hp: Number(data.hp) || 0,
-        maxHp: Math.max(1, Number(data.maxHp) || 1),
+        hp: hp.hp,
+        maxHp: hp.maxHp,
         turn: turns[m[1]] === m[2],
         // Their conditions show (and are edited) on the token too
         pf2: !!(data.monster && data.monster.system === "pf2"),
@@ -481,6 +484,18 @@
   window.addEventListener("message", function (event) {
     if (event.origin === location.origin && event.data && event.data.type === "party-panel-links-request") postLinks();
   });
+
+  // A Shadowrun 5e member's "HP" for its token: the boxes left on its
+  // physical track (8 + Body / 2, as the panel counts them), none once it is
+  // knocked out by a full stun track
+  function srTrack(member) {
+    var sr = member.sr || {};
+    var max = Math.max(1, 8 + Math.ceil((Number(sr.bod) || 0) / 2) + (Number(member.physBonus) || 0));
+    var stunMax = Math.max(1, 8 + Math.ceil((Number(sr.wil) || 0) / 2) + (Number(member.stunBonus) || 0));
+    var left = Math.max(0, max - (Number(member.phys) || 0));
+    if (!member.grunt && (Number(member.stun) || 0) >= stunMax) left = 0;
+    return { hp: left, maxHp: max };
+  }
 
   // An NPC's conditions as the token shows them: its conditions, and for a
   // 5e NPC its exhaustion level as "力竭 N" (the panel keeps it apart)
