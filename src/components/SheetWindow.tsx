@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Button, Flex, Select, Text } from "theme-ui";
 
 import FloatingWindow, { besidePartyRect } from "./FloatingWindow";
+import HtmlSheetFrame from "./HtmlSheetFrame";
 import {
   CURRENT_SHEET_STORAGE_KEY,
   OPEN_SHEET_EVENT,
@@ -12,6 +13,7 @@ import {
   getSheetFile,
   importAccept,
   importSheetFiles,
+  isHtmlSheet,
   isSheetFile,
   listSheets,
   pdfHasFormFields,
@@ -180,6 +182,12 @@ function SheetWindow() {
       const data = meta && (await getSheetFile(meta.id));
       if (!meta || !data) {
         openedRef.current = null;
+        return;
+      }
+      // HTML sheets run as pages of their own, not in the editor
+      if (isHtmlSheet(meta)) {
+        openedRef.current = meta;
+        setStatus("");
         return;
       }
       if (meta.ext === "pdf" && meta.pdfFillForms === undefined) {
@@ -435,7 +443,7 @@ function SheetWindow() {
     setIsDropTarget(false);
     const files = Array.from(event.dataTransfer.files).filter(isSheetFile);
     if (files.length === 0) {
-      setStatus("Drop an Excel, Word or PDF file");
+      setStatus("Drop an Excel, Word, PDF or HTML file");
       return;
     }
     await importSheetFiles(files);
@@ -443,6 +451,7 @@ function SheetWindow() {
 
   const currentSheet = sheets.find((sheet) => sheet.id === currentId);
   const hasSheet = !!currentSheet;
+  const htmlSheet = currentSheet && isHtmlSheet(currentSheet) ? currentSheet : null;
 
   return (
     <>
@@ -492,7 +501,7 @@ function SheetWindow() {
           variant="secondary"
           py={1}
           onClick={handleToggleTools}
-          disabled={!isReady}
+          disabled={!isReady || !!htmlSheet}
           title={
             hideTools
               ? "Show the editor's toolbar and menus"
@@ -534,9 +543,10 @@ function SheetWindow() {
             height: "100%",
             border: "none",
             background: "white",
-            visibility: hasSheet ? "visible" : "hidden",
+            visibility: hasSheet && !htmlSheet ? "visible" : "hidden",
           }}
         />
+        {htmlSheet && <HtmlSheetFrame key={htmlSheet.id} sheet={htmlSheet} />}
         {!hasSheet && (
           <Flex
             sx={{
@@ -550,8 +560,8 @@ function SheetWindow() {
             p={3}
           >
             <Text>
-              Import or drop an Excel, Word or PDF character sheet. It stays in
-              this browser only.
+              Import or drop an Excel, Word, PDF or HTML character sheet. It
+              stays in this browser only.
             </Text>
           </Flex>
         )}

@@ -118,6 +118,31 @@ export async function deleteSheet(id: string): Promise<void> {
   await run([META_STORE, FILE_STORE], "readwrite", (tx) => {
     tx.objectStore(META_STORE).delete(id);
     tx.objectStore(FILE_STORE).delete(id);
+    tx.objectStore(FILE_STORE).delete(stateKey(id));
+  });
+}
+
+/**
+ * What an HTML sheet's page has saved: its localStorage and the values in
+ * its form fields (HtmlSheetFrame keeps them, as the page runs sandboxed).
+ */
+export type HtmlSheetState = {
+  storage: Record<string, string>;
+  fields: Record<string, string | boolean>;
+};
+
+const stateKey = (id: string) => `state:${id}`;
+
+export async function getHtmlSheetState(id: string): Promise<HtmlSheetState> {
+  const state = await run<HtmlSheetState>([FILE_STORE], "readonly", (tx) =>
+    tx.objectStore(FILE_STORE).get(stateKey(id))
+  );
+  return state && typeof state === "object" ? state : { storage: {}, fields: {} };
+}
+
+export async function putHtmlSheetState(id: string, state: HtmlSheetState) {
+  await run([FILE_STORE], "readwrite", (tx) => {
+    tx.objectStore(FILE_STORE).put(state, stateKey(id));
   });
 }
 
@@ -133,8 +158,15 @@ export function splitFileName(fileName: string): [string, string] {
 const spreadsheetExts = ["xlsx", "xlsm", "xls", "ods"];
 const textExts = ["docx", "doc", "odt", "rtf", "txt"];
 
-// PDFs keep their format: form fields are filled and saved back as PDF
-const importExts = [...spreadsheetExts, "csv", ...textExts, "pdf"];
+// PDFs keep their format: form fields are filled and saved back as PDF.
+// HTML sheets run as pages of their own (HtmlSheetFrame), not in the editor.
+const htmlExts = ["html", "htm"];
+const importExts = [...spreadsheetExts, "csv", ...textExts, "pdf", ...htmlExts];
+
+/** Whether a stored sheet is an HTML page (shown as a page, not edited) */
+export function isHtmlSheet(sheet: { ext: string }) {
+  return htmlExts.includes(sheet.ext);
+}
 
 export const importAccept = importExts.map((ext) => `.${ext}`).join(",");
 
@@ -156,6 +188,7 @@ const sheetMimeTypes = [
   "application/rtf",
   "text/rtf",
   "application/pdf",
+  "text/html",
 ];
 
 /**
