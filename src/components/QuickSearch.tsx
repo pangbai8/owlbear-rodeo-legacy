@@ -502,8 +502,8 @@ function QuickSearch() {
                       px: 1,
                       mr: 2,
                       borderRadius: "4px",
-                      bg: result.accent || (result.isMonster ? "primary" : "muted"),
-                      color: result.accent ? "white" : result.isMonster ? "background" : "text",
+                      bg: result.accent || categoryColor(result) || "muted",
+                      color: result.accent || categoryColor(result) ? "white" : "text",
                       whiteSpace: "nowrap",
                     }}
                   >
@@ -552,6 +552,24 @@ function QuickSearch() {
       )}
     </Box>
   );
+}
+
+// Result label colors by kind, the same in every rules mode
+const KIND_COLORS: [RegExp, string][] = [
+  [/^(怪物|生物)/, "#a23b3b"],
+  [/^(法术|仪式|戏法)/, "#5b4bb0"],
+  [/^(灵能|武术|威能|战技|魔能祈唤|超魔法|秘法射击)/, "#2f7f8a"],
+  [/^(状态|疾病|危险|陷阱)/, "#b8661c"],
+  [/^(专长|职业特性|可选特性|战斗风格)/, "#3f7d3b"],
+  [/^(物品|物件|特征)/, "#8a6d1f"],
+  [/^(职业|种族|背景|典范|天命|主题|神祇)/, "#3a5f9e"],
+  [/^(动作|技能)/, "#6b5a8a"],
+];
+
+/** The label color for a result's kind ("法术 3" → 法术); null for the rest */
+function categoryColor(result: SearchResult) {
+  if (result.isMonster) return KIND_COLORS[0][1];
+  return KIND_COLORS.find(([re]) => re.test(result.categoryLabel))?.[1] || null;
 }
 
 export default QuickSearch;
