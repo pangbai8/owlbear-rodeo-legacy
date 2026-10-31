@@ -1,7 +1,8 @@
 // 3R quick search: a mirror of the Chinese D&D 3R wiki
 // (https://dnd3r.huijiwiki.com/, CC BY-SA), built by scripts/dnd3r/build.mjs
 // into public/dnd3r/ and served with the VTT itself, since the wiki cannot
-// be read from other sites. Cards link back to the wiki.
+// be read from other sites. Cards link back to the wiki. Entries the wiki
+// lacks come from 《3R扩展大不全》 (no wiki page: they link to a wiki search).
 
 import { MonsterRef, MonsterStats, SearchResult, matchScore } from "./fiveETools";
 
@@ -57,8 +58,18 @@ export function dnd3rUrl(page: string) {
   return DND3R_WIKI + encodeURIComponent(page).replace(/%2F/g, "/");
 }
 
+/** An entry's wiki page, or a wiki search for its name when it is from the CHM */
+function entryUrl(entry: Dnd3rIndex["entries"][number]) {
+  return entry[7] ? dnd3rUrl(entry[7]) : `${DND3R_WIKI}Special:Search?search=${encodeURIComponent(entry[0])}`;
+}
+
+/** Whether a result is from 《3R扩展大不全》 rather than the wiki */
+export function isDnd3rChm(result: SearchResult) {
+  return result.url.startsWith(`${DND3R_WIKI}Special:Search?`);
+}
+
 function toResult(index: Dnd3rIndex, entry: Dnd3rIndex["entries"][number]): SearchResult {
-  const [name, englishName, kindIndex, row, chunk, position, source, page] = entry;
+  const [name, englishName, kindIndex, row, chunk, position, source] = entry;
   const kind = index.kinds[kindIndex];
   return {
     id: CATEGORY_BASE * 100000 + kindIndex * 10000 + chunk * 100 + position,
@@ -68,7 +79,7 @@ function toResult(index: Dnd3rIndex, entry: Dnd3rIndex["entries"][number]): Sear
     categoryLabel: kind,
     // Shown at the end of the row: a spell's levels, a monster's CR, a book…
     source: kind === "怪物" && row ? `CR ${row}` : row || source,
-    url: dnd3rUrl(page),
+    url: entryUrl(entry),
     reprinted: false,
     modern: false,
     isMonster: kind === "怪物",
@@ -130,7 +141,7 @@ async function locateMonster(ref: MonsterRef): Promise<Dnd3rLocation> {
   const index = await loadDnd3rIndex();
   const monsters = index.kinds.indexOf("怪物");
   const entry =
-    index.entries.find((e) => e[2] === monsters && e[0] === ref.name && dnd3rUrl(e[7]) === ref.url) ||
+    index.entries.find((e) => e[2] === monsters && e[0] === ref.name && entryUrl(e) === ref.url) ||
     index.entries.find((e) => e[2] === monsters && e[0] === ref.name);
   if (!entry) throw new Error(`3R 资料里没有「${ref.name}」`);
   return { kind: "怪物", chunk: entry[4], position: entry[5] };

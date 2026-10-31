@@ -5,7 +5,12 @@
 // dnd3r-data.json.gz: { exported, source, pages: [{ title, text,
 // categories }], redirects: { from: to } }.
 //
-//   node scripts/dnd3r/build.mjs path/to/dnd3r-data.json.gz
+//   node scripts/dnd3r/build.mjs path/to/dnd3r-data.json.gz [dnd3r-chm.json]
+//
+// The second file, from 《3R扩展大不全》 (scripts/dnd3r/chm/parse_chm.py), adds
+// the entries the wiki lacks (matched by English or Chinese name). They go in
+// chunks after the wiki's, so the wiki entries keep their places (favourites
+// bars store them by chunk and position).
 //
 // Spells, powers, feats, maneuvers, items and monsters are templates in the
 // articles ({{法术数据|名称=…|…}}); each becomes a record of fields and body
@@ -230,7 +235,80 @@ export function conditionsOf(text, titles) {
   });
 }
 
-function build(file) {
+// Kinds whose CHM entries are checked against each other's names
+const SAME_NAMES = { 法术: ["法术", "灵能", "武术"], 灵能: ["法术", "灵能", "武术"], 武术: ["法术", "灵能", "武术"] };
+// A wizard's name in front of a spell: "Mordenkainen's Disjunction" is the wiki's "Mage's Disjunction"
+const NAMED = new Set(["bigby", "drawmij", "evard", "leomund", "melf", "mordenkainen", "nystul", "otiluke", "otto", "rary", "tasha", "tenser", "mage", "serten", "snilloc", "aganazzar", "larloch", "manshoon", "khelben", "elminster", "simbul", "vecna"]);
+
+/** Ways to write an English name: "Sword, Cursed" / "Cursed Sword", without a wizard's name, singular */
+export function englishKeys(en) {
+  const lower = String(en || "").toLowerCase().replace(/’/g, "'").replace(/'s /g, " ").replace(/s' /g, " ");
+  const forms = new Set([lower]);
+  if (lower.includes(",")) {
+    const at = lower.indexOf(",");
+    forms.add(lower.slice(at + 1) + " " + lower.slice(0, at));
+  }
+  for (const form of [...forms]) {
+    const words = form.trim().split(/\s+/);
+    if (words.length > 1 && NAMED.has(words[0])) forms.add(words.slice(1).join(" "));
+  }
+  const keys = new Set();
+  for (const form of forms) {
+    const key = form.replace(/[^a-z0-9]/g, "");
+    if (!key) continue;
+    keys.add(key);
+    if (key.endsWith("s")) keys.add(key.slice(0, -1));
+  }
+  return [...keys];
+}
+
+/** A Chinese name without its note ("暗行者（职业）") or punctuation */
+export function chineseKey(name) {
+  return String(name || "")
+    .replace(/[（(][^)）]*[)）]/g, "")
+    .replace(/[\s·、，,()（）[\]【】]/g, "");
+}
+
+/** The CHM's records of each kind that the wiki (or an earlier CHM record) lacks */
+export function chmAdditions(chm, byKind, redirects = {}) {
+  const known = new Set();
+  const keysOf = (r) => [...englishKeys(r.en).map((k) => "en:" + k), "zh:" + chineseKey(r.name)];
+  for (const [kind, records] of Object.entries(byKind)) for (const r of records) for (const k of keysOf(r)) known.add(kind + "|" + k);
+  for (const alias of Object.keys(redirects)) known.add("*|zh:" + chineseKey(alias));
+  const added = Object.fromEntries(KINDS.map(([kind]) => [kind, []]));
+  for (const { kind, file, section, ...record } of chm) {
+    if (!added[kind] || !record.name) continue;
+    const keys = keysOf(record);
+    const kinds = SAME_NAMES[kind] || [kind];
+    if (keys.some((k) => known.has("*|" + k) || kinds.some((other) => known.has(other + "|" + k)))) continue;
+    for (const k of keys) known.add(kind + "|" + k);
+    added[kind].push(record);
+  }
+  return added;
+}
+
+/** Records in chunks of at most CHUNK records and about CHUNK_BYTES */
+function chunked(records) {
+  const groups = [];
+  let group = [];
+  let bytes = 0;
+  for (const r of records) {
+    const size = Buffer.byteLength(JSON.stringify(r));
+    if (group.length && (group.length >= CHUNK || bytes + size > CHUNK_BYTES)) {
+      groups.push(group);
+      group = [];
+      bytes = 0;
+    }
+    group.push(r);
+    bytes += size;
+  }
+  if (group.length) groups.push(group);
+  return groups;
+}
+
+const byName = (a, b) => String(a.en || a.name).localeCompare(String(b.en || b.name));
+
+function build(file, chmFile) {
   const dump = JSON.parse(zlib.gunzipSync(fs.readFileSync(file)));
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(path.join(OUT, "data"), { recursive: true });
@@ -277,28 +355,19 @@ function build(file) {
     });
   }
 
+  const chm = chmFile ? JSON.parse(fs.readFileSync(chmFile, "utf8")) : [];
+  const added = chmAdditions(chm, byKind, dump.redirects);
+
   const entries = [];
   KINDS.forEach(([kind], kindIndex) => {
-    const records = byKind[kind].sort((a, b) => String(a.en || a.name).localeCompare(String(b.en || b.name)));
-    // Chunks of at most CHUNK records and about CHUNK_BYTES
-    const groups = [];
-    let group = [];
-    let bytes = 0;
-    for (const r of records) {
-      const size = Buffer.byteLength(JSON.stringify(r));
-      if (group.length && (group.length >= CHUNK || bytes + size > CHUNK_BYTES)) {
-        groups.push(group);
-        group = [];
-        bytes = 0;
-      }
-      group.push(r);
-      bytes += size;
-    }
-    if (group.length) groups.push(group);
+    const groups = [...chunked(byKind[kind].sort(byName)), ...chunked(added[kind].sort(byName))];
+    // A result's id has room for 100 chunks of a kind
+    if (groups.length > 100) throw new Error(`${kind}: ${groups.length} chunks`);
     groups.forEach((members, n) => {
       members.forEach((r, i) => {
         const row = ROW_FIELD[kind] ? r.fields?.find(([k]) => k === ROW_FIELD[kind])?.[1] || "" : (r.tags || []).join(" · ");
-        entries.push([r.name, r.en || "", kindIndex, String(row).replace(/\*\*/g, "").slice(0, 40), n, i, r.source || "", r.page || r.name]);
+        // No wiki page: from the CHM
+        entries.push([r.name, r.en || "", kindIndex, String(row).replace(/\*\*/g, "").slice(0, 40), n, i, r.source || "", r.page || ""]);
       });
       fs.writeFileSync(path.join(OUT, "data", `${kind}-${n}.json`), JSON.stringify(members));
     });
@@ -316,14 +385,15 @@ function build(file) {
   };
   fs.writeFileSync(path.join(OUT, "index.json"), JSON.stringify(index));
   const counts = Object.fromEntries(KINDS.map(([kind]) => [kind, byKind[kind].length]));
-  return { entries: entries.length, counts };
+  const fromChm = Object.fromEntries(KINDS.map(([kind]) => [kind, added[kind].length]));
+  return { entries: entries.length, counts, fromChm };
 }
 
 if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) {
   const file = process.argv[2];
   if (!file) {
-    console.error("usage: node scripts/dnd3r/build.mjs dnd3r-data.json.gz");
+    console.error("usage: node scripts/dnd3r/build.mjs dnd3r-data.json.gz [dnd3r-chm.json]");
     process.exit(1);
   }
-  console.log(build(file));
+  console.log(build(file, process.argv[3]));
 }

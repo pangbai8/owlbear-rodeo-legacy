@@ -10,6 +10,7 @@ import {
 import {
   Dnd3rRecord,
   findDnd3rTitle,
+  isDnd3rChm,
   loadDnd3rMonsterRecord,
   loadDnd3rRecord,
 } from "../helpers/dnd3r";
@@ -53,7 +54,7 @@ function Dnd3rCard({ result }: Dnd3rCardProps) {
     return (
       <Box sx={{ p: 3, fontSize: 1 }}>
         <Text>读取资料失败：{error}</Text>
-        <WikiLink url={result.url} />
+        <WikiLink result={result} />
       </Box>
     );
   }
@@ -136,7 +137,7 @@ function Dnd3rCard({ result }: Dnd3rCardProps) {
           <Dnd3rText text={text} roller={roller} context={record.name} />
         </Box>
       ))}
-      <WikiLink url={result.url} />
+      <WikiLink result={result} />
     </Box>
   );
 }
@@ -398,18 +399,22 @@ function EntryLink({ text, title }: { text: string; title: string }) {
   );
 }
 
-function WikiLink({ url }: { url: string }) {
+function WikiLink({ result }: { result: SearchResult }) {
+  // Entries the wiki lacks are from the CHM: their link is a wiki search
+  const chm = isDnd3rChm(result);
   return (
     <Box sx={{ mt: 3, fontSize: 0, color: "gray" }}>
       <Link
-        href={url}
+        href={result.url}
         target="_blank"
         rel="noopener noreferrer"
         sx={{ color: "primary", fontSize: 1 }}
       >
-        在 3R 中文维基打开
+        {chm ? "在 3R 中文维基搜索" : "在 3R 中文维基打开"}
       </Link>
-      <Text sx={{ display: "block" }}>资料来自龙与地下城三版中文维基（CC BY-SA）</Text>
+      <Text sx={{ display: "block" }}>
+        {chm ? "资料来自《3R扩展大不全》" : "资料来自龙与地下城三版中文维基（CC BY-SA）"}
+      </Text>
     </Box>
   );
 }
