@@ -25,6 +25,10 @@ import {
 export const sheetEditorUrl = process.env.REACT_APP_SHEET_EDITOR_URL || "";
 
 const AUTOSAVE_DELAY = 3000;
+// The editor says it is ready on its page's load event, which never comes if
+// a request hangs (an offline-cache version swap cuts them off mid-load)
+const READY_TIMEOUT = 25000;
+const AUTO_RELOADS = 2;
 const HIDE_TOOLS_STORAGE_KEY = "characterSheets.hideTools";
 
 type SaveWaiter = { resolve: () => void; reject: (error: Error) => void };
@@ -80,6 +84,10 @@ function SheetWindow() {
   const [isDropTarget, setIsDropTarget] = useState(false);
   const [hideTools, setHideTools] = useState(loadHideTools);
   const readyRef = useRef(false);
+  // Changing it remounts the editor iframe, which loads it again
+  const [editorKey, setEditorKey] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const reloadsRef = useRef(0);
 
   // The sheet the editor currently holds, which may lag behind currentId
   const openedRef = useRef<SheetMeta | null>(null);
@@ -212,6 +220,11 @@ function SheetWindow() {
     refreshSheets();
   }, [refreshSheets]);
 
+  const openSheetRef = useRef(openSheet);
+  openSheetRef.current = openSheet;
+  const currentIdRef = useRef(currentId);
+  currentIdRef.current = currentId;
+
   useEffect(() => {
     async function handleMessage(event: MessageEvent) {
       if (
@@ -222,8 +235,23 @@ function SheetWindow() {
       }
       const { type, payload } = event.data || {};
       if (type === "document:ready") {
+        // Ready again with a sheet open: the editor page reloaded itself and
+        // lost the sheet (and any edits not saved yet), so open it again
+        const reopen = readyRef.current && openedRef.current;
         readyRef.current = true;
+        reloadsRef.current = 0;
+        setLoadFailed(false);
         setIsReady(true);
+        if (reopen) {
+          openedRef.current = null;
+          dirtyRef.current = false;
+          setIsDirty(false);
+          clearSaveTimer(saveTimerRef);
+          saveWaitersRef.current
+            .splice(0)
+            .forEach((waiter) => waiter.reject(new Error("Editor reloaded")));
+          openSheetRef.current(currentIdRef.current);
+        }
       } else if (type === "document:opened") {
         setStatus("");
       } else if (type === "document:readonly-changed") {
@@ -281,6 +309,31 @@ function SheetWindow() {
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [refreshSheets, scheduleSave]);
+
+  // Load the editor again when it never says it is ready
+  useEffect(() => {
+    if (isReady || loadFailed) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (readyRef.current) {
+        return;
+      }
+      if (reloadsRef.current < AUTO_RELOADS) {
+        reloadsRef.current += 1;
+        setEditorKey((key) => key + 1);
+      } else {
+        setLoadFailed(true);
+      }
+    }, READY_TIMEOUT);
+    return () => clearTimeout(timer);
+  }, [isReady, loadFailed, editorKey]);
+
+  function handleRetryEditor() {
+    reloadsRef.current = 0;
+    setLoadFailed(false);
+    setEditorKey((key) => key + 1);
+  }
 
   // Open the last used sheet once the editor is ready
   useEffect(() => {
@@ -527,11 +580,23 @@ function SheetWindow() {
           Delete
         </Button>
         <Text variant="caption" sx={{ flexGrow: 1, textAlign: "right" }}>
-          {!isReady ? "Loading editor…" : isDirty ? "Unsaved" : status}
+          {loadFailed
+            ? "Editor failed to load"
+            : !isReady
+            ? "Loading editor…"
+            : isDirty
+            ? "Unsaved"
+            : status}
         </Text>
+        {loadFailed && (
+          <Button variant="secondary" py={1} onClick={handleRetryEditor}>
+            Retry
+          </Button>
+        )}
       </Flex>
       <Box sx={{ position: "relative", flexGrow: 1 }}>
         <iframe
+          key={editorKey}
           ref={iframeRef}
           src={editorSrc(hideTools)}
           title="Character Sheet Editor"
