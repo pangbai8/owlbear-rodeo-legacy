@@ -150,6 +150,13 @@ function Party({
           <Nickname
             nickname={`${playerState.nickname} (you)`}
             diceRolls={shareDice ? playerState.dice.rolls : undefined}
+            action={
+              <ChangeNicknameButton
+                nickname={playerState.nickname}
+                onChange={handleNicknameChange}
+                compact
+              />
+            }
           />
           {Object.entries(partyState).map(([id, { nickname, dice }]) => (
             <Nickname
