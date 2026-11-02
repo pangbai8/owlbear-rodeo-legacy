@@ -1,4 +1,4 @@
-import { DND3R_WIKI, findDnd3rTitle, isDnd3rChm, loadDnd3rRecord, searchDnd3r } from "./dnd3r";
+import { DND3R_WIKI, articleLabel, dnd3rBlocks, findDnd3rTitle, isDnd3rChm, loadDnd3rRecord, searchDnd3r } from "./dnd3r";
 
 const index = {
   kinds: ["怪物", "法术", "状态", "灵能", "武术", "专长", "物品", "条目"],
@@ -61,4 +61,22 @@ test("a CHM monster is found by name, with its CR", async () => {
   const [beholder] = await searchDnd3r("眼魔");
   expect(beholder).toMatchObject({ isMonster: true, source: "CR 13" });
   expect((await findDnd3rTitle("眼魔"))?.dnd3r).toEqual({ kind: "怪物", chunk: 20, position: 3 });
+});
+
+test("a table's rows become a table, the text around it stays lines", () => {
+  const text = "**炽念使等级进度表**\n**等级** | **基本攻击加值**\n1 | +0\n2 | +1\n下一段\n正文 | 只有一行不算表";
+  expect(dnd3rBlocks(text)).toEqual([
+    { lines: ["**炽念使等级进度表**"] },
+    { table: [["**等级**", "**基本攻击加值**"], ["1", "+0"], ["2", "+1"]] },
+    { lines: ["下一段", "正文 | 只有一行不算表"] },
+  ]);
+});
+
+test("classes, races, domains… are labelled as what they are", () => {
+  expect(articleLabel("玩家手册 · 玩家手册职业 · 职业")).toBe("职业");
+  expect(articleLabel("城主指南 · 城主指南进阶职业 · 进阶职业")).toBe("进阶职业");
+  expect(articleLabel("怪物图鉴3 · 种族")).toBe("种族");
+  expect(articleLabel("玩家手册 · 玩家手册领域 · 领域")).toBe("领域");
+  expect(articleLabel("城主指南 · 城主指南附魔 · 附魔")).toBe("附魔");
+  expect(articleLabel("规则 · 职业特性")).toBe("条目");
 });

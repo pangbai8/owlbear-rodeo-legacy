@@ -124,13 +124,44 @@ export function cleanText(input, titles = new Set()) {
   // Templates, innermost first
   for (let i = 0; i < 6 && s.includes("{{"); i++) {
     s = s.replace(/\{\{([^{}]*)\}\}/g, (_, body) => {
-      const parts = body.split("|").map((p) => p.trim());
+      // A "|" inside a ⟦link|target⟧ made by an inner template is not the template's
+      const parts = body.split(/\|(?![^⟦]*⟧)/).map((p) => p.trim());
       const name = parts[0];
       if (LINK_TEMPLATES.has(name) && parts[1]) return link(parts[1], parts[2] || parts[1]);
       if (/^(出处|审核状态|DEFAULTSORT|目录|TOC)/.test(name) || name.startsWith("#")) return "";
       if (name === "怪物能力定义") return `\u0001${parts[1] || ""}\u0001${parts[2] && !parts[2].includes("=") ? `（${parts[2]}）` : ""} `;
+      // A class's abilities: "{{能力定义|动物之友|特异|Animal Companion}}" -> **动物之友（特异）**
+      if (name === "能力定义" || name === "子能力定义") return `\u0001${parts[1] || ""}${parts[2] ? `（${parts[2]}）` : ""}\u0001`;
+      // A class's skills: all of them
+      if (name === "本职技能") return parts.slice(1).filter(Boolean).join("、");
+      // A prestige class's requirements: a line a field ("特殊2" is another 特殊)
+      if (name === "进阶需求") {
+        return (
+          "\n" +
+          parts
+            .slice(1)
+            .map((p) => /^([\w一-龥]+?)\d*\s*=\s*([\s\S]*)$/.exec(p))
+            .filter((m) => m && m[2].trim())
+            .map((m) => (m[1] === "引言" ? m[2].trim() : `\u0001${m[1]}：\u0001${m[2].trim()}`))
+            .join("\n") +
+          "\n"
+        );
+      }
+      // A starting package: its name, then its text
+      if (name === "起始套组") {
+        const text = parts.find((p) => p.startsWith("文本="))?.slice(3) || "";
+        return `\n\u0001${parts[1] || ""}\u0001\n${text.trim()}\n`;
+      }
       // Anything else: its last plain argument, or nothing
-      const plain = parts.slice(1).filter((p) => !/^[\w一-龥]+=/.test(p));
+      const plain = parts.slice(1).filter((p) => !/^[\w一-龥]+\s*=/.test(p));
+      // A data template of no kind of its own (附魔数据, 领域数据…): a line a field
+      if (name.endsWith("数据") && !plain.length) {
+        const fields = parts
+          .slice(1)
+          .map((p) => /^([\w一-龥]+)\s*=\s*([\s\S]*)$/.exec(p))
+          .filter((m) => m && m[2].trim() && !SKIP_FIELD.test(m[1]));
+        return `\n${fields.map(([, k, v]) => (BODY_FIELD.test(k) ? v.trim() : `\u0001${k}：\u0001${v.trim()}`)).join("\n")}\n`;
+      }
       return plain.length ? plain[plain.length - 1] : "";
     });
   }
@@ -150,9 +181,20 @@ export function cleanText(input, titles = new Set()) {
         .replace(/^:+\s*/, "")
     )
     .join("\n");
-  // Tables: rows on lines, cells split by " | "
-  s = s.replace(/^\{\|.*$/gm, "").replace(/^\|\}.*$/gm, "").replace(/^\|-.*$/gm, "");
-  s = s.replace(/^\|\+\s*/gm, "").replace(/^[!|]\s*/gm, "").replace(/\s*(\|\||!!)\s*/g, " | ");
+  // Tables: a row a line, cells split by " | ", header cells bold
+  s = wikiTables(s);
+  s = s.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_, table) => {
+    const rows = [...table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(([, row]) =>
+      [...row.matchAll(/<t([dh])\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(([, tag, text]) => ({
+        header: tag.toLowerCase() === "h",
+        text: text.replace(/<br\s*\/?>/gi, " ").replace(/\s+/g, " ").trim(),
+      }))
+    );
+    const lines = rows
+      .filter((cells) => cells.length)
+      .map((cells) => cells.map((c) => (cells.every((x) => x.header) ? `\u0001${c.text}\u0001` : c.text)).join(" | "));
+    return `\n${lines.join("\n")}\n`;
+  });
   // HTML; bold is \u0001 until the end, so a "*" in the text stays plain
   s = s.replace(/<\/?(b|strong)\b[^>]*>/gi, "\u0001");
   s = s.replace(/<br\s*\/?>|<hr\s*\/?>|<\/p>|<\/tr>|<\/li>|<\/div>/gi, "\n");
@@ -165,10 +207,59 @@ export function cleanText(input, titles = new Set()) {
     .split("\n")
     .map((line) => line.trimEnd())
     .join("\n");
-  s = s.replace(/\u0001\s*\u0001/g, "").replace(/\u0001/g, "**");
+  // Bold that ends and starts again on one line is one bold; a heading stays on its own line
+  s = s.replace(/\u0001[ \t]*\u0001/g, "").replace(/\u0001/g, "**");
   s = s.replace(/__NOTOC__|__TOC__|__NOEDITSECTION__/g, "");
   s = s.replace(/\n{3,}/g, "\n\n");
   return s.trim();
+}
+
+/**
+ * Wiki tables ({| … |}) as text: the caption, then one line a row with its
+ * cells split by " | " (header cells in bold). In the wiki a row's cells may
+ * each be on a line of their own ("! 等级\n! 基本攻击加值"), so they are
+ * gathered row by row, between the "|-" lines.
+ */
+export function wikiTables(text) {
+  const out = [];
+  let rows = null;
+  let row = null;
+  const endRow = () => {
+    if (row && row.cells.some((c) => c.text.trim())) rows.push(row);
+    row = null;
+  };
+  const cell = (raw, header) => {
+    // "style="…" | text": the attributes go
+    const attr = /^[^|[⟦]*=\s*["'][^"']*["'][^|]*\|(?!\|)(.*)$/.exec(raw);
+    if (!row) row = { cells: [] };
+    row.cells.push({ text: (attr ? attr[1] : raw).trim(), header });
+  };
+  for (const line of String(text).split("\n")) {
+    const t = line.trim();
+    if (rows === null) {
+      if (t.startsWith("{|")) rows = [];
+      else out.push(line);
+      continue;
+    }
+    if (t.startsWith("|}")) {
+      endRow();
+      for (const r of rows) {
+        const header = r.cells.every((c) => c.header);
+        out.push(r.cells.map((c) => (header ? `\u0001${c.text.replace(/'''/g, "")}\u0001` : c.text)).join(" | "));
+      }
+      rows = null;
+      continue;
+    }
+    if (t.startsWith("|+")) out.push(t.slice(2).trim());
+    else if (t.startsWith("|-")) endRow();
+    else if (t.startsWith("!")) t.slice(1).split(/\s*!!\s*|\s*\|\|\s*/).forEach((c) => cell(c, true));
+    else if (t.startsWith("|")) t.slice(1).split(/\s*\|\|\s*/).forEach((c) => cell(c, false));
+    // A cell's text going on over more lines
+    else if (t && row?.cells.length) row.cells[row.cells.length - 1].text += " " + t;
+  }
+  // A table never closed: its rows as they are
+  if (rows) for (const r of rows.concat(row ? [row] : [])) out.push(r.cells.map((c) => c.text).join(" | "));
+  return out.join("\n");
 }
 
 /** A template's fields -> { name, en, source, summary, fields: [[label, text]], body: [[label, text]] } */

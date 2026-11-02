@@ -9,6 +9,7 @@ import {
 } from "../helpers/fiveETools";
 import {
   Dnd3rRecord,
+  dnd3rBlocks,
   findDnd3rTitle,
   isDnd3rChm,
   loadDnd3rMonsterRecord,
@@ -69,6 +70,8 @@ function Dnd3rCard({ result }: Dnd3rCardProps) {
   }
 
   const kind = result.dnd3r?.kind || "";
+  // An article's label says what it is (职业, 进阶职业, 种族)
+  const label = result.categoryLabel || kind;
   const get = (name: string) => record.fields?.find(([k]) => k === name)?.[1] || "";
   const subtitle = isMonster
     ? [
@@ -79,7 +82,7 @@ function Dnd3rCard({ result }: Dnd3rCardProps) {
       ]
         .filter(Boolean)
         .join(" · ")
-    : [kind, record.source, ...(record.tags || [])].filter(Boolean).join(" · ");
+    : [label, record.source, ...(record.tags || []).filter((tag) => tag !== label)].filter(Boolean).join(" · ");
   const texts = [...(record.fields || []), ...(record.body || [])].map(([, t]) => t);
   const hasRolls = isMonster || texts.some((t) => splitRolls(t).some((p) => typeof p !== "string"));
   const rowProps = (label: string) => ({
@@ -359,28 +362,59 @@ function Dnd3rText({
     const name = words || context;
     return part.kind === "hit" ? `${name} 命中` : part.kind === "damage" ? `${name} 伤害` : name;
   };
+  const inline = (line: string) =>
+    line.split(/(⟦[^⟧]+⟧)/).map((piece, j) => {
+      const link = piece.match(/^⟦([^⟧|]+)(?:\|([^⟧]+))?⟧$/);
+      // The entry's own name in its text is not a link to itself
+      if (link && (link[2] || link[1]) === context) return link[1];
+      if (link) return <EntryLink key={j} text={link[1]} title={link[2] || link[1]} />;
+      return <RollableText key={j} parts={split(piece)} label={label} roller={roller} />;
+    });
+  const blocks = dnd3rBlocks(String(text));
+  const single = blocks.length === 1 && "lines" in blocks[0] && blocks[0].lines.length === 1;
   return (
     <>
-      {String(text)
-        .split("\n")
-        .map((line, i, lines) => (
-          // One line (a field's value) stays beside its label
-          <Text
-            key={i}
-            sx={{
-              display: lines.length > 1 ? "block" : "inline",
-              minHeight: line ? undefined : "0.6em",
-            }}
-          >
-            {line.split(/(⟦[^⟧]+⟧)/).map((piece, j) => {
-              const link = piece.match(/^⟦([^⟧|]+)(?:\|([^⟧]+))?⟧$/);
-              // The entry's own name in its text is not a link to itself
-              if (link && (link[2] || link[1]) === context) return link[1];
-              if (link) return <EntryLink key={j} text={link[1]} title={link[2] || link[1]} />;
-              return <RollableText key={j} parts={split(piece)} label={label} roller={roller} />;
-            })}
-          </Text>
-        ))}
+      {blocks.map((block, b) =>
+        "table" in block ? (
+          <Box key={b} sx={{ overflowX: "auto", my: 1 }}>
+            <Box as="table" sx={{ borderCollapse: "collapse", fontSize: 0, lineHeight: 1.4 }}>
+              <tbody>
+                {block.table.map((cells, r) => (
+                  <tr key={r}>
+                    {cells.map((cell, c) => (
+                      <Box
+                        as="td"
+                        key={c}
+                        sx={{
+                          border: "1px solid",
+                          borderColor: "border",
+                          px: 1,
+                          py: "2px",
+                          verticalAlign: "top",
+                          // Numbers and short words keep to one line
+                          whiteSpace: cell.length <= 10 ? "nowrap" : "normal",
+                        }}
+                      >
+                        {inline(cell)}
+                      </Box>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </Box>
+          </Box>
+        ) : (
+          block.lines.map((line, i) => (
+            // One line (a field's value) stays beside its label
+            <Text
+              key={`${b}-${i}`}
+              sx={{ display: single ? "inline" : "block", minHeight: line ? undefined : "0.6em" }}
+            >
+              {inline(line)}
+            </Text>
+          ))
+        )
+      )}
     </>
   );
 }
