@@ -115,7 +115,32 @@ export async function findDnd3rTitle(title: string) {
 
 const chunks = new Map<string, Promise<Dnd3rRecord[]>>();
 
-export async function loadDnd3rRecord({ kind, chunk, position }: Dnd3rLocation): Promise<Dnd3rRecord> {
+/**
+ * A record by its place, checked against the name it was stored with: the
+ * CHM's entries can move when the data is built again, so a favourite saved
+ * before is then found by its name (or English name) instead.
+ */
+export async function loadDnd3rRecord(
+  location: Dnd3rLocation,
+  expected?: { name: string; englishName?: string }
+): Promise<Dnd3rRecord> {
+  if (!expected) return recordAt(location);
+  const record = await recordAt(location).catch(() => null);
+  if (record?.name === expected.name) return record;
+  const index = await loadDnd3rIndex();
+  const kind = index.kinds.indexOf(location.kind);
+  const named = (e: Dnd3rIndex["entries"][number]) => e[0] === expected.name;
+  const english = (e: Dnd3rIndex["entries"][number]) => !!expected.englishName && e[1] === expected.englishName;
+  const entry =
+    index.entries.find((e) => e[2] === kind && named(e)) ||
+    index.entries.find(named) ||
+    index.entries.find((e) => e[2] === kind && english(e)) ||
+    index.entries.find(english);
+  if (!entry) throw new Error("资料不存在");
+  return recordAt({ kind: index.kinds[entry[2]], chunk: entry[4], position: entry[5] });
+}
+
+async function recordAt({ kind, chunk, position }: Dnd3rLocation): Promise<Dnd3rRecord> {
   const key = `${kind}-${chunk}`;
   if (!chunks.has(key)) {
     chunks.set(

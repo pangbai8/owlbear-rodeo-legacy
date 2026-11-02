@@ -261,7 +261,7 @@ export async function entryFromResult(
       const record = await loadDnd4eRecord(result.dnd4e);
       parts = recordText(record).flatMap((text) => splitRolls(text));
     } else if (result.system === "3r" && result.dnd3r) {
-      const record = await loadDnd3rRecord(result.dnd3r);
+      const record = await loadDnd3rRecord(result.dnd3r, result);
       parts = recordText([record.fields, record.body]).flatMap((text) =>
         splitDnd3rAttacks(text)
       );

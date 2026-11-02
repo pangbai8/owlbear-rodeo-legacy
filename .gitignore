@@ -35,3 +35,6 @@ tsconfig.tsbuildinfo
 /sheet-editor/.wrangler/
 /sheet-editor/.work/
 /sheet-editor/dist/
+
+# python
+__pycache__/
