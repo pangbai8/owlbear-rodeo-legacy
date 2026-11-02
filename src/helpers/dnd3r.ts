@@ -68,15 +68,50 @@ export function isDnd3rChm(result: SearchResult) {
   return result.url.startsWith(`${DND3R_WIKI}Special:Search?`);
 }
 
+/** What an article is, from its tags ("玩家手册 · 玩家手册职业 · 职业" → 职业), else 条目 */
+export function articleLabel(tags: string) {
+  for (const label of ["进阶职业", "职业", "种族", "领域", "灵域", "附魔", "技能"]) {
+    if (new RegExp(`${label}(\\s·|$)`).test(tags)) return label;
+  }
+  return "条目";
+}
+
+/**
+ * 3R text in blocks: runs of lines, and tables (two or more lines in a row
+ * with cells split by " | ", as the build writes a table's rows)
+ */
+export function dnd3rBlocks(text: string): ({ lines: string[] } | { table: string[][] })[] {
+  const blocks: ({ lines: string[] } | { table: string[][] })[] = [];
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; ) {
+    let end = i;
+    while (end < lines.length && lines[end].includes(" | ")) end++;
+    if (end - i >= 2) {
+      blocks.push({ table: lines.slice(i, end).map((line) => line.split(" | ").map((cell) => cell.trim())) });
+      i = end;
+      continue;
+    }
+    const last = blocks[blocks.length - 1];
+    if (last && "lines" in last) last.lines.push(lines[i]);
+    else blocks.push({ lines: [lines[i]] });
+    i++;
+  }
+  return blocks;
+}
+
 function toResult(index: Dnd3rIndex, entry: Dnd3rIndex["entries"][number]): SearchResult {
-  const [name, englishName, kindIndex, row, chunk, position, source] = entry;
+  const [name, englishName, kindIndex, tagsOrRow, chunk, position, source] = entry;
   const kind = index.kinds[kindIndex];
+  const label = kind === "条目" ? articleLabel(tagsOrRow) : kind;
+  // An article's row is its tags: the one its label already says goes
+  const row = kind === "条目" ? tagsOrRow.split(" · ").filter((tag) => tag !== label).join(" · ") : tagsOrRow;
   return {
     id: CATEGORY_BASE * 100000 + kindIndex * 10000 + chunk * 100 + position,
     name,
     englishName,
     category: CATEGORY_BASE + kindIndex,
-    categoryLabel: kind,
+    // Classes, races, domains… are articles in the data, but say what they are
+    categoryLabel: label,
     // Shown at the end of the row: a spell's levels, a monster's CR, a book…
     source: kind === "怪物" && row ? `CR ${row}` : row || source,
     url: entryUrl(entry),

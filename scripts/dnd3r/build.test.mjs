@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { articleEnglish, chmAdditions, englishKeys, nearMatches } from "./build.mjs";
+import { articleEnglish, chmAdditions, cleanText, englishKeys, nearMatches, wikiTables } from "./build.mjs";
 
 const byKind = {
   法术: [{ name: "法师裂解术", en: "Mage's Disjunction" }, { name: "心灵沉静", en: "Clarity of Mind" }],
@@ -54,4 +54,34 @@ test("near spellings are listed for a person, unless settled as different", () =
 test("a wiki article's English name comes from its header", () => {
   assert.equal(articleEnglish("{{条目头|出处=城主指南|类型=进阶职业|英文名=Blackguard}}\n正文"), "Blackguard");
   assert.equal(articleEnglish("没有条目头"), "");
+});
+
+test("a wiki table is a row a line, its header cells bold", () => {
+  const table = "{| class=\"wikitable\"\n|+ '''进度表'''\n! 等级\n! 特殊\n \n|-\n| 1 || 取得灵域\n|-\n| style=\"text-align:center\" | 2\n| 读心\n继续\n|}";
+  assert.equal(wikiTables(`前文\n${table}\n后文`), "前文\n'''进度表'''\n\u0001等级\u0001 | \u0001特殊\u0001\n1 | 取得灵域\n2 | 读心 继续\n后文");
+  assert.equal(cleanText(table).split("\n")[1], "**等级** | **特殊**");
+});
+
+test("a class's templates keep their text", () => {
+  const titles = new Set(["驯养动物", "技能专攻"]);
+  const page = [
+    "{{进阶需求\n|引言=要具备万兽王的资格：\n|技能={{技能|驯养动物}}8级\n|特殊2=能召唤动物\n}}",
+    "'''本职技能：'''{{本职技能|攀爬|驯养动物|游泳}}。",
+    "{{能力定义|动物之友|特异|Animal Companion}}\n获得一个动物伙伴。",
+    "{{起始套组|侏儒吟游诗人起始套组\n|文本='''金钱：'''2d4 金币。\n}}",
+    '<table class="wikitable">\n  <tr><th>技能</th><th>级数</th></tr>\n\n  <tr><td>{{技能|驯养动物}}</td><td>4</td></tr>\n</table>',
+  ].join("\n\n");
+  const text = cleanText(page, titles);
+  for (const line of [
+    "要具备万兽王的资格：",
+    "**技能：**⟦驯养动物⟧8级",
+    "**特殊：**能召唤动物",
+    "**本职技能：**攀爬、驯养动物、游泳。",
+    "**动物之友（特异）**",
+    "**侏儒吟游诗人起始套组**",
+    "**金钱：**2d4 金币。",
+    "**技能** | **级数**\n⟦驯养动物⟧ | 4",
+  ]) {
+    assert.ok(text.includes(line), `${line}\n— not in —\n${text}`);
+  }
 });
