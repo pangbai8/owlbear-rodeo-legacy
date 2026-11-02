@@ -136,6 +136,10 @@ def parse_title(line):
         if 1 <= len(name) <= 20 and letters >= 3 and len(en.split()) <= 9 and not re.search(r'[。；！？]', name):
             return name, nice_en(en.replace('’', "'")), tags
         return None
+    # A name that starts with a word in Latin letters: "Cli七弦琴（Cli Lyre）", the English in brackets
+    m = re.match(r'^([A-Za-z]{1,12}[' + CJK + r'][^()（）\[\]|:：]{0,16}?)\s*[\(（]\s*([A-Za-z][A-Za-z0-9 ,.\'’\-:/&!+]*?)\s*[\)）]$', s)
+    if m:
+        return m.group(1).strip(), nice_en(m.group(2).replace('’', "'")), tags
     if re.match(r'^[' + CJK + r'0-9+\-·、]{2,14}$', s):
         return s, '', tags
     return None
@@ -194,8 +198,22 @@ ARTICLE_SECTIONS = [(re.compile(r'^(\d+\.\s*)?(新)?进阶职业'), '进阶职�
 NOT_ARTICLE = re.compile(r'年龄|身高|体重|表|介绍|简介|概述|选择|创造|设计|调整|规则|说明|列表|附录|总览|一览|前言|替代|变体|犯错|随谈|领域|常见|血脉|自发|其他|传奇|一般|强力|[：:？?]|^进阶职业$|^职业$|^种族$')
 
 
+def quick_reference(stack, label):
+    """A race or base class in the contents' quick reference ("速查"): ("人类", "种族"), else None"""
+    m = re.match(r'^\[[^\]]+\]\s*(.+)$', label)
+    if not m:
+        return None
+    name = re.split(r'[/／(（]', m.group(1))[0].strip()
+    if any(x.startswith('种族') for x in stack):
+        return name, '种族'
+    # A class, not one of its variants (those sit under the class)
+    if any(x.startswith('基础职业') for x in stack) and not stack[-1].startswith('['):
+        return name, '职业'
+    return None
+
+
 def toc_articles(root):
-    """[(rel, name, section)] for the class, prestige class and race pages in the contents"""
+    """[(rel, name, section)] for the class, prestige class and race pages and the magic item sets in the contents"""
     t = open(os.path.join(root, 'Contents.hhc'), 'rb').read().decode('gb18030', 'replace')
     stack, out, last, seen = [], [], None, set()
     for m in re.finditer(r'<UL>|</UL>|<OBJECT type="text/sitemap">(.*?)</OBJECT>', t, re.S | re.I):
@@ -212,11 +230,18 @@ def toc_articles(root):
             name = re.search(r'name="Name"\s+value="([^"]*)"', body, re.I)
             last = html.unescape(name.group(1)).strip() if name else ''
             loc = re.search(r'name="Local"\s+value="([^"]*)"', body, re.I)
-            if not loc or not stack or any(x.startswith('速查') for x in stack):
+            if not loc or not stack:
                 continue
-            section = next((s for pattern, s in ARTICLE_SECTIONS if pattern.search(stack[-1].strip())), None)
-            label = re.sub(r'\s*[（(][^)）]*[)）]\s*|\s*\[[^\]]*\]\s*', '', last).strip()
             rel = urllib.parse.unquote(loc.group(1).split('#')[0]).replace('/', os.sep)
+            if any(x.startswith('速查') for x in stack):
+                found = quick_reference(stack, last)
+                if found and HAS_CJK.search(found[0]) and rel not in seen:
+                    seen.add(rel)
+                    out.append((rel,) + found)
+                continue
+            section = '套装' if stack[-1].strip().startswith('魔法物品套装') else \
+                next((s for pattern, s in ARTICLE_SECTIONS if pattern.search(stack[-1].strip())), None)
+            label = re.sub(r'\s*[（(][^)）]*[)）]\s*|\s*\[[^\]]*\]\s*', '', last).strip()
             if section and label and not NOT_ARTICLE.search(label) and HAS_CJK.search(label) and rel not in seen:
                 seen.add(rel)
                 out.append((rel, label, section))
@@ -340,28 +365,78 @@ def entries_of(lines):
     return spans
 
 
-SIZE_TYPE = re.compile(r'^(' + '|'.join(sorted(SIZES, key=len, reverse=True)) + r')\s*([^\s。；，,].{0,40})$')
+SIZE_WORDS = '|'.join(sorted(SIZES, key=len, reverse=True))
+SIZE_TYPE = re.compile(r'^(' + SIZE_WORDS + r')\s*([^\s。；，,].{0,40})$')
 
 
-def build_record(lines, i, end, rel):
+def header_cell(cell):
+    """A stat table's column head: "波达尸 (Bodak) 中型不死生物（外界）" -> ("波达尸 (Bodak)", "中型不死生物（外界）")"""
+    m = re.match(r'^(.*?[)）A-Za-z' + CJK + r'])\s+((?:' + SIZE_WORDS + r')\s*[' + CJK + r'].{0,40})$', cell)
+    if m and not SIZE_TYPE.match(cell):
+        return m.group(1).strip(), m.group(2).strip()
+    return cell, None
+
+
+def statblock_starts(lines, i, end):
+    """Where a second (third…) stat block starts in an entry: the bold line or table head that names it"""
+    starts, seen, low = [], False, i + 1
+    for j in range(i + 1, end):
+        f = field_of(plain_of(lines[j]))
+        # A class's "生命骰：d8" is no stat block
+        if not f or f[0] != '生命骰' or re.match(r'^d\d+', str(f[2]).strip()):
+            continue
+        if seen:
+            for k in range(j - 1, max(low, j - 8) - 1, -1):
+                plain = plain_of(lines[k])
+                if re.match(r'^资料栏位?\s*\|', plain) or (
+                        (all_bold(lines[k]) or heading_level(lines[k])) and len(plain) <= 40 and not field_of(plain)):
+                    starts.append(k)
+                    low = j + 1
+                    break
+        seen = True
+    return starts
+
+
+def block_title(line):
+    """The name over a later stat block: "3个 野蛮人衍体 CR5", "阿曼德守夜人，等级4武僧", a table head"""
+    plain = plain_of(line)
+    if re.match(r'^资料栏位?\s*\|', plain):
+        plain = header_cell(plain.split(' | ')[1].strip())[0]
+    plain = re.sub(r'^\d+\s*[个只名位]\s*|\s*(CR|ＣＲ)\s*[\d/]*\s*$', '', plain).strip()
+    t = parse_title(plain)
+    if t:
+        return t
+    # "海獭（Otter，…": the English up to the first comma
+    m = re.match(r'^([' + CJK + r']{1,16})\s*[（(]\s*([A-Za-z][A-Za-z \'’\-]+)', plain)
+    if m:
+        return m.group(1), nice_en(m.group(2)), []
+    name = re.split(r'[，,：:]', plain)[0].strip()
+    return (name, '', []) if HAS_CJK.search(name) and len(name) <= 16 else None
+
+
+def build_record(lines, i, end, rel, title=None):
     """Fields and text of an entry, in the page's order"""
-    name, en, tags = parse_title(lines[i])
+    name, en, tags = title or parse_title(lines[i])
     segments = []  # ['field', label, value or [values]] | ['text', text]
     labels = []
     first_free = None
     size_type = None
     header = None
+    header_types = []
     cr_hint = None
     last = None
     skip = set()
-    for j in range(i + 1, end):
+    # A later stat block named by its table head: the head is read too (its size and type)
+    head_row = bool(re.match(r'^资料栏位?\s*\|', plain_of(lines[i])))
+    for j in range(i if head_row else i + 1, end):
         if j in skip:
             continue
         plain = plain_of(lines[j])
         if re.match(r'^资料栏位?\s*\|', plain):
-            cells = [c.strip() for c in plain.split(' | ')[1:]]
+            cells = [header_cell(c.strip()) for c in plain.split(' | ')[1:]]
             if header is None:
-                header = cells
+                header = [c[0] for c in cells]
+                header_types = [c[1] for c in cells]
             continue
         if re.match(r'^(反馈本页勘误|返回目录|返回顶部|上一页|下一页)$', plain):
             continue
@@ -401,7 +476,7 @@ def build_record(lines, i, end, rel):
     if first_free and not size_type and SIZE_TYPE.match(first_free):
         size_type, first_free = first_free, None
     return dict(name=name, en=en, tags=tags, segments=segments, labels=labels, first=first_free,
-                size_type=size_type, header=header, cr=cr_hint, rel=rel)
+                size_type=size_type, header=header, header_types=header_types, cr=cr_hint, rel=rel)
 
 
 def item_class(name, rel, fields):
@@ -456,15 +531,17 @@ def finish(rec, kind, source, column=None):
     if kind == '物品':
         lead.append(['类别', item_class(rec['name'], rec['rel'], [s[1:] for s in rec['segments'] if s[0] == 'field'])])
     elif kind == '专长':
-        t = feat_type(rec['tags'])
-        if t:
+        # From the title's tag, else the heading or file it is under ("龙纹专长"); a bare "专长" says nothing
+        t = feat_type(rec['tags']) or (rec.get('section') if rec.get('section', '') != '专长' else '')
+        if t and t.endswith('专长'):
             lead.append(['类型', t])
     elif kind == '法术' and rec['first'] and SCHOOL.match(rec['first']):
         lead.append(['学派', rec['first']])
     elif kind == '灵能' and rec['first']:
         lead.append(['能系', rec['first']])
     elif kind == '怪物':
-        size_type = rec['size_type'] or ''
+        types = rec.get('header_types') or []
+        size_type = (types[column or 0] if len(types) > (column or 0) else None) or rec['size_type'] or ''
         for s in rec['segments']:
             if s[0] == 'field' and s[1] == '体型/类型':
                 size_type = s[2][column] if isinstance(s[2], list) else s[2]
@@ -475,6 +552,11 @@ def finish(rec, kind, source, column=None):
             lead.append(['类型', re.sub(r'\s*[\(（].*$', '', m.group(2)).strip()])
             if sub:
                 lead.append(['亚种', sub.group(1)])
+        else:
+            # A table with no type row: the size in the name ("大型火元素") sizes the token
+            size = re.match(r'^(' + SIZE_WORDS + r')', rec['name'])
+            if size:
+                lead.append(['体型', size.group(1)])
     rows, body = [], []
     # The short line under the title, when it was not the school or discipline
     texts = [] if rec['first'] and any(v == rec['first'] for _, v in lead) or not rec['first'] else [rec['first']]
@@ -514,6 +596,13 @@ def finish(rec, kind, source, column=None):
     flush()
     if kind == '怪物' and rec.get('cr') and not any(k == '挑战等级' for k, _ in rows):
         rows.append(['挑战等级', rec['cr']])
+    if kind == '怪物':
+        # A dragon's table gives each age its CR: "雏龙3、幼龙5、少年龙7…" -> 少年赤铜龙's is 7
+        for row in rows:
+            ages = re.findall(r'([' + CJK + r']+?)龙?\s*(\d+(?:/\d+)?)', row[1]) if row[0] == '挑战等级' else []
+            mine = [cr for age, cr in ages if rec['name'].startswith(age)]
+            if len(ages) > 1 and mine:
+                row[1] = max(((age, cr) for age, cr in ages if rec['name'].startswith(age)), key=lambda x: len(x[0]))[1]
     out = {'name': rec['name'], 'en': rec['en'], 'source': source}
     if rows:
         out['fields'] = rows
@@ -539,6 +628,113 @@ def monster_stats(get, lead):
     }
 
 
+FEAT_LABELS = {'先决条件', '效果', '正常', '特殊'}
+SPELL_LABELS = {'等级', '法术成分', '施法时间', '距离', '目标', '效果', '区域', '持续时间', '豁免检定', '豁免', '法术抗力'}
+# "X专长" headings that name no type
+NOT_FEAT_TYPE = {'新', '其他', '额外', '相关', '可选', '附加', '更多', '选择', '的', '一些', '以下', '各种', '本章', '这些'}
+
+
+def section_of(lines, i, rel):
+    """What the entry sits under: a feat type ("龙纹专长") or 法术, from the nearest heading or the file's name"""
+    names = [plain_of(lines[k]) for k in range(i - 1, -1, -1) if heading_level(lines[k])][:3]
+    for text in names + [os.path.splitext(os.path.basename(rel))[0]]:
+        m = re.search(r'([' + CJK + r']{1,5})专长', text)
+        if m and m.group(1) not in NOT_FEAT_TYPE and not m.group(1).endswith(('新', '的')):
+            return m.group(1) + '专长'
+        if '专长' in text:
+            return '专长'
+        if '法术' in text:
+            return '法术'
+    return ''
+
+
+def kind_of(rec, rel, section):
+    """The entry's kind from its labels, its title's tags and what it sits under"""
+    kind = classify(rec['labels'], rec['tags'], ' '.join(rec['tags']))
+    feat_context = feat_type(rec['tags']) or '专长' in rel or section.endswith('专长')
+    if kind == '专长' and not feat_context:
+        return None
+    labels = set(rec['labels'])
+    # A feat without prerequisites: only its 效果 (and 特殊 / 正常)
+    if not kind and labels and labels <= FEAT_LABELS and '效果' in labels and feat_context \
+            and not re.search(r'仪式|指挥官|^替代能力', rec['name']):
+        return '专长'
+    # A spell in short: its level ("修验者2") and a few lines
+    level = next((s[2] for s in rec['segments'] if s[0] == 'field' and s[1] == '等级' and isinstance(s[2], str)), '')
+    if not kind and labels <= SPELL_LABELS and len(labels) >= 2 and re.match(r'^[' + CJK + r'/、，, ]+\s*\d', level) \
+            and ('法术' in rel or section == '法术'):
+        return '法术'
+    return kind
+
+
+def entry_records(lines, i, end, rel, source, unclassified):
+    """The records an entry gives: one, one a column of a stat table, or one a stat block"""
+    section = section_of(lines, i, rel)
+    starts = statblock_starts(lines, i, end)
+    if starts:
+        first = build_record(lines, i, starts[0], rel)
+        if kind_of(first, rel, section) == '怪物':
+            out = records_from(first, '怪物', source, rel, section)
+            bounds = starts + [end]
+            for a, b in zip(starts, bounds[1:]):
+                title = block_title(lines[a])
+                if not title:
+                    continue
+                rec = build_record(lines, a, b, rel, title)
+                if kind_of(rec, rel, section) == '怪物':
+                    out += records_from(rec, '怪物', source, rel, section)
+            return out
+    rec = build_record(lines, i, end, rel)
+    kind = kind_of(rec, rel, section)
+    if not kind:
+        if rec['labels']:
+            unclassified[tuple(sorted(set(rec['labels'])))] += 1
+        return []
+    return records_from(rec, kind, source, rel, section)
+
+
+def records_from(rec, kind, source, rel, section):
+    rec['name'] = clean_name(rec['name'], kind)
+    rec['section'] = section
+    # A school or discipline line is no spell's name
+    if kind in ('法术', '灵能') and SCHOOL.match(rec['name']) and rec['name'].endswith('系'):
+        return []
+    # Without an English name only a feat with its type, or a block with many fields
+    if not rec['name'] or not (rec['en'] or (kind == '专长' and (feat_type(rec['tags']) or section.endswith('专长'))) or (
+            len(set(rec['labels'])) >= (2 if kind == '专长' else 5) and len(rec['name']) <= 12
+            and not re.search(r'说明|解释|名称|列表|章|节|表|规则', rec['name'])
+            and not re.match(r'^[0-9一二三四五六七八九十]', rec['name']))):
+        return []
+    # A size or a size and type is no monster's name ("超大型", "大体型异界生物"), nor is a template's how-to
+    if kind == '怪物' and (rec['name'] in SIZES or SIZE_TYPE.match(rec['name']) and not rec['en']
+                          or re.match(r'^(' + SIZE_WORDS + r'|大体型|中体型|小体型)[' + CJK + r']{0,3}(生物|类)$', rec['name'])
+                          or re.match(r'^创造', rec['name'])):
+        return []
+    # A feat table's head or a feat type is no feat ("专长名称", "秽恶专长")
+    if kind == '专长' and (rec['name'].endswith('专长') or rec['name'] in ('专长名称', '专长说明')):
+        return []
+    file = rel.replace(os.sep, '/')
+    out = []
+    if kind == '怪物' and rec['header'] and len(rec['header']) > 1:
+        # Monsters side by side: one record a column; a column headed by a size is that size of the monster
+        for column, title in enumerate(rec['header']):
+            t = (title + rec['name'], '', []) if title in SIZES else parse_title(title)
+            if not t:
+                continue
+            one = dict(rec, name=clean_name(t[0], kind), en=t[1])
+            r = finish(one, kind, source, column)
+            r['kind'], r['file'] = kind, file
+            out.append(r)
+        return out
+    if kind == '怪物' and rec['header'] and len(rec['header']) == 1:
+        t = parse_title(rec['header'][0])
+        if t and t[1]:
+            rec['name'], rec['en'] = clean_name(t[0], kind), t[1]
+    r = finish(rec, kind, source)
+    r['kind'], r['file'] = kind, file
+    return [r]
+
+
 def main():
     root, out = sys.argv[1], sys.argv[2]
     BOOKS.update(toc_books(root))
@@ -560,50 +756,21 @@ def main():
         lines = to_lines(decode(open(p, 'rb').read()))
         source = source_of(rel)
         for i, end in entries_of(lines):
-            rec = build_record(lines, i, end, rel)
-            kind = classify(rec['labels'], rec['tags'], ' '.join(rec['tags']))
-            if kind == '专长' and not (feat_type(rec['tags']) or '专长' in rel):
-                kind = None
-            if not kind:
-                if rec['labels']:
-                    unclassified[tuple(sorted(set(rec['labels'])))] += 1
-                continue
-            rec['name'] = clean_name(rec['name'], kind)
-            # A school or discipline line is no spell's name
-            if kind in ('法术', '灵能') and SCHOOL.match(rec['name']) and rec['name'].endswith('系'):
-                continue
-            # Without an English name only a feat with its type, or a block with many fields
-            if not rec['name'] or not (rec['en'] or (kind == '专长' and feat_type(rec['tags'])) or (
-                    kind != '专长' and len(set(rec['labels'])) >= 5 and len(rec['name']) <= 12
-                    and not re.search(r'说明|解释|名称|列表|章|节|表|规则', rec['name'])
-                    and not re.match(r'^[0-9一二三四五六七八九十]', rec['name']) and not SIZE_TYPE.match(rec['name']))):
-                continue
-            if kind == '怪物' and rec['header'] and len(rec['header']) > 1:
-                # Monsters side by side: one record a column
-                for column, title in enumerate(rec['header']):
-                    t = parse_title(title)
-                    if not t:
-                        continue
-                    one = dict(rec, name=clean_name(t[0], kind), en=t[1] or rec['en'])
-                    r = finish(one, kind, source, column)
-                    r['kind'], r['file'] = kind, rel.replace(os.sep, '/')
-                    records.append(r)
-                continue
-            if kind == '怪物' and rec['header'] and len(rec['header']) == 1:
-                t = parse_title(rec['header'][0])
-                if t and t[1]:
-                    rec['name'], rec['en'] = clean_name(t[0], kind), t[1]
-            r = finish(rec, kind, source)
-            r['kind'], r['file'] = kind, rel.replace(os.sep, '/')
-            records.append(r)
+            records += entry_records(lines, i, end, rel, source, unclassified)
     for rel, name, section in toc_articles(root):
         if rel.startswith('10 ') or not os.path.isfile(os.path.join(root, rel)):
             continue
         r = article_of(root, rel, name, section)
-        if r:
+        if not r:
+            continue
+        r['file'] = rel.replace(os.sep, '/')
+        if section == '套装':
+            # A magic item set: an item whose text is the whole page
+            r.update(kind='物品', source=source_of(rel), fields=[['类别', '套装']], tags=[])
+            del r['section']
+        else:
             r['tags'] = [t for t in (source_of(rel), section) if t]
-            r['file'] = rel.replace(os.sep, '/')
-            records.append(r)
+        records.append(r)
     json.dump(records, open(out, 'w', encoding='utf-8'), ensure_ascii=False)
     c = collections.Counter(r['kind'] for r in records)
     print(len(records), dict(c))

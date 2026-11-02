@@ -38,7 +38,7 @@ function Dnd3rCard({ result }: Dnd3rCardProps) {
     setError("");
     // A stored monster (token menu, party panel) is found by name and page
     const load = result.dnd3r
-      ? loadDnd3rRecord(result.dnd3r)
+      ? loadDnd3rRecord(result.dnd3r, result)
       : result.isMonster
         ? loadDnd3rMonsterRecord(monsterRefOf(result))
         : Promise.reject(new Error("资料位置未知"));

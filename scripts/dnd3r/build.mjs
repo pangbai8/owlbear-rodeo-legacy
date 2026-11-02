@@ -8,9 +8,10 @@
 //   node scripts/dnd3r/build.mjs path/to/dnd3r-data.json.gz [dnd3r-chm.json]
 //
 // The second file, from 《3R扩展大不全》 (scripts/dnd3r/chm/parse_chm.py), adds
-// the entries the wiki lacks (matched by English or Chinese name). They go in
-// chunks after the wiki's, so the wiki entries keep their places (favourites
-// bars store them by chunk and position).
+// the entries the wiki lacks (matched by English or Chinese name, and by the
+// pairs in scripts/dnd3r/chm/same-as.json). They go in chunks after the
+// wiki's, so the wiki entries keep their places (favourites bars store them by
+// chunk and position).
 //
 // Spells, powers, feats, maneuvers, items and monsters are templates in the
 // articles ({{法术数据|名称=…|…}}); each becomes a record of fields and body
@@ -269,22 +270,72 @@ export function chineseKey(name) {
     .replace(/[\s·、，,()（）[\]【】]/g, "");
 }
 
-/** The CHM's records of each kind that the wiki (or an earlier CHM record) lacks */
-export function chmAdditions(chm, byKind, redirects = {}) {
+/** The Chinese name without 之 / 的 ("巴哈姆特之封臣" is "巴哈姆特的封臣"), for names with no English to go by */
+export function looseChineseKey(name) {
+  return chineseKey(name).replace(/[之的]/g, "");
+}
+
+/**
+ * The CHM's records of each kind that the wiki (or an earlier CHM record) lacks.
+ * sameAs: { kind: { CHM name: wiki name } }, the pairs a person found to be one
+ * entry under two spellings (English typos, other translations).
+ */
+export function chmAdditions(chm, byKind, redirects = {}, sameAs = {}) {
   const known = new Set();
   const keysOf = (r) => [...englishKeys(r.en).map((k) => "en:" + k), "zh:" + chineseKey(r.name)];
-  for (const [kind, records] of Object.entries(byKind)) for (const r of records) for (const k of keysOf(r)) known.add(kind + "|" + k);
+  // 之 / 的 only count when one of the two names has no English
+  const looseOf = (r) => "zl:" + looseChineseKey(r.name) + (r.en ? "|en" : "|no-en");
+  for (const [kind, records] of Object.entries(byKind)) {
+    for (const r of records) for (const k of [...keysOf(r), looseOf(r)]) known.add(kind + "|" + k);
+  }
   for (const alias of Object.keys(redirects)) known.add("*|zh:" + chineseKey(alias));
   const added = Object.fromEntries(KINDS.map(([kind]) => [kind, []]));
   for (const { kind, file, section, ...record } of chm) {
-    if (!added[kind] || !record.name) continue;
+    if (!added[kind] || !record.name || sameAs[kind]?.[record.name]) continue;
     const keys = keysOf(record);
+    const loose = "zl:" + looseChineseKey(record.name);
     const kinds = SAME_NAMES[kind] || [kind];
-    if (keys.some((k) => known.has("*|" + k) || kinds.some((other) => known.has(other + "|" + k)))) continue;
+    const has = (k) => known.has("*|" + k) || kinds.some((other) => known.has(other + "|" + k));
+    if (keys.some(has) || has(loose + "|no-en") || (!record.en && has(loose + "|en"))) continue;
     for (const k of keys) known.add(kind + "|" + k);
+    known.add(kind + "|" + looseOf(record));
     added[kind].push(record);
   }
   return added;
+}
+
+/** Edit distance, or limit + 1 once it is over limit */
+function distance(a, b, limit) {
+  if (Math.abs(a.length - b.length) > limit) return limit + 1;
+  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(previous[j] + 1, row[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      best = Math.min(best, row[j]);
+    }
+    if (best > limit) return limit + 1;
+    previous = row;
+  }
+  return previous[b.length];
+}
+
+/** Added CHM records whose English is a letter or two from a wiki entry's: for a person to settle in same-as.json */
+export function nearMatches(added, byKind, sameAs = {}) {
+  const letters = (s) => String(s || "").toLowerCase().replace(/[^a-z]/g, "");
+  const found = [];
+  for (const [kind, records] of Object.entries(added)) {
+    const wiki = (SAME_NAMES[kind] || [kind]).flatMap((k) => byKind[k] || []).filter((w) => w.en);
+    for (const r of records) {
+      const a = letters(r.en);
+      if (a.length < 7 || sameAs.different?.[r.name]) continue;
+      const limit = a.length > 14 ? 2 : 1;
+      const w = wiki.find((w) => distance(a, letters(w.en), limit) <= limit);
+      if (w) found.push(`${kind}\t${r.name}\t${r.en}\t~\t${w.name}\t${w.en}`);
+    }
+  }
+  return found;
 }
 
 /** Records in chunks of at most CHUNK records and about CHUNK_BYTES */
@@ -306,7 +357,18 @@ function chunked(records) {
   return groups;
 }
 
+/** An article's English name, from its header: {{条目头|…|英文名=Blackguard}} */
+export function articleEnglish(text) {
+  const head = findTemplates(String(text || ""), new Set(["条目头"]))[0];
+  const en = head?.fields.find(([k]) => k === "英文名")?.[1] || "";
+  return cleanText(en).replace(/\*\*/g, "");
+}
+
 const byName = (a, b) => String(a.en || a.name).localeCompare(String(b.en || b.name));
+// Articles keep the order they had before they had English names
+const byTitle = (a, b) => String(a.name).localeCompare(String(b.name));
+
+const SAME_AS = path.resolve("scripts/dnd3r/chm/same-as.json");
 
 function build(file, chmFile) {
   const dump = JSON.parse(zlib.gunzipSync(fs.readFileSync(file)));
@@ -347,7 +409,7 @@ function build(file, chmFile) {
     if (!pageText || page.title === "首页" || page.title.startsWith("沙盒")) continue;
     byKind.条目.push({
       name: page.title,
-      en: "",
+      en: articleEnglish(page.text),
       source: "",
       tags: (page.categories || []).filter((c) => !/^(需要|页面|隐藏|含有)/.test(c)).slice(0, 4),
       body: [["", pageText]],
@@ -356,11 +418,22 @@ function build(file, chmFile) {
   }
 
   const chm = chmFile ? JSON.parse(fs.readFileSync(chmFile, "utf8")) : [];
-  const added = chmAdditions(chm, byKind, dump.redirects);
+  const sameAs = chm.length && fs.existsSync(SAME_AS) ? JSON.parse(fs.readFileSync(SAME_AS, "utf8")) : {};
+  for (const [kind, pairs] of Object.entries(sameAs)) {
+    if (kind === "different") continue;
+    for (const wikiName of Object.values(pairs)) {
+      if (!(SAME_NAMES[kind] || [kind]).some((k) => byKind[k]?.some((r) => r.name === wikiName))) {
+        console.warn(`same-as.json: no ${kind} "${wikiName}" on the wiki`);
+      }
+    }
+  }
+  const added = chmAdditions(chm, byKind, dump.redirects, sameAs);
+  const near = chm.length ? nearMatches(added, byKind, sameAs) : [];
 
   const entries = [];
   KINDS.forEach(([kind], kindIndex) => {
-    const groups = [...chunked(byKind[kind].sort(byName)), ...chunked(added[kind].sort(byName))];
+    const order = kind === "条目" ? byTitle : byName;
+    const groups = [...chunked(byKind[kind].sort(order)), ...chunked(added[kind].sort(byName))];
     // A result's id has room for 100 chunks of a kind
     if (groups.length > 100) throw new Error(`${kind}: ${groups.length} chunks`);
     groups.forEach((members, n) => {
@@ -386,6 +459,8 @@ function build(file, chmFile) {
   fs.writeFileSync(path.join(OUT, "index.json"), JSON.stringify(index));
   const counts = Object.fromEntries(KINDS.map(([kind]) => [kind, byKind[kind].length]));
   const fromChm = Object.fromEntries(KINDS.map(([kind]) => [kind, added[kind].length]));
+  // Spellings a letter or two apart: to go in same-as.json, under their kind or under "different"
+  if (near.length) console.warn(`Check these against the wiki (scripts/dnd3r/chm/same-as.json):\n${near.join("\n")}`);
   return { entries: entries.length, counts, fromChm };
 }
 
